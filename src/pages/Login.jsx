@@ -29,7 +29,8 @@ export default function Login({ onLoginSuccess }) {
       }
 
       // Save token (optional)
-      localStorage.setItem("token", data.token);
+     localStorage.setItem("adminToken", data.token);
+
 
       // After login success
       onLoginSuccess();

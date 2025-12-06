@@ -302,34 +302,519 @@
 //   );
 // }
 
+// import { useEffect, useState } from "react";
+// import DocumentTable from "../components/DocumentTable";
+// import DocumentPreview from "../components/DocumentPreview";
+
+// export default function Documents() {
+//   const [documents, setDocuments] = useState([]);
+//   const [loading, setLoading] = useState(true);
+//   const [selectedDoc, setSelectedDoc] = useState(null);
+
+//   // Date Range
+//   const [startDate, setStartDate] = useState("");
+//   const [endDate, setEndDate] = useState("");
+
+//   // Fetch API Function
+//   async function fetchDocs() {
+//     try {
+//       setLoading(true);
+
+//       let url = "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin/fetchdocuments";
+
+//       // If date range selected → send query params
+//       if (startDate && endDate) {
+//         url += `?start=${startDate}&end=${endDate}`;
+//       }
+
+//       const res = await fetch(url);
+//       const data = await res.json();
+//       setDocuments(data);
+//     } catch (error) {
+//       console.error("Error fetching docs:", error);
+//     } finally {
+//       setLoading(false);
+//     }
+//   }
+
+//   // Load all docs on first render
+//   useEffect(() => {
+//     fetchDocs();
+//   }, []);
+
+//   // Trigger when date range changes
+//   useEffect(() => {
+//     if (startDate && endDate) {
+//       fetchDocs();
+//     }
+//   }, [startDate, endDate]);
+
+//   return (
+//     <div className="text-white p-4">
+//       {/* TOP BUTTON GROUP */}
+//       <div className="flex flex-wrap gap-3 mb-6">
+//         {[
+//           "Pickup Doc",
+//           "Delivery Proof",
+//           "Load Image",
+//           "Fuel Receipt",
+//           "Stamp Paper",
+//           "Driver Expense",
+//           "DM Transport Trip Envelope",
+//           "DM Trans Inc Trip Envelope",
+//           "DM Transport City Worksheet",
+//           "Repair and Maintenance",
+//           "CTPAT",
+//         ].map((item) => (
+//           <button
+//             key={item}
+//             className="border border-gray-600 px-4 py-1 rounded-full hover:bg-gray-800 text-sm"
+//           >
+//             {item}
+//           </button>
+//         ))}
+//       </div>
+
+//       {/* MAIN 2 COLUMN LAYOUT */}
+//       <div className="flex gap-4">
+//         {/* LEFT TABLE SECTION */}
+//         <div className="flex-1 bg-[#161b22] p-4 rounded-lg border border-gray-700">
+//           {/* Date Range Filter */}
+//           <div className="flex gap-3 items-center mb-4">
+//             <span className="text-gray-400 text-sm">Date Range:</span>
+
+//             <input
+//               type="date"
+//               value={startDate}
+//               onChange={(e) => setStartDate(e.target.value)}
+//               className="bg-[#1d232a] px-3 py-1 rounded text-sm outline-none"
+//             />
+
+//             <span className="text-gray-400">to</span>
+
+//             <input
+//               type="date"
+//               value={endDate}
+//               onChange={(e) => setEndDate(e.target.value)}
+//               className="bg-[#1d232a] px-3 py-1 rounded text-sm outline-none"
+//             />
+
+//             <button
+//               onClick={() => {
+//                 setStartDate("");
+//                 setEndDate("");
+//                 fetchDocs();
+//               }}
+//               className="ml-3 bg-gray-700 px-3 py-1 rounded text-sm hover:bg-gray-600"
+//             >
+//               Reset
+//             </button>
+//           </div>
+
+//           {/* Document Table Component */}
+//           <DocumentTable
+//             documents={documents}
+//             loading={loading}
+//             setSelectedDoc={setSelectedDoc}
+//           />
+//         </div>
+
+//         {/* RIGHT PREVIEW PANEL */}
+//         <div className="w-[35%] bg-[#161b22] p-4 rounded-lg border border-gray-700 min-h-[600px] flex justify-center items-center">
+//           <DocumentPreview selectedDoc={selectedDoc} />
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }
+
+
+// import { useEffect, useState } from "react";
+// import DocumentTable from "../components/DocumentTable";
+// import DocumentPreview from "../components/DocumentPreview";
+
+// export default function Documents() {
+//   const [documents, setDocuments] = useState([]);
+//   const [loading, setLoading] = useState(true);
+//   const [selectedDoc, setSelectedDoc] = useState(null);
+
+//   // Date Range
+//   const [startDate, setStartDate] = useState("");
+//   const [endDate, setEndDate] = useState("");
+
+//   // Fetch API Function
+//   async function fetchDocs() {
+//     try {
+//       setLoading(true);
+
+//       // Get token from localStorage
+//       const token = localStorage.getItem("adminToken");
+
+//       let url =
+//         "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin/fetchdocuments";
+
+//       // If date range selected → send query params
+//       if (startDate && endDate) {
+//         url += `?start_date=${startDate}&end_date=${endDate}`;
+//       }
+
+//       const res = await fetch(url, {
+//         method: "GET",
+//         headers: {
+//           "Content-Type": "application/json",
+//           Authorization: `Bearer ${token}`, // 🔥 MAIN FIX
+//         },
+//       });
+
+//       if (!res.ok) {
+//         console.error("Unauthorized / Error:", res.status);
+//         return;
+//       }
+
+//       const data = await res.json();
+//       setDocuments(data.documents || []);
+
+//     } catch (error) {
+//       console.error("Error fetching docs:", error);
+//     } finally {
+//       setLoading(false);
+//     }
+//   }
+
+//   // Load all docs on first render
+//   useEffect(() => {
+//     fetchDocs();
+//   }, []);
+
+//   // Trigger when date range changes
+//   useEffect(() => {
+//     if (startDate && endDate) {
+//       fetchDocs();
+//     }
+//   }, [startDate, endDate]);
+
+//   return (
+//     <div className="text-white p-4">
+//       {/* TOP BUTTON GROUP */}
+//       <div className="flex flex-wrap gap-3 mb-6">
+//         {[
+//           "Pickup Doc",
+//           "Delivery Proof",
+//           "Load Image",
+//           "Fuel Receipt",
+//           "Stamp Paper",
+//           "Driver Expense",
+//           "DM Transport Trip Envelope",
+//           "DM Trans Inc Trip Envelope",
+//           "DM Transport City Worksheet",
+//           "Repair and Maintenance",
+//           "CTPAT",
+//         ].map((item) => (
+//           <button
+//             key={item}
+//             className="border border-gray-600 px-4 py-1 rounded-full hover:bg-gray-800 text-sm"
+//           >
+//             {item}
+//           </button>
+//         ))}
+//       </div>
+
+//       {/* MAIN 2 COLUMN LAYOUT */}
+//       <div className="flex gap-4">
+//         {/* LEFT TABLE SECTION */}
+//         <div className="flex-1 bg-[#161b22] p-4 rounded-lg border border-gray-700">
+//           {/* Date Range Filter */}
+//           <div className="flex gap-3 items-center mb-4">
+//             <span className="text-gray-400 text-sm">Date Range:</span>
+
+//             <input
+//               type="date"
+//               value={startDate}
+//               onChange={(e) => setStartDate(e.target.value)}
+//               className="bg-[#1d232a] px-3 py-1 rounded text-sm outline-none"
+//             />
+
+//             <span className="text-gray-400">to</span>
+
+//             <input
+//               type="date"
+//               value={endDate}
+//               onChange={(e) => setEndDate(e.target.value)}
+//               className="bg-[#1d232a] px-3 py-1 rounded text-sm outline-none"
+//             />
+
+//             <button
+//               onClick={() => {
+//                 setStartDate("");
+//                 setEndDate("");
+//                 fetchDocs();
+//               }}
+//               className="ml-3 bg-gray-700 px-3 py-1 rounded text-sm hover:bg-gray-600"
+//             >
+//               Reset
+//             </button>
+//           </div>
+
+//           {/* Document Table */}
+//           <DocumentTable
+//             documents={documents}
+//             loading={loading}
+//             setSelectedDoc={setSelectedDoc}
+//           />
+//         </div>
+
+//         {/* RIGHT PREVIEW PANEL */}
+//         <div className="w-[35%] bg-[#161b22] p-4 rounded-lg border border-gray-700 min-h-[600px] flex justify-center items-center">
+//           <DocumentPreview selectedDoc={selectedDoc} />
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }
+
+
+// import { useEffect, useState } from "react";
+// import DocumentTable from "../components/DocumentTable";
+// import DocumentPreview from "../components/DocumentPreview";
+
+// // Function: Last 60 Days Default Range
+// function getDefaultDates() {
+//   const today = new Date();
+//   const past = new Date();
+
+//   // last 60 days
+//   past.setDate(today.getDate() - 60);
+
+//   const format = (d) => d.toISOString().split("T")[0];
+
+//   return {
+//     start: format(past), // 60 days before
+//     end: format(today),  // today
+//   };
+// }
+
+// export default function Documents() {
+//   const { start, end } = getDefaultDates();
+
+//   const [documents, setDocuments] = useState([]);
+//   const [loading, setLoading] = useState(true);
+//   const [selectedDoc, setSelectedDoc] = useState(null);
+
+//   const [startDate, setStartDate] = useState(start);
+//   const [endDate, setEndDate] = useState(end);
+
+//   // Fetch API Function
+//   async function fetchDocs() {
+//     try {
+//       setLoading(true);
+
+//       const token = localStorage.getItem("adminToken");
+
+//       let url =
+//         "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin/fetchdocuments";
+
+//       // send date range
+//       if (startDate && endDate) {
+//         url += `?start_date=${startDate}&end_date=${endDate}`;
+//       }
+
+//       const res = await fetch(url, {
+//         method: "GET",
+//         headers: {
+//           "Content-Type": "application/json",
+//           Authorization: `Bearer ${token}`,
+//         },
+//       });
+
+//       const data = await res.json();
+
+//       if (!res.ok) {
+//         console.error("Error fetching documents:", data);
+//         return;
+//       }
+
+//       // Sort documents by date → latest first
+//       const sorted = (data.documents || []).sort((a, b) => {
+//         return new Date(b.date) - new Date(a.date);
+//       });
+
+//       setDocuments(sorted);
+
+//     } catch (error) {
+//       console.error("Error fetching docs:", error);
+//     } finally {
+//       setLoading(false);
+//     }
+//   }
+
+//   // FIRST LOAD → fetch with default last 60 days
+//   useEffect(() => {
+//     fetchDocs();
+//   }, []);
+
+//   // If user changes date manually → re-fetch
+//   useEffect(() => {
+//     if (startDate && endDate) {
+//       fetchDocs();
+//     }
+//   }, [startDate, endDate]);
+
+//   // RESET → back to default last 60 days
+//   function resetDates() {
+//     const { start, end } = getDefaultDates();
+//     setStartDate(start);
+//     setEndDate(end);
+//     fetchDocs();
+//   }
+// useEffect(() => {
+//   console.log("SELECTED DOC UPDATED:", selectedDoc);
+// }, [selectedDoc]);
+//   return (
+//     <div className="text-white p-4">
+
+//       {/* TOP BUTTON GROUP */}
+//       <div className="flex flex-wrap gap-3 mb-6">
+//         {[
+//           "Pickup Doc",
+//           "Delivery Proof",
+//           "Load Image",
+//           "Fuel Receipt",
+//           "Stamp Paper",
+//           "Driver Expense",
+//           "DM Transport Trip Envelope",
+//           "DM Trans Inc Trip Envelope",
+//           "DM Transport City Worksheet",
+//           "Repair and Maintenance",
+//           "CTPAT",
+//         ].map((item) => (
+//           <button
+//             key={item}
+//             className="border border-gray-600 px-4 py-1 rounded-full hover:bg-gray-800 text-sm"
+//           >
+//             {item}
+//           </button>
+//         ))}
+//       </div>
+
+//       {/* MAIN 2 COLUMN LAYOUT */}
+//       <div className="flex gap-4">
+
+//         {/* LEFT TABLE */}
+//         <div className="flex-1 bg-[#161b22] p-4 rounded-lg border border-gray-700">
+
+//           {/* Date Range Filter */}
+//           <div className="flex gap-3 items-center mb-4">
+//             <span className="text-gray-400 text-sm">Date Range:</span>
+
+//             <input
+//               type="date"
+//               value={startDate}
+//               onChange={(e) => setStartDate(e.target.value)}
+//               className="bg-[#1d232a] px-3 py-1 rounded text-sm outline-none"
+//             />
+
+//             <span className="text-gray-400">to</span>
+
+//             <input
+//               type="date"
+//               value={endDate}
+//               onChange={(e) => setEndDate(e.target.value)}
+//               className="bg-[#1d232a] px-3 py-1 rounded text-sm outline-none"
+//             />
+
+//             <button
+//               onClick={resetDates}
+//               className="ml-3 bg-gray-700 px-3 py-1 rounded text-sm hover:bg-gray-600"
+//             >
+//               Reset
+//             </button>
+//           </div>
+
+//           {/* Document Table */}
+//           <DocumentTable
+//             documents={documents}
+//             loading={loading}
+//             setSelectedDoc={setSelectedDoc}
+//           />
+//         </div>
+
+//         {/* RIGHT PREVIEW PANEL */}
+//         <div className="w-[35%] bg-[#161b22] p-4 rounded-lg border border-gray-700 
+//      min-h-[600px] overflow-auto">
+//   <DocumentPreview selectedDoc={selectedDoc} />
+// </div>
+
+
+//       </div>
+//     </div>
+//   );
+// }
+
+
+
 import { useEffect, useState } from "react";
 import DocumentTable from "../components/DocumentTable";
 import DocumentPreview from "../components/DocumentPreview";
 
+// Function: Last 60 Days Default Range
+function getDefaultDates() {
+  const today = new Date();
+  const past = new Date();
+
+  past.setDate(today.getDate() - 60);
+  const format = (d) => d.toISOString().split("T")[0];
+
+  return {
+    start: format(past),
+    end: format(today),
+  };
+}
+
 export default function Documents() {
+  const { start, end } = getDefaultDates();
+
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDoc, setSelectedDoc] = useState(null);
 
-  // Date Range
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [startDate, setStartDate] = useState(start);
+  const [endDate, setEndDate] = useState(end);
 
   // Fetch API Function
   async function fetchDocs() {
     try {
       setLoading(true);
 
-      let url = "http://localhost:5000/api/documents";
+      const token = localStorage.getItem("adminToken");
 
-      // If date range selected → send query params
+      let url =
+        "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin/fetchdocuments";
+
       if (startDate && endDate) {
-        url += `?start=${startDate}&end=${endDate}`;
+        url += `?start_date=${startDate}&end_date=${endDate}`;
       }
 
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
       const data = await res.json();
-      setDocuments(data);
+
+      if (!res.ok) {
+        console.error("Error fetching documents:", data);
+        return;
+      }
+
+      const sorted = (data.documents || []).sort((a, b) => {
+        return new Date(b.date) - new Date(a.date);
+      });
+
+      setDocuments(sorted);
+
     } catch (error) {
       console.error("Error fetching docs:", error);
     } finally {
@@ -337,21 +822,31 @@ export default function Documents() {
     }
   }
 
-  // Load all docs on first render
   useEffect(() => {
     fetchDocs();
   }, []);
 
-  // Trigger when date range changes
   useEffect(() => {
     if (startDate && endDate) {
       fetchDocs();
     }
   }, [startDate, endDate]);
 
+  function resetDates() {
+    const { start, end } = getDefaultDates();
+    setStartDate(start);
+    setEndDate(end);
+    fetchDocs();
+  }
+
+  useEffect(() => {
+    console.log("Selected Doc:", selectedDoc);
+  }, [selectedDoc]);
+
   return (
     <div className="text-white p-4">
-      {/* TOP BUTTON GROUP */}
+
+      {/* TOP BUTTONS */}
       <div className="flex flex-wrap gap-3 mb-6">
         {[
           "Pickup Doc",
@@ -375,11 +870,14 @@ export default function Documents() {
         ))}
       </div>
 
-      {/* MAIN 2 COLUMN LAYOUT */}
+      {/* 2 COLUMN LAYOUT */}
       <div className="flex gap-4">
-        {/* LEFT TABLE SECTION */}
-        <div className="flex-1 bg-[#161b22] p-4 rounded-lg border border-gray-700">
-          {/* Date Range Filter */}
+
+        {/* LEFT TABLE - ONLY THIS WILL SCROLL */}
+        <div className="flex-1 bg-[#161b22] p-4 rounded-lg border border-gray-700 
+                        h-[80vh] overflow-y-auto">
+
+          {/* Date Filter */}
           <div className="flex gap-3 items-center mb-4">
             <span className="text-gray-400 text-sm">Date Range:</span>
 
@@ -400,18 +898,14 @@ export default function Documents() {
             />
 
             <button
-              onClick={() => {
-                setStartDate("");
-                setEndDate("");
-                fetchDocs();
-              }}
+              onClick={resetDates}
               className="ml-3 bg-gray-700 px-3 py-1 rounded text-sm hover:bg-gray-600"
             >
               Reset
             </button>
           </div>
 
-          {/* Document Table Component */}
+          {/* TABLE */}
           <DocumentTable
             documents={documents}
             loading={loading}
@@ -420,9 +914,11 @@ export default function Documents() {
         </div>
 
         {/* RIGHT PREVIEW PANEL */}
-        <div className="w-[35%] bg-[#161b22] p-4 rounded-lg border border-gray-700 min-h-[600px] flex justify-center items-center">
+        <div className="w-[35%] bg-[#161b22] p-4 rounded-lg border border-gray-700 
+                        min-h-[600px] overflow-auto">
           <DocumentPreview selectedDoc={selectedDoc} />
         </div>
+
       </div>
     </div>
   );
