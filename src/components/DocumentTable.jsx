@@ -144,3 +144,6 @@ export default function DocumentTable({ documents, loading, setSelectedDoc }) {
     </>
   );
 }
+
+
+
