@@ -1,73 +1,7 @@
-
-
-// import { useEffect, useState } from "react";
-// import ChatListItem from "./ChatListItem";
-// import { fetchUsersForChat } from "../services/chatAPI";
-
-// const ChatList = ({ onSelectDriver }) => {
-//   const [drivers, setDrivers] = useState([]);
-//   const [search, setSearch] = useState("");
-
-//   useEffect(() => {
-//     loadDrivers();
-//   }, []);
-
-//   async function loadDrivers() {
-//     const res = await fetchUsersForChat();
-
-//     const mapped =
-//       res?.users?.map((u) => ({
-//         userid: u.userid,
-//         driver_name: u.name || u.driver_name,
-//         driver_image: u.profilePic || u.image || null,
-//       })) || [];
-
-//     setDrivers(mapped);
-//   }
-
-//   const filtered = drivers.filter((d) =>
-//     d.driver_name?.toLowerCase().includes(search.toLowerCase())
-//   );
-
-//   return (
-//     <div className="h-full flex flex-col">
-
-//       {/* SEARCH BAR (STICKY) */}
-//       <div className="p-3 border-b border-gray-700 sticky top-0 bg-[#0d1117] z-20">
-//         <input
-//           type="text"
-//           placeholder="Search drivers..."
-//           className="w-full p-2 bg-[#1f2937] rounded outline-none"
-//           value={search}
-//           onChange={(e) => setSearch(e.target.value)}
-//         />
-//       </div>
-
-//       {/* DRIVER LIST (SCROLL ONLY THIS) */}
-//       <div className="flex-1 overflow-y-auto">
-//         {filtered.map((driver) => (
-//           <ChatListItem
-//             key={driver.userid}
-//             driver={driver}
-//             onClick={() => onSelectDriver(driver)}
-//           />
-//         ))}
-//       </div>
-
-//     </div>
-//   );
-// };
-
-// export default ChatList;
-
-
-
 import { useEffect, useState } from "react";
 import ChatListItem from "./ChatListItem";
-import {
-  fetchUsersForChat,
-  fetchMessages,
-} from "../services/chatAPI";
+import { fetchUsersForChat, fetchMessages } from "../services/chatAPI";
+import SkeletonLoader from "./skeletons/Skeleton";
 
 const ChatList = ({ onSelectDriver }) => {
   const [drivers, setDrivers] = useState([]);
@@ -101,7 +35,7 @@ const ChatList = ({ onSelectDriver }) => {
               userid: u.userid,
               driver_name: u.name || u.driver_name,
               driver_image: u.profilePic || u.image || null,
-               lastSeen: u.lastSeen || null,
+              lastSeen: u.lastSeen || null,
               last_message: lastMsg?.content?.message || "",
               last_chat_time: lastMsg?.dateTime || null,
             };
@@ -139,7 +73,6 @@ const ChatList = ({ onSelectDriver }) => {
 
   return (
     <div className="h-full flex flex-col">
-
       {/* 🔍 SEARCH BAR (STICKY) */}
       <div className="p-3 border-b border-gray-700 sticky top-0 bg-[#0d1117] z-20">
         <input
@@ -154,12 +87,12 @@ const ChatList = ({ onSelectDriver }) => {
       {/* 📜 DRIVER LIST (ONLY THIS SCROLLS) */}
       {/* <div className="flex-1 overflow-y-auto"> */}
       <div className="flex-1 overflow-y-auto chat-list-scroll">
-
-        {loading && (
+        {/* {loading && (
           <p className="text-center text-gray-500 text-sm mt-4">
             Loading chats...
           </p>
-        )}
+        )} */}
+        {loading && <SkeletonLoader count={10} />}
 
         {!loading &&
           filtered.map((driver) => (
@@ -181,4 +114,3 @@ const ChatList = ({ onSelectDriver }) => {
 };
 
 export default ChatList;
-
