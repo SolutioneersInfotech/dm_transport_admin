@@ -57,6 +57,8 @@ import {
   LayoutDashboard,
   Settings,
   ShieldCheck,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 const menuSections = [
@@ -87,6 +89,7 @@ const menuSections = [
 export default function Sidebar() {
   const location = useLocation();
   const [open, setOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [user, setUser] = useState(null);
   const [notifications, setNotifications] = useState([
     {
@@ -124,23 +127,47 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r border-slate-800 bg-slate-950 text-slate-100">
-      <div className="flex items-center gap-3 border-b border-slate-800 px-6 py-5">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-800 text-lg font-semibold">
-          DM
+    <aside
+      className={`flex h-screen flex-col border-r border-slate-800 bg-slate-950 text-slate-100 transition-all duration-200 ${
+        isCollapsed ? "w-20" : "w-64"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-800 text-lg font-semibold">
+            DM
+          </div>
+          <div className={`${isCollapsed ? "hidden" : "flex"} flex-col`}>
+            <span className="text-sm font-semibold">DM Transport</span>
+            <span className="text-xs text-slate-400">Admin Panel</span>
+          </div>
         </div>
-        <div className="flex flex-col">
-          <span className="text-sm font-semibold">DM Transport</span>
-          <span className="text-xs text-slate-400">Admin Panel</span>
-        </div>
+        <button
+          type="button"
+          onClick={() => setIsCollapsed((prev) => !prev)}
+          className="rounded-md border border-slate-800 p-1.5 text-slate-300 transition hover:border-slate-600 hover:text-white"
+          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {isCollapsed ? (
+            <ChevronRight className="h-4 w-4" />
+          ) : (
+            <ChevronLeft className="h-4 w-4" />
+          )}
+        </button>
       </div>
 
-      <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-4 py-6">
+      <div
+        className={`flex flex-1 flex-col gap-6 overflow-y-auto ${
+          isCollapsed ? "px-2 py-4" : "px-4 py-6"
+        }`}
+      >
         {menuSections.map((section) => (
           <div key={section.label} className="space-y-3">
-            <p className="px-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-              {section.label}
-            </p>
+            {!isCollapsed && (
+              <p className="px-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                {section.label}
+              </p>
+            )}
             <div className="space-y-1">
               {section.items.map((item) => {
                 const isActive = location.pathname === item.path;
@@ -150,7 +177,9 @@ export default function Sidebar() {
                   <Link
                     to={item.path}
                     key={item.title}
-                    className={`group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition
+                    className={`group relative flex items-center rounded-lg px-3 py-2 text-sm font-medium transition ${
+                      isCollapsed ? "justify-center" : "gap-3"
+                    }
                       ${
                         isActive
                           ? "bg-slate-800 text-white"
@@ -159,9 +188,16 @@ export default function Sidebar() {
                     `}
                   >
                     <Icon className="h-4 w-4 text-slate-400 group-hover:text-white" />
-                    <span className="flex-1">{item.title}</span>
-                    {item.badge && (
+                    <span className={isCollapsed ? "sr-only" : "flex-1"}>
+                      {item.title}
+                    </span>
+                    {item.badge && !isCollapsed && (
                       <span className="rounded-full bg-slate-700 px-2 py-0.5 text-xs text-slate-200">
+                        {item.badge}
+                      </span>
+                    )}
+                    {item.badge && isCollapsed && (
+                      <span className="absolute -right-1 -top-1 rounded-full bg-slate-700 px-1.5 py-0.5 text-[10px] text-slate-200">
                         {item.badge}
                       </span>
                     )}
@@ -172,62 +208,72 @@ export default function Sidebar() {
           </div>
         ))}
 
-        <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-200">
-              <Bell className="h-4 w-4 text-slate-400" />
-              Notifications
-              {unreadCount > 0 && (
-                <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-xs text-rose-200">
-                  {unreadCount}
-                </span>
+        {!isCollapsed && (
+          <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+                <Bell className="h-4 w-4 text-slate-400" />
+                Notifications
+                {unreadCount > 0 && (
+                  <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-xs text-rose-200">
+                    {unreadCount}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setNotifications([])}
+                className="text-xs font-semibold text-slate-400 transition hover:text-slate-200"
+              >
+                Clear
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {notifications.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-slate-800 px-3 py-4 text-xs text-slate-500">
+                  You&apos;re all caught up.
+                </p>
+              ) : (
+                notifications.map((notification) => (
+                  <div
+                    key={notification.id}
+                    className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-slate-200">
+                        {notification.title}
+                      </p>
+                      <span className="text-[10px] uppercase tracking-wide text-slate-500">
+                        {notification.time}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      {notification.detail}
+                    </p>
+                  </div>
+                ))
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => setNotifications([])}
-              className="text-xs font-semibold text-slate-400 transition hover:text-slate-200"
-            >
-              Clear
-            </button>
           </div>
-
-          <div className="space-y-2">
-            {notifications.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-slate-800 px-3 py-4 text-xs text-slate-500">
-                You&apos;re all caught up.
-              </p>
-            ) : (
-              notifications.map((notification) => (
-                <div
-                  key={notification.id}
-                  className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold text-slate-200">
-                      {notification.title}
-                    </p>
-                    <span className="text-[10px] uppercase tracking-wide text-slate-500">
-                      {notification.time}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-400">{notification.detail}</p>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+        )}
       </div>
 
       <div className="border-t border-slate-800 px-4 py-4">
-        <div className="relative flex items-center gap-3 rounded-lg bg-slate-900 px-3 py-3">
+        <div
+          className={`relative flex items-center rounded-lg bg-slate-900 px-3 py-3 ${
+            isCollapsed ? "justify-center" : "gap-3"
+          }`}
+        >
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-800">
             <ShieldCheck className="h-5 w-5 text-slate-200" />
           </div>
-          <div className="flex-1">
-            <p className="text-sm font-semibold">Admin Team</p>
-            <p className="text-xs text-slate-400">admin@dmtransport.io</p>
-          </div>
+          {!isCollapsed && (
+            <div className="flex-1">
+              <p className="text-sm font-semibold">Admin Team</p>
+              <p className="text-xs text-slate-400">admin@dmtransport.io</p>
+            </div>
+          )}
           <button
             className="rounded-md border border-slate-700 p-2 text-slate-300 transition hover:border-slate-500 hover:text-white"
             type="button"
