@@ -59,6 +59,7 @@ import Navbar from "./components/Navbar";
 import Dashboard from "./pages/Dashboard";
 import Chat from "./pages/Chat";
 import Documents from "./pages/Document";
+import MaintenanceChat from "./pages/MaintenanceChat";
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -83,6 +84,7 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/chat" element={<Chat />} />
+                <Route path="/maintenance-chat" element={<MaintenanceChat />} />
                 <Route path="/documents" element={<Documents />} />
               </Routes>
             </div>
