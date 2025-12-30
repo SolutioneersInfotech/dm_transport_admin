@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, MessageCircle, Settings } from "lucide-react";
+import { Settings } from "lucide-react";
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
@@ -23,22 +23,6 @@ export default function Navbar() {
   return (
     <div className="relative flex justify-end items-center p-4 bg-[#161b22] border-b border-gray-700">
       <div className="flex items-center gap-6">
-        {/* Notifications */}
-        <div className="relative cursor-pointer">
-          <Bell className="w-5 h-5" />
-          <span className="absolute -top-2 -right-2 bg-red-500 text-xs px-1 rounded-full">
-            189
-          </span>
-        </div>
-
-        {/* Messages */}
-        <div className="relative cursor-pointer">
-          <MessageCircle className="w-5 h-5" />
-          <span className="absolute -top-2 -right-2 bg-red-500 text-xs px-1 rounded-full">
-            0
-          </span>
-        </div>
-
         {/* Settings Icon */}
         <div className="cursor-pointer" onClick={() => setOpen(!open)}>
           <Settings className="w-5 h-5" />

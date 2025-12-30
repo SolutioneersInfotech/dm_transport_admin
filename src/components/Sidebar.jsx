@@ -44,8 +44,10 @@
 //   );
 // }
 
+import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
+  Bell,
   Folder,
   MessageCircle,
   Wrench,
@@ -84,6 +86,27 @@ const menuSections = [
 
 export default function Sidebar() {
   const location = useLocation();
+  const [notifications, setNotifications] = useState([
+    {
+      id: "notif-1",
+      title: "Chat escalation",
+      detail: "3 new escalations need review",
+      time: "2m ago",
+    },
+    {
+      id: "notif-2",
+      title: "Document upload",
+      detail: "12 manifests pending approval",
+      time: "18m ago",
+    },
+    {
+      id: "notif-3",
+      title: "System update",
+      detail: "Nightly sync completed",
+      time: "1h ago",
+    },
+  ]);
+  const unreadCount = useMemo(() => notifications.length, [notifications]);
 
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-slate-800 bg-slate-950 text-slate-100">
@@ -133,6 +156,52 @@ export default function Sidebar() {
             </div>
           </div>
         ))}
+
+        <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+              <Bell className="h-4 w-4 text-slate-400" />
+              Notifications
+              {unreadCount > 0 && (
+                <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-xs text-rose-200">
+                  {unreadCount}
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setNotifications([])}
+              className="text-xs font-semibold text-slate-400 transition hover:text-slate-200"
+            >
+              Clear
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {notifications.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-slate-800 px-3 py-4 text-xs text-slate-500">
+                You&apos;re all caught up.
+              </p>
+            ) : (
+              notifications.map((notification) => (
+                <div
+                  key={notification.id}
+                  className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-slate-200">
+                      {notification.title}
+                    </p>
+                    <span className="text-[10px] uppercase tracking-wide text-slate-500">
+                      {notification.time}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400">{notification.detail}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="border-t border-slate-800 px-4 py-4">
