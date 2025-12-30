@@ -175,32 +175,34 @@ export default function Sidebar() {
 
                 return (
                   <Link
-                    to={item.path}
-                    key={item.title}
-                    className={`group relative flex items-center rounded-lg px-3 py-2 text-sm font-medium transition ${
-                      isCollapsed ? "justify-center" : "gap-3"
+                  to={item.path}
+                  key={item.title}
+                  className={`group relative flex items-center rounded-lg px-3 py-2 text-sm font-medium transition ${
+                    isCollapsed ? "justify-center" : "gap-3"
+                  }
+                    ${
+                    isActive
+                      ? "bg-slate-800 text-white"
+                      : "text-slate-300 hover:bg-slate-900 hover:text-white"
                     }
-                      ${
-                        isActive
-                          ? "bg-slate-800 text-white"
-                          : "text-slate-300 hover:bg-slate-900 hover:text-white"
-                      }
-                    `}
+                  `}
                   >
-                    <Icon className="h-4 w-4 text-slate-400 group-hover:text-white" />
-                    <span className={isCollapsed ? "sr-only" : "flex-1"}>
-                      {item.title}
+                  <Icon className={`text-slate-400 group-hover:text-white ${
+                    isCollapsed ? "h-7 w-8" : "h-5 w-5"
+                  }`} />
+                  <span className={isCollapsed ? "sr-only" : "flex-1"}>
+                    {item.title}
+                  </span>
+                  {item.badge && !isCollapsed && (
+                    <span className="rounded-full bg-slate-700 px-2 py-0.5 text-xs text-slate-200">
+                    {item.badge}
                     </span>
-                    {item.badge && !isCollapsed && (
-                      <span className="rounded-full bg-slate-700 px-2 py-0.5 text-xs text-slate-200">
-                        {item.badge}
-                      </span>
-                    )}
-                    {item.badge && isCollapsed && (
-                      <span className="absolute -right-1 -top-1 rounded-full bg-slate-700 px-1.5 py-0.5 text-[10px] text-slate-200">
-                        {item.badge}
-                      </span>
-                    )}
+                  )}
+                  {item.badge && isCollapsed && (
+                    <span className="absolute -right-1 -top-1 rounded-full bg-slate-700 px-1.5 py-0.5 text-[10px] text-slate-200">
+                    {item.badge}
+                    </span>
+                  )}
                   </Link>
                 );
               })}
@@ -265,9 +267,11 @@ export default function Sidebar() {
             isCollapsed ? "justify-center" : "gap-3"
           }`}
         >
+          {!isCollapsed && (
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-800">
             <ShieldCheck className="h-5 w-5 text-slate-200" />
           </div>
+          )}
           {!isCollapsed && (
             <div className="flex-1">
               <p className="text-sm font-semibold">Admin Team</p>
