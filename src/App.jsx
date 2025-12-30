@@ -75,7 +75,7 @@ export default function App() {
           <Sidebar />
 
           <div className="flex-1 relative">
-            <div className="fixed top-0 left-20 right-0 z-50">
+            <div className="fixed top-0 left-64 right-0 z-50">
               <Navbar />
             </div>
 
