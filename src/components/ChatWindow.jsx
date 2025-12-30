@@ -187,10 +187,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  fetchMessages,
-  sendMessage,
-  deleteChatHistory,
-  deleteSpecificMessage,
+  fetchMessages as defaultFetchMessages,
+  sendMessage as defaultSendMessage,
+  deleteChatHistory as defaultDeleteChatHistory,
+  deleteSpecificMessage as defaultDeleteSpecificMessage,
 } from "../services/chatAPI";
 
 import ChatMessageBubble from "./ChatMessageBubble";
@@ -211,11 +211,22 @@ function formatLastSeen(lastSeen) {
   });
 }
 
-export default function ChatWindow({ driver }) {
+export default function ChatWindow({ driver, chatApi }) {
   const [messages, setMessages] = useState([]);
   const [selected, setSelected] = useState([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
+  const {
+    fetchMessages,
+    sendMessage,
+    deleteChatHistory,
+    deleteSpecificMessage,
+  } = chatApi || {
+    fetchMessages: defaultFetchMessages,
+    sendMessage: defaultSendMessage,
+    deleteChatHistory: defaultDeleteChatHistory,
+    deleteSpecificMessage: defaultDeleteSpecificMessage,
+  };
 
   const bottomRef = useRef(null);
 

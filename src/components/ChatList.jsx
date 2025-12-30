@@ -1,12 +1,19 @@
 import { useEffect, useState } from "react";
 import ChatListItem from "./ChatListItem";
-import { fetchUsersForChat, fetchMessages } from "../services/chatAPI";
+import {
+  fetchUsersForChat as defaultFetchUsersForChat,
+  fetchMessages as defaultFetchMessages,
+} from "../services/chatAPI";
 import SkeletonLoader from "./skeletons/Skeleton";
 
-const ChatList = ({ onSelectDriver }) => {
+const ChatList = ({ onSelectDriver, chatApi }) => {
   const [drivers, setDrivers] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
+  const { fetchUsersForChat, fetchMessages } = chatApi || {
+    fetchUsersForChat: defaultFetchUsersForChat,
+    fetchMessages: defaultFetchMessages,
+  };
 
   useEffect(() => {
     loadDrivers();
