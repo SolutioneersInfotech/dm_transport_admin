@@ -81,7 +81,7 @@ const ChatList = ({ onSelectDriver, chatApi }) => {
   return (
     <div className="h-full flex flex-col">
       {/* 🔍 SEARCH BAR (STICKY) */}
-      <div className="p-3 border-b border-gray-700 sticky top-0 bg-[#0d1117] z-20">
+      <div className="p-5 border-b border-gray-700 sticky top-0 bg-[#0d1117] z-20">
         <input
           type="text"
           placeholder="Search drivers..."

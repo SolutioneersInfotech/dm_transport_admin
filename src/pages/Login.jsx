@@ -1,99 +1,23 @@
-// import { useState } from "react";
-
-// export default function Login({ onLoginSuccess }) {
-//   const [id, setId] = useState("");
-//   const [password, setPassword] = useState("");
-//   const [loading, setLoading] = useState(false);
-//   const [error, setError] = useState("");
-
-//   async function handleLogin(e) {
-//     e.preventDefault();
-//     setLoading(true);
-//     setError("");
-
-//     try {
-//       const res = await fetch(
-//         "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin/login",
-//         {
-//           method: "POST",
-//           headers: { "Content-Type": "application/json" },
-//           body: JSON.stringify({ userid: id, password }),
-//         }
-//       );
-
-//       const data = await res.json();
-
-//       if (!res.ok) {
-//         setError(data.message || "Invalid credentials");
-//         return;
-//       }
-
-//       // Save token (optional)
-//      localStorage.setItem("adminToken", data.token);
-
-
-//       // After login success
-//       onLoginSuccess();
-//     } catch (err) {
-//       setError("Something went wrong");
-//     } finally {
-//       setLoading(false);
-//     }
-//   }
-
-//   return (
-//     <div className="flex justify-center items-center min-h-screen bg-[#0d1117]">
-//       <form
-//         onSubmit={handleLogin}
-//         className="bg-[#161b22] p-10 rounded-xl w-[420px] border border-gray-700 shadow-xl"
-//       >
-//         <h2 className="text-center text-2xl font-semibold mb-10 text-gray-200">
-//           Enter the following details
-//         </h2>
-
-//         <div className="mb-6">
-//           <label className="block text-gray-400 mb-1">Id</label>
-//           <input
-//             value={id}
-//             onChange={(e) => setId(e.target.value)}
-//             type="text"
-//             className="w-full bg-transparent border-b border-gray-600 outline-none py-2 text-gray-200"
-//           />
-//         </div>
-
-//         <div className="mb-6">
-//           <label className="block text-gray-400 mb-1">Password</label>
-//           <input
-//             value={password}
-//             onChange={(e) => setPassword(e.target.value)}
-//             type="password"
-//             className="w-full bg-transparent border-b border-gray-600 outline-none py-2 text-gray-200"
-//           />
-//         </div>
-
-//         {error && (
-//           <p className="text-red-500 text-sm mb-4 text-center">{error}</p>
-//         )}
-
-//         <button
-//           disabled={loading}
-//           className="w-full mt-4 bg-[#1f6feb] hover:bg-[#1158c7] transition text-white py-2 rounded-full flex justify-center items-center gap-2"
-//         >
-//           {loading ? "Logging in..." : "Login"}
-//         </button>
-//       </form>
-//     </div>
-//   );
-// }
-
-
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 export default function Login({ onLoginSuccess }) {
   const [id, setId] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const navigate = useNavigate();
+
+  // ✅ Auto redirect if already logged in
+  useEffect(() => {
+    const token = localStorage.getItem("adminToken");
+    if (token) {
+      navigate("/"); // or "/dashboard"
+    }
+  }, [navigate]);
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -102,7 +26,7 @@ export default function Login({ onLoginSuccess }) {
 
     try {
       const res = await fetch(
-        "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin/login",
+        `${import.meta.env.VITE_API_BASE_URL}/admin/login`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -117,62 +41,154 @@ export default function Login({ onLoginSuccess }) {
         return;
       }
 
-      // ✅ Save token
+      // ✅ Save auth data
       localStorage.setItem("adminToken", data.token);
-
-      // ⭐⭐⭐ SAVE USER DETAILS IN LOCAL STORAGE ⭐⭐⭐
       localStorage.setItem("adminUser", JSON.stringify(data.admin));
 
-      // After login success
-      onLoginSuccess();
-    } catch (err) {
-      setError("Something went wrong");
+      // Optional callback (if parent needs it)
+      if (onLoginSuccess) onLoginSuccess();
+
+      // ✅ REAL REDIRECT (this fixes /login issue)
+      navigate("/"); // change to "/dashboard" if you want
+    } catch {
+      setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="flex justify-center items-center min-h-screen bg-[#0d1117]">
-      <form
-        onSubmit={handleLogin}
-        className="bg-[#161b22] p-10 rounded-xl w-[420px] border border-gray-700 shadow-xl"
-      >
-        <h2 className="text-center text-2xl font-semibold mb-10 text-gray-200">
-          Enter the following details
-        </h2>
+    <div className="min-h-screen bg-[#0d1117] flex items-center justify-center">
+      <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-10 px-6">
 
-        <div className="mb-6">
-          <label className="block text-gray-400 mb-1">Id</label>
-          <input
-            value={id}
-            onChange={(e) => setId(e.target.value)}
-            type="text"
-            className="w-full bg-transparent border-b border-gray-600 outline-none py-2 text-gray-200"
-          />
+        {/* LEFT — BRAND */}
+        <div className="hidden md:flex flex-col justify-center">
+          <div className="mb-6 animate-fade-in">
+            <div className="text-4xl font-bold tracking-wide text-gray-100">
+              DM <span className="text-[#1f6feb]">Transport</span>
+            </div>
+            <div className="mt-2 h-[2px] w-16 bg-[#1f6feb] animate-line" />
+          </div>
+
+          <p className="text-gray-400 max-w-sm leading-relaxed">
+            Secure administrative access for operations, dispatch, and internal
+            management.
+          </p>
+
+          <p className="mt-10 text-xs text-gray-600">
+            © DM Transport • Internal System
+          </p>
         </div>
 
-        <div className="mb-6">
-          <label className="block text-gray-400 mb-1">Password</label>
-          <input
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            type="password"
-            className="w-full bg-transparent border-b border-gray-600 outline-none py-2 text-gray-200"
-          />
-        </div>
-
-        {error && (
-          <p className="text-red-500 text-sm mb-4 text-center">{error}</p>
-        )}
-
-        <button
-          disabled={loading}
-          className="w-full mt-4 bg-[#1f6feb] hover:bg-[#1158c7] transition text-white py-2 rounded-full flex justify-center items-center gap-2"
+        {/* RIGHT — LOGIN CARD */}
+        <form
+          onSubmit={handleLogin}
+          className="bg-[rgba(22,27,34,0.85)] backdrop-blur-xl
+          border border-gray-700 rounded-2xl p-10 shadow-xl
+          animate-slide-up"
         >
-          {loading ? "Logging in..." : "Login"}
-        </button>
-      </form>
+          <h2 className="text-2xl font-semibold text-gray-200 mb-2">
+            Admin Login
+          </h2>
+          <p className="text-sm text-gray-400 mb-8">
+            Authorized personnel only
+          </p>
+
+          {/* ID */}
+          <div className="mb-6">
+            <label className="block text-gray-400 mb-1">Admin ID</label>
+            <input
+              disabled={loading}
+              value={id}
+              onChange={(e) => setId(e.target.value)}
+              type="text"
+              className="w-full bg-transparent border-b border-gray-600
+              focus:border-[#1f6feb] transition outline-none py-2 pl-2
+              text-gray-200 disabled:opacity-50"
+            />
+          </div>
+
+          {/* Password */}
+          <div className="mb-6 relative">
+            <label className="block text-gray-400 mb-1">Password</label>
+            <input
+              disabled={loading}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              type={showPassword ? "text" : "password"}
+              className="w-full bg-transparent border-b border-gray-600
+              focus:border-[#1f6feb] transition outline-none py-2 pr-2 pl-2
+              text-gray-200 disabled:opacity-50"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-2 top-10 text-gray-400 hover:text-gray-200"
+              tabIndex={-1}
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+
+          {error && (
+            <p className="text-red-500 text-sm mb-4 text-center animate-shake">
+              {error}
+            </p>
+          )}
+
+          <button
+            disabled={loading}
+            className="w-full mt-4 bg-[#1f6feb] hover:bg-[#1158c7]
+            transition text-white py-2 rounded-full
+            flex justify-center items-center
+            disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {loading ? "Authenticating..." : "Login"}
+          </button>
+
+          <p className="mt-6 text-xs text-gray-600 text-center">
+            🔒 Secure Access
+          </p>
+        </form>
+      </div>
+
+      {/* Animations */}
+      <style>
+        {`
+          .animate-slide-up {
+            animation: slideUp 0.4s ease-out;
+          }
+          .animate-fade-in {
+            animation: fadeIn 1s ease-out;
+          }
+          .animate-line {
+            animation: lineGrow 1.2s ease-out;
+          }
+          .animate-shake {
+            animation: shake 0.3s;
+          }
+
+          @keyframes slideUp {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+          @keyframes lineGrow {
+            from { width: 0; }
+            to { width: 64px; }
+          }
+          @keyframes shake {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-4px); }
+            50% { transform: translateX(4px); }
+            75% { transform: translateX(-4px); }
+            100% { transform: translateX(0); }
+          }
+        `}
+      </style>
     </div>
   );
 }
