@@ -355,7 +355,7 @@ export default function Admins() {
   };
 
   return (
-    <div className="min-h-screen bg-[#101418] px-6 py-8 text-white">
+    <div className="flex min-h-screen h-full flex-col overflow-hidden bg-[#101418] px-6 py-8 text-white">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <p className="text-sm text-slate-400">DM Transport</p>
@@ -559,7 +559,7 @@ export default function Admins() {
         </div>
       )}
 
-      <div className="grid h-[calc(100vh-190px)] gap-6 lg:grid-cols-[320px_1fr]">
+      <div className="grid flex-1 gap-6 overflow-hidden lg:grid-cols-[320px_1fr]">
         <div className="flex flex-col rounded-2xl border border-slate-800 bg-[#151a1f] p-4 shadow-lg">
           <div className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-2">
             <Search className="h-4 w-4 text-slate-400" />
