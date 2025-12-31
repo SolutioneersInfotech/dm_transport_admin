@@ -6,6 +6,7 @@ import {
   Save,
   Trash2,
   ShieldCheck,
+  KeyRound
 } from "lucide-react";
 import {
   createAdmin,
@@ -280,9 +281,7 @@ export default function Admins() {
       );
       setIsAddAdminOpen(false);
     } catch (err) {
-      setCreateAdminError(
-        err?.message || "Unable to create admin right now."
-      );
+      setCreateAdminError(err?.message || "Unable to create admin right now.");
     } finally {
       setIsCreatingAdmin(false);
     }
@@ -335,9 +334,7 @@ export default function Admins() {
       setIsDeletingAdmin(true);
       setDeleteAdminError("");
       await deleteAdmin(userid);
-      setAdmins((prev) =>
-        prev.filter((admin) => admin.name !== selectedAdmin)
-      );
+      setAdmins((prev) => prev.filter((admin) => admin.name !== selectedAdmin));
       setAdminPermissions((prev) => {
         const next = { ...prev };
         delete next[selectedAdmin];
@@ -346,32 +343,14 @@ export default function Admins() {
       setSelectedAdmin("");
       setIsDeleteModalOpen(false);
     } catch (err) {
-      setDeleteAdminError(
-        err?.message || "Unable to delete admin right now."
-      );
+      setDeleteAdminError(err?.message || "Unable to delete admin right now.");
     } finally {
       setIsDeletingAdmin(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen h-full flex-col overflow-hidden bg-[#101418] px-6 py-8 text-white">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <p className="text-sm text-slate-400">DM Transport</p>
-          <h1 className="text-2xl font-semibold">Admins</h1>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setIsAddAdminOpen(true)}
-            className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-500"
-          >
-            <Plus className="h-4 w-4" />
-            Add Admin
-          </button>
-        </div>
-      </div>
+    <div className="flex min-h-screen h-full flex-col overflow-hidden bg-[#101418] px-4 py-4 text-white">
 
       {isAddAdminOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
@@ -408,7 +387,9 @@ export default function Admins() {
                   <input
                     type="password"
                     value={newAdminPassword}
-                    onChange={(event) => setNewAdminPassword(event.target.value)}
+                    onChange={(event) =>
+                      setNewAdminPassword(event.target.value)
+                    }
                     placeholder="Enter Password"
                     className="mt-2 w-full border-b border-slate-700 bg-transparent px-1 py-2 text-sm text-slate-100 focus:border-slate-400 focus:outline-none"
                   />
@@ -438,9 +419,7 @@ export default function Admins() {
                     key={permission}
                     className="flex items-center justify-between border-b border-slate-800 py-3"
                   >
-                    <span className="text-sm text-slate-200">
-                      {permission}
-                    </span>
+                    <span className="text-sm text-slate-200">{permission}</span>
                     <button
                       type="button"
                       onClick={() => toggleNewAdminPermission(permission)}
@@ -498,9 +477,7 @@ export default function Admins() {
 
             <form onSubmit={handleChangePassword} className="mt-6 space-y-6">
               <div>
-                <label className="text-sm text-slate-300">
-                  New Password
-                </label>
+                <label className="text-sm text-slate-300">New Password</label>
                 <input
                   type="password"
                   value={updatedPassword}
@@ -559,8 +536,8 @@ export default function Admins() {
         </div>
       )}
 
-      <div className="grid flex-1 min-h-0 gap-6 overflow-hidden lg:grid-cols-[320px_1fr]">
-        <div className="flex min-h-0 flex-col rounded-2xl border border-slate-800 bg-[#151a1f] p-4 shadow-lg">
+      <div className="grid flex-1 min-h-0 gap-4 overflow-hidden lg:grid-cols-[320px_1fr]">
+        <div className="flex min-h-0 flex-col rounded-2xl border border-slate-800 bg-[#151a1f] p-3 shadow-lg">
           <div className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-2">
             <Search className="h-4 w-4 text-slate-400" />
             <input
@@ -610,11 +587,24 @@ export default function Admins() {
                 ))
               )}
               {!isLoading && !error && (
-                <div className="sticky bottom-0 border-t border-slate-800 bg-[#151a1f] pt-3 text-xs text-slate-400">
-                  Total admins:{" "}
-                  <span className="font-semibold text-slate-200">
-                    {filteredAdmins.length}
-                  </span>
+                <div className="sticky bottom-0 border-t border-slate-800 bg-[#151a1f] pt-3 px-4 text-xs text-slate-400">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      Total admins:{" "}
+                      <span className="font-semibold text-slate-200">
+                        {filteredAdmins.length}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsAddAdminOpen(true)}
+                      className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-500"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Admin
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -684,18 +674,11 @@ export default function Admins() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    onClick={() => setIsChangePasswordOpen(true)}
                     className="rounded-lg border border-slate-700 bg-slate-900 p-2 text-slate-300 transition hover:border-slate-500"
                     aria-label="Save permissions"
                   >
-                    <Save className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsChangePasswordOpen(true)}
-                    disabled={!selectedAdmin}
-                    className="rounded-full border border-slate-700 px-4 py-1.5 text-xs text-slate-300 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    Change Password
+                    <KeyRound className="h-4 w-4" />
                   </button>
                   <button
                     type="button"
@@ -737,7 +720,11 @@ export default function Admins() {
                               permissions?.[permission]
                                 ? "border-sky-400 bg-sky-500"
                                 : "border-slate-700 bg-slate-800"
-                            } ${!selectedAdmin ? "cursor-not-allowed opacity-60" : ""}`}
+                            } ${
+                              !selectedAdmin
+                                ? "cursor-not-allowed opacity-60"
+                                : ""
+                            }`}
                           >
                             <span
                               className={`h-5 w-5 rounded-full bg-white shadow transition ${
