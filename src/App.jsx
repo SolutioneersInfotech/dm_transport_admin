@@ -1,93 +1,40 @@
-// import Sidebar from "./components/Sidebar";
-// import Navbar from "./components/Navbar";
-// import Dashboard from "./pages/Dashboard";
-// import Chat from "./pages/chat";
-
-// export default function App() {
-//   return (
-//     <div className="flex bg-[#101418] text-white min-h-screen">
-//       <Sidebar />
-//       <Chat />
-//       <div className="flex-1">
-//         <Navbar />
-//         <Dashboard />
-//       </div>
-//     </div>
-//   );
-// }
-
-// import { BrowserRouter, Routes, Route } from "react-router-dom";
-// import Sidebar from "./components/Sidebar";
-// import Navbar from "./components/Navbar";
-// import Dashboard from "./pages/Dashboard";
-// import Chat from "./pages/chat";
-// import Documents from "./pages/Document";
-
-// export default function App() {
-//   return (
-//     <BrowserRouter>
-//       <div className="flex bg-[#101418] text-white min-h-screen">
-//         {/* Sidebar always visible */}
-//         <Sidebar />
-
-//         {/* Main Area */}
-//         <div className="flex-1 relative">
-//           {/* 🔥 FIXED Navbar */}
-//           <div className="fixed top-0 left-20 right-0 z-50">
-//             <Navbar />
-//           </div>
-
-//           {/* 🔥 Scrollable Content (navbar height = ~70px) */}
-//           <div className="pt-[70px] h-screen overflow-y-auto">
-//             <Routes>
-//               <Route path="/" element={<Dashboard />} />
-//               <Route path="/chat" element={<Chat />} />
-//               <Route path="/documents" element={<Documents />} />
-//             </Routes>
-//           </div>
-//         </div>
-//       </div>
-//     </BrowserRouter>
-//   );
-// }
-
+import "./App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { AuthProvider } from "./context/AuthContext";
 import Login from "./pages/Login";
-import Sidebar from "./components/Sidebar";
 import Dashboard from "./pages/Dashboard";
 import Chat from "./pages/Chat";
 import Documents from "./pages/Document";
 import MaintenanceChat from "./pages/MaintenanceChat";
 import Drivers from "./pages/Drivers";
+import Admins from "./pages/Admins";
+import ProtectedLayout from "./layout/ProtectedLayout";
+import NotFoundPage from "./pages/NotFoundPage";
 
-export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+function App() {
+https://github.com/SolutioneersInfotech/dm_transport_admin/pull/23/conflict?name=src%252FApp.jsx&ancestor_oid=dbb21144f9747e06c6ee12a77ff7c8cffa331845&base_oid=9380e058236bacc65c16e20e10f481ca1ff1989f&head_oid=7fde0341cbbf290c5c3de6c8e1486e20e4984e7a  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Protected Routes */}
+          <Route element={<ProtectedLayout />}>
+            <Route exact path="/" element={<Dashboard />} />
+            <Route exact path="/chat" element={<Chat />} />
+            <Route exact path="/documents" element={<Documents />} />
+            <Route exact path="/maintenance-chat" element={<MaintenanceChat />} />
+            <Route exact path="/admins" element={<Admins />} />
+            <Route exact path="/drivers" element={<Drivers />} />
+          </Route>
 
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    setIsLoggedIn(!!token);
-  }, []);
+          {/* Public Routes */}
+          <Route exact path="/login" element={<Login />} />
 
-  return (
-    <BrowserRouter>
-      {isLoggedIn ? (
-        <div className="flex bg-[#101418] text-white min-h-screen">
-          <Sidebar />
-
-          <div className="flex-1 h-screen overflow-y-auto">
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/chat" element={<Chat />} />
-              <Route path="/documents" element={<Documents />} />
-              <Route path="/maintenance-chat" element={<MaintenanceChat />} />
-              <Route path="/drivers" element={<Drivers />} />
-            </Routes>
-          </div>
-        </div>
-      ) : (
-        <Login onLoginSuccess={() => setIsLoggedIn(true)} />
-      )}
-    </BrowserRouter>
+          {/* 404 - Catch all route */}
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
+
+export default App;

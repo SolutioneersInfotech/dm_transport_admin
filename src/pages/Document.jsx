@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import DocumentTable from "../components/DocumentTable";
 import DocumentPreview from "../components/DocumentPreview";
+import { fetchDocumentsRoute } from "../utils/apiRoutes";
 
 // Last 60 Days
 function getDefaultDates() {
@@ -52,13 +53,7 @@ export default function Documents() {
       setLoading(true);
 
       const token = localStorage.getItem("adminToken");
-
-      let url =
-        "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin/fetchdocuments";
-
-      if (startDate && endDate) {
-        url += `?start_date=${startDate}&end_date=${endDate}`;
-      }
+      const url = fetchDocumentsRoute(startDate, endDate);
 
       const res = await fetch(url, {
         method: "GET",

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DocumentCard from "../components/DocumentCard";
+import { fetchDocumentsRoute } from "../utils/apiRoutes";
 
 const summaryStats = [
   { label: "Active Chats", value: "148", trend: "+12% vs last week" },
@@ -84,12 +85,7 @@ export default function Dashboard() {
     async function fetchDocs() {
       try {
         const token = localStorage.getItem("adminToken");
-        let url =
-          "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin/fetchdocuments";
-
-        if (start && end) {
-          url += `?start_date=${start}&end_date=${end}`;
-        }
+        const url = fetchDocumentsRoute(start, end);
 
         const res = await fetch(url, {
           method: "GET",

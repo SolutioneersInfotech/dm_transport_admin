@@ -1,13 +1,17 @@
-const BASE_URL =
-  import.meta.env.VITE_DM_BACKEND_URL ??
-  "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/dm_backend";
+import {
+  maintenanceFetchUsersRoute,
+  maintenanceFetchChatHistoryRoute,
+  maintenanceSendChatMessageRoute,
+  maintenanceDeleteChatHistoryRoute,
+  maintenanceDeleteSpecificChatRoute,
+} from "../utils/apiRoutes";
 
 function getToken() {
   return localStorage.getItem("adminToken");
 }
 
 async function api(url, method = "GET", body = null) {
-  const res = await fetch(`${BASE_URL}/${url}`, {
+  const res = await fetch(url, {
     method,
     headers: {
       "Content-Type": "application/json",
@@ -20,7 +24,7 @@ async function api(url, method = "GET", body = null) {
 }
 
 export async function fetchUsersForChat() {
-  const result = await api("fetchusers", "GET");
+  const result = await api(maintenanceFetchUsersRoute, "GET");
 
   return {
     users: result?.users || [],
@@ -28,13 +32,13 @@ export async function fetchUsersForChat() {
 }
 
 export async function fetchMessages(userid) {
-  return await api(`fetchchathistory?userid=${userid}`, "GET");
+  return await api(maintenanceFetchChatHistoryRoute(userid), "GET");
 }
 
 export async function sendMessage(userid, text) {
   const adminUser = JSON.parse(localStorage.getItem("adminUser"));
 
-  return await api("sendchatmessage", "POST", {
+  return await api(maintenanceSendChatMessageRoute, "POST", {
     userid,
     message: text,
     sendername: adminUser?.userid || "Admin",
@@ -43,9 +47,9 @@ export async function sendMessage(userid, text) {
 }
 
 export async function deleteChatHistory(userid) {
-  return await api("deletechathistory", "DELETE", { userid });
+  return await api(maintenanceDeleteChatHistoryRoute, "DELETE", { userid });
 }
 
 export async function deleteSpecificMessage(id) {
-  return await api("deletespecificchats", "DELETE", { id });
+  return await api(maintenanceDeleteSpecificChatRoute, "DELETE", { id });
 }

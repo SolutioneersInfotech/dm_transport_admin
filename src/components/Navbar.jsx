@@ -1,23 +1,17 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Settings } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
-  const [user, setUser] = useState(null);
-
-  // 🔥 Load logged-in user from localStorage
-  useEffect(() => {
-    const savedUser = localStorage.getItem("adminUser");
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
-  }, []);
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   // 🔥 Logout function
   function handleLogout() {
-    localStorage.removeItem("adminToken");
-    localStorage.removeItem("adminUser");
-    window.location.href = "/login";
+    logout();
+    navigate("/login", { replace: true });
   }
 
   return (
