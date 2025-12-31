@@ -367,13 +367,6 @@ export default function Drivers() {
           >
             Export roster
           </button>
-          <button
-            type="button"
-            onClick={() => openModal("add")}
-            className="rounded-full bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-500"
-          >
-            Add driver
-          </button>
         </div>
       </header>
 
@@ -409,7 +402,7 @@ export default function Drivers() {
       </section>
 
       <section className="grid flex-1 min-h-0 items-start gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <div className="flex min-h-0 flex-col rounded-2xl border border-slate-800 bg-slate-950/60">
+        <div className="flex h-[640px] flex-col rounded-2xl border border-slate-800 bg-slate-950/60">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 p-4">
             <div className="relative flex-1 min-w-[240px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -468,7 +461,7 @@ export default function Drivers() {
             <span className="col-span-2 text-right">Last seen</span>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="drivers-scroll flex-1 overflow-y-auto">
             {isLoading && (
               <div className="px-4 py-6 text-sm text-slate-400">
                 Loading drivers…
@@ -534,12 +527,12 @@ export default function Drivers() {
             })}
           </div>
 
-          <div className="flex items-center justify-between border-t border-slate-800 px-4 py-3 text-sm text-slate-400">
+          <div className="sticky bottom-0 flex items-center justify-between border-t border-slate-800 bg-slate-950/95 px-4 py-3 text-sm text-slate-400 backdrop-blur">
             <span>Total drivers: {totalDrivers}</span>
             <button
               type="button"
               onClick={() => openModal("add")}
-              className="rounded-full border border-slate-700 px-4 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-slate-500"
+              className="rounded-full bg-sky-600 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-sky-500"
             >
               + Add Driver
             </button>
