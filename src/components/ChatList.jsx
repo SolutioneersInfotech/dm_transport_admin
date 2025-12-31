@@ -15,6 +15,17 @@ const ChatList = ({ onSelectDriver, chatApi }) => {
     fetchMessages: defaultFetchMessages,
   };
 
+  function getDriverId(driver) {
+    return (
+      driver?.userid ||
+      driver?.userId ||
+      driver?.contactId ||
+      driver?.contactid ||
+      driver?.id ||
+      null
+    );
+  }
+
   useEffect(() => {
     loadDrivers();
   }, []);
@@ -33,13 +44,18 @@ const ChatList = ({ onSelectDriver, chatApi }) => {
       // 🔥 Attach last message to each user
       const withLastChat = await Promise.all(
         res.users.map(async (u) => {
+          const userId = getDriverId(u);
+          if (!userId) {
+            return null;
+          }
+
           try {
-            const chat = await fetchMessages(u.userid);
+            const chat = await fetchMessages(userId);
             const msgs = chat?.messages || [];
             const lastMsg = msgs[msgs.length - 1];
 
             return {
-              userid: u.userid,
+              userid: userId,
               driver_name: u.name || u.driver_name,
               driver_image: u.profilePic || u.image || null,
               lastSeen: u.lastSeen || null,
@@ -48,7 +64,7 @@ const ChatList = ({ onSelectDriver, chatApi }) => {
             };
           } catch {
             return {
-              userid: u.userid,
+              userid: userId,
               driver_name: u.name || u.driver_name,
               driver_image: u.profilePic || u.image || null,
               last_message: "",
@@ -59,7 +75,9 @@ const ChatList = ({ onSelectDriver, chatApi }) => {
       );
 
       // 🔥 SORT → latest chat first
-      withLastChat.sort((a, b) => {
+      const driversWithIds = withLastChat.filter(Boolean);
+
+      driversWithIds.sort((a, b) => {
         if (!a.last_chat_time) return 1;
         if (!b.last_chat_time) return -1;
         return (
@@ -68,7 +86,7 @@ const ChatList = ({ onSelectDriver, chatApi }) => {
         );
       });
 
-      setDrivers(withLastChat);
+      setDrivers(driversWithIds);
     } finally {
       setLoading(false);
     }

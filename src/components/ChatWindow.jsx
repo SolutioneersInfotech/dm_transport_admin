@@ -216,6 +216,13 @@ export default function ChatWindow({ driver, chatApi }) {
   const [selected, setSelected] = useState([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
+  const driverId =
+    driver?.userid ||
+    driver?.userId ||
+    driver?.contactId ||
+    driver?.contactid ||
+    driver?.id ||
+    null;
   const {
     fetchMessages,
     sendMessage,
@@ -232,10 +239,10 @@ export default function ChatWindow({ driver, chatApi }) {
 
   /* ================= LOAD MESSAGES ================= */
   useEffect(() => {
-    if (driver?.userid) {
+    if (driverId) {
       loadMessages();
     }
-  }, [driver]);
+  }, [driverId]);
 
   async function loadMessages() {
     try {
@@ -243,7 +250,7 @@ export default function ChatWindow({ driver, chatApi }) {
       setMessages([]);
       setSelected([]);
 
-      const res = await fetchMessages(driver.userid);
+      const res = await fetchMessages(driverId);
       setMessages(res?.messages || []);
       scrollToBottom();
     } finally {
@@ -281,7 +288,7 @@ export default function ChatWindow({ driver, chatApi }) {
     scrollToBottom();
     setText("");
 
-    await sendMessage(driver.userid, text);
+    await sendMessage(driverId, text);
   }
 
   /* ================= DELETE SELECTED ================= */
@@ -289,7 +296,7 @@ export default function ChatWindow({ driver, chatApi }) {
     if (selected.length === 0) return;
 
     for (let id of selected) {
-      await deleteSpecificMessage(id, driver.userid);
+      await deleteSpecificMessage(id, driverId);
     }
 
     setMessages((prev) => prev.filter((m) => !selected.includes(m.msgId)));
@@ -300,7 +307,7 @@ export default function ChatWindow({ driver, chatApi }) {
   async function handleDeleteAll() {
     if (!window.confirm("Delete all messages?")) return;
 
-    await deleteChatHistory(driver.userid);
+    await deleteChatHistory(driverId);
     setMessages([]);
     setSelected([]);
   }
