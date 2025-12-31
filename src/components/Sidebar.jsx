@@ -191,7 +191,7 @@ export default function Sidebar() {
       </div>
 
       <div
-        className={`flex flex-1 flex-col gap-6 overflow-y-auto ${
+        className={`sidebar-scroll flex flex-1 flex-col gap-6 overflow-y-auto ${
           isCollapsed ? "px-2 py-4" : "px-4 py-6"
         }`}
       >
