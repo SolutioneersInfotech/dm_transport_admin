@@ -13,6 +13,7 @@
     "@reduxjs/toolkit": "^2.8.1",
     "@tanstack/react-query": "^5.76.0",
     "@tailwindcss/vite": "^4.1.6",
+    "firebase": "^11.10.0",
     "lucide-react": "^0.562.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

@@ -289,7 +289,7 @@ export default function ChatWindow({ driver, chatApi }) {
     if (selected.length === 0) return;
 
     for (let id of selected) {
-      await deleteSpecificMessage(id);
+      await deleteSpecificMessage(id, driver.userid);
     }
 
     setMessages((prev) => prev.filter((m) => !selected.includes(m.msgId)));
