@@ -348,29 +348,8 @@ export default function Drivers() {
         : "Change Password";
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-            Operations · Drivers
-          </p>
-          <h1 className="text-3xl font-semibold text-slate-100">Drivers</h1>
-          <p className="mt-2 max-w-2xl text-sm text-slate-400">
-            Monitor your fleet roster, review compliance metrics, and manage
-            driver availability from a single, modernized workspace.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-500"
-          >
-            Export roster
-          </button>
-        </div>
-      </header>
-
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="flex h-full flex-col gap-3 p-3">
+      {/* <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
           <p className="text-sm text-slate-400">Total Drivers</p>
           <p className="mt-3 text-2xl font-semibold text-slate-100">
@@ -399,10 +378,10 @@ export default function Drivers() {
           </p>
           <p className="mt-2 text-xs text-slate-500">Across 2,140 trips</p>
         </div>
-      </section>
+      </section> */}
 
-      <section className="grid flex-1 min-h-0 items-start gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <div className="flex h-[640px] flex-col rounded-2xl border border-slate-800 bg-slate-950/60">
+      <section className="grid flex-1 min-h-0 items-start gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <div className="flex h-[740px] flex-col rounded-2xl border border-slate-800 bg-slate-950/60">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 p-4">
             <div className="relative flex-1 min-w-[240px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -539,7 +518,7 @@ export default function Drivers() {
           </div>
         </div>
 
-        <aside className="flex flex-col gap-4 self-start rounded-2xl border border-slate-800 bg-slate-950/60 p-5">
+        <aside className="flex flex-col gap-4 self-start rounded-2xl border border-slate-800 bg-slate-950/60 p-7">
           {selectedDriver ? (
             <>
               <div className="flex items-start justify-between gap-4">
@@ -645,7 +624,7 @@ export default function Drivers() {
               </div>
 
               <div className="grid gap-3">
-                <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
                     Latest activity
                   </p>
