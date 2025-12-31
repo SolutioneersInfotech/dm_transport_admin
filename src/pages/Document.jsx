@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import DocumentTable from "../components/DocumentTable";
 import DocumentPreview from "../components/DocumentPreview";
 
@@ -33,6 +34,8 @@ export default function Documents() {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDoc, setSelectedDoc] = useState(null);
+
+  const [searchParams] = useSearchParams();
 
   const [startDate, setStartDate] = useState(start);
   const [endDate, setEndDate] = useState(end);
@@ -88,6 +91,19 @@ export default function Documents() {
   useEffect(() => {
     fetchDocs();
   }, [startDate, endDate]);
+
+  useEffect(() => {
+    const typeParam = searchParams.get("type");
+    const statusParam = searchParams.get("status");
+
+    setSelectedFilter(typeParam || null);
+
+    if (["all", "seen", "unseen"].includes(statusParam)) {
+      setStatusFilter(statusParam);
+    } else {
+      setStatusFilter("all");
+    }
+  }, [searchParams]);
 
   const filteredDocuments = documents
     .filter((doc) =>

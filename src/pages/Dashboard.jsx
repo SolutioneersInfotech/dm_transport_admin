@@ -1,3 +1,5 @@
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import DocumentCard from "../components/DocumentCard";
 
 const summaryStats = [
@@ -33,21 +35,104 @@ const analyticsInsights = [
   },
 ];
 
-const documents = [
-  { title: "Pickup Docs", count: 2, priority: "High" },
-  { title: "Delivery Proofs", count: 1, priority: "Normal" },
-  { title: "Load Images", count: 141, priority: "High" },
-  { title: "Fuel Receipts", count: 65, priority: "Normal" },
-  { title: "Stamp Papers", count: 744, priority: "High" },
-  { title: "Driver Expenses", count: 56, priority: "Normal" },
-  { title: "Trip Envelopes", count: 170, priority: "Normal" },
-  { title: "City Worksheets", count: 126, priority: "Normal" },
-  { title: "Trip Envelopes (DM Trans)", count: 0, priority: "Low" },
-  { title: "Repair & Maintenance", count: 69, priority: "Normal" },
-  { title: "CTPAT", count: 61, priority: "Normal" },
+const documentTiles = [
+  { title: "Pickup Docs", filterType: "pick_up", priority: "High" },
+  { title: "Delivery Proofs", filterType: "delivery", priority: "Normal" },
+  { title: "Load Images", filterType: "load_image", priority: "High" },
+  { title: "Fuel Receipts", filterType: "fuel_recipt", priority: "Normal" },
+  { title: "Stamp Papers", filterType: "paper_logs", priority: "High" },
+  { title: "Driver Expenses", filterType: "driver_expense_sheet", priority: "Normal" },
+  {
+    title: "Trip Envelopes",
+    filterType: "dm_transport_trip_envelope",
+    priority: "Normal",
+  },
+  {
+    title: "City Worksheets",
+    filterType: "dm_transport_city_worksheet_trip_envelope",
+    priority: "Normal",
+  },
+  {
+    title: "Trip Envelopes (DM Trans)",
+    filterType: "dm_trans_inc_trip_envelope",
+    priority: "Low",
+  },
+  {
+    title: "Repair & Maintenance",
+    filterType: "trip_envelope",
+    priority: "Normal",
+  },
+  { title: "CTPAT", filterType: "CTPAT", priority: "Normal" },
 ];
 
+function getDefaultDates() {
+  const today = new Date();
+  const past = new Date();
+  past.setDate(today.getDate() - 60);
+
+  const format = (d) => d.toISOString().split("T")[0];
+
+  return { start: format(past), end: format(today) };
+}
+
 export default function Dashboard() {
+  const navigate = useNavigate();
+  const { start, end } = getDefaultDates();
+  const [documents, setDocuments] = useState([]);
+
+  useEffect(() => {
+    async function fetchDocs() {
+      try {
+        const token = localStorage.getItem("adminToken");
+        let url =
+          "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin/fetchdocuments";
+
+        if (start && end) {
+          url += `?start_date=${start}&end_date=${end}`;
+        }
+
+        const res = await fetch(url, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) return;
+
+        setDocuments(data.documents || []);
+      } catch (err) {
+        console.log("Fetch error:", err);
+      }
+    }
+
+    fetchDocs();
+  }, [start, end]);
+
+  const unseenDocuments = useMemo(
+    () => documents.filter((doc) => doc.seen === false),
+    [documents]
+  );
+
+  const unseenTotal =
+    unseenDocuments.length > 999 ? "999+" : unseenDocuments.length;
+
+  const documentCounts = useMemo(() => {
+    return documentTiles.reduce((acc, tile) => {
+      acc[tile.filterType] = unseenDocuments.filter(
+        (doc) => doc.type === tile.filterType
+      ).length;
+      return acc;
+    }, {});
+  }, [unseenDocuments]);
+
+  const handleTileClick = (filterType) => {
+    navigate(`/documents?status=unseen&type=${filterType}`);
+  };
+
   return (
     <div className="p-6 space-y-8">
       <section className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
@@ -146,13 +231,22 @@ export default function Dashboard() {
             </p>
           </div>
           <span className="bg-red-600 text-xs px-3 py-1 rounded-full text-white">
-            999+ pending
+            {unseenTotal} pending
           </span>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
-          {documents.map((doc) => (
+          {documentTiles.map((doc) => (
             <div key={doc.title} className="relative">
-              <DocumentCard title={doc.title} count={doc.count} />
+              <button
+                type="button"
+                className="w-full text-left"
+                onClick={() => handleTileClick(doc.filterType)}
+              >
+                <DocumentCard
+                  title={doc.title}
+                  count={documentCounts[doc.filterType] || 0}
+                />
+              </button>
               <span
                 className={`absolute top-4 right-4 text-[10px] uppercase tracking-wide px-2 py-1 rounded-full ${
                   doc.priority === "High"
