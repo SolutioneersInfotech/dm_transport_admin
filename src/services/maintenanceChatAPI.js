@@ -9,6 +9,8 @@ import { database } from "../firebase/firebaseApp";
 
 const ADMIN_MAINTENANCE_PATH = "chat/users/admin/maintenance";
 const USER_MAINTENANCE_PATH = "chat/users";
+const USERS_PATH = "users";
+const DRIVERS_PATH = "drivers";
 const CONFIG_PATH = "configuration";
 
 function getAdminUser() {
@@ -50,6 +52,42 @@ function getDriverNameFromMessages(messages, fallback) {
   return fallback;
 }
 
+async function fetchDriverProfile(contactId) {
+  const profilePaths = [
+    `${USERS_PATH}/${contactId}`,
+    `${DRIVERS_PATH}/${contactId}`,
+  ];
+
+  for (const path of profilePaths) {
+    const snapshot = await get(ref(database, path));
+    if (snapshot.exists()) {
+      return snapshot.val();
+    }
+  }
+
+  return null;
+}
+
+function getDriverImage(profile) {
+  return (
+    profile?.profilePic ||
+    profile?.image ||
+    profile?.photoUrl ||
+    profile?.avatar ||
+    null
+  );
+}
+
+function getDriverName(profile) {
+  return (
+    profile?.name ||
+    profile?.driver_name ||
+    profile?.fullName ||
+    profile?.username ||
+    null
+  );
+}
+
 export async function fetchUsersForChat() {
   const adminRef = ref(database, ADMIN_MAINTENANCE_PATH);
   const snapshot = await get(adminRef);
@@ -80,10 +118,14 @@ export async function fetchUsersForChat() {
 
     const sortedMessages = sortByDateTimeAsc(messages);
     const lastMessage = sortedMessages[sortedMessages.length - 1];
+    const profile = await fetchDriverProfile(contactId);
+    const profileName = getDriverName(profile);
 
     users.push({
       userid: contactId,
-      driver_name: getDriverNameFromMessages(sortedMessages, contactId),
+      driver_name:
+        profileName || getDriverNameFromMessages(sortedMessages, contactId),
+      driver_image: getDriverImage(profile),
       last_message: lastMessage?.content?.message || "",
       last_chat_time: lastMessage?.dateTime || null,
     });
