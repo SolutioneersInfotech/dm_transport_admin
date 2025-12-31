@@ -135,8 +135,13 @@
 // }
 
 
-const BASE_URL =
-  "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin";
+import {
+  fetchUsersRoute,
+  fetchChatHistoryRoute,
+  sendChatMessageRoute,
+  deleteChatHistoryRoute,
+  deleteSpecificChatRoute,
+} from "../utils/apiRoutes";
 
 // Always get latest token
 function getToken() {
@@ -144,7 +149,7 @@ function getToken() {
 }
 
 async function api(url, method = "GET", body = null) {
-  const res = await fetch(`${BASE_URL}/${url}`, {
+  const res = await fetch(url, {
     method,
     headers: {
       "Content-Type": "application/json",
@@ -157,10 +162,10 @@ async function api(url, method = "GET", body = null) {
 }
 
 /* ------------------------------------------------------------------
-    1️⃣ Fetch all drivers/users for chat
+   1️⃣ Fetch all drivers/users for chat
 ------------------------------------------------------------------ */
 export async function fetchUsersForChat() {
-  const result = await api("fetchusers", "GET");
+  const result = await api(fetchUsersRoute, "GET");
 
   return {
     users: result?.users || [],
@@ -168,19 +173,19 @@ export async function fetchUsersForChat() {
 }
 
 /* ------------------------------------------------------------------
-    2️⃣ Fetch Chat Messages
+   2️⃣ Fetch Chat Messages
 ------------------------------------------------------------------ */
 export async function fetchMessages(userid) {
-  return await api(`fetchchathistory?userid=${userid}`, "GET");
+  return await api(fetchChatHistoryRoute(userid), "GET");
 }
 
 /* ------------------------------------------------------------------
-    3️⃣ Send Message (UPDATED to include sendername)
+   3️⃣ Send Message (UPDATED to include sendername)
 ------------------------------------------------------------------ */
 export async function sendMessage(userid, text) {
   const adminUser = JSON.parse(localStorage.getItem("adminUser"));
 
-  return await api("sendchatmessage", "POST", {
+  return await api(sendChatMessageRoute, "POST", {
     userid,                    // driver id
     message: text,             // chat text
     sendername: adminUser?.userid || "Admin", // logged-in admin
@@ -188,17 +193,16 @@ export async function sendMessage(userid, text) {
   });
 }
 
-
 /* ------------------------------------------------------------------
-    4️⃣ Delete complete chat history
+   4️⃣ Delete complete chat history
 ------------------------------------------------------------------ */
 export async function deleteChatHistory(userid) {
-  return await api("deletechathistory", "DELETE", { userid });
+  return await api(deleteChatHistoryRoute, "DELETE", { userid });
 }
 
 /* ------------------------------------------------------------------
-    5️⃣ Delete single message
+   5️⃣ Delete single message
 ------------------------------------------------------------------ */
 export async function deleteSpecificMessage(id) {
-  return await api("deletespecificchats", "DELETE", { id });
+  return await api(deleteSpecificChatRoute, "DELETE", { id });
 }

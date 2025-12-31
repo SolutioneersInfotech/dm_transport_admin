@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { loginRoute } from "../utils/apiRoutes";
 
-export default function Login({ onLoginSuccess }) {
+export default function Login() {
   const [id, setId] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -10,14 +12,14 @@ export default function Login({ onLoginSuccess }) {
   const [error, setError] = useState("");
 
   const navigate = useNavigate();
+  const { isAuthenticated, login } = useAuth();
 
   // ✅ Auto redirect if already logged in
   useEffect(() => {
-    const token = localStorage.getItem("adminToken");
-    if (token) {
-      navigate("/"); // or "/dashboard"
+    if (isAuthenticated) {
+      navigate("/", { replace: true });
     }
-  }, [navigate]);
+  }, [isAuthenticated, navigate]);
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -25,14 +27,11 @@ export default function Login({ onLoginSuccess }) {
     setError("");
 
     try {
-      const res = await fetch(
-        `${import.meta.env.VITE_API_BASE_URL}/admin/login`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userid: id, password }),
-        }
-      );
+      const res = await fetch(loginRoute, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userid: id, password }),
+      });
 
       const data = await res.json();
 
@@ -41,15 +40,11 @@ export default function Login({ onLoginSuccess }) {
         return;
       }
 
-      // ✅ Save auth data
-      localStorage.setItem("adminToken", data.token);
-      localStorage.setItem("adminUser", JSON.stringify(data.admin));
-
-      // Optional callback (if parent needs it)
-      if (onLoginSuccess) onLoginSuccess();
+      // ✅ Save auth data using context
+      login(data.admin, data.token);
 
       // ✅ REAL REDIRECT (this fixes /login issue)
-      navigate("/"); // change to "/dashboard" if you want
+      navigate("/", { replace: true });
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
