@@ -90,6 +90,9 @@ export default function Admins() {
   const [selectedAdmin, setSelectedAdmin] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [isAddAdminOpen, setIsAddAdminOpen] = useState(false);
+  const [newAdminName, setNewAdminName] = useState("");
+  const [newAdminEmail, setNewAdminEmail] = useState("");
   const [adminPermissions, setAdminPermissions] = useState({});
 
   useEffect(() => {
@@ -164,6 +167,32 @@ export default function Admins() {
     (admin) => admin.name === selectedAdmin
   );
 
+  const handleAddAdmin = (event) => {
+    event.preventDefault();
+    const trimmedName = newAdminName.trim();
+    if (!trimmedName) {
+      return;
+    }
+
+    const createdAdmin = {
+      id: `local-${Date.now()}`,
+      name: trimmedName,
+      raw: {
+        email: newAdminEmail.trim() || undefined,
+      },
+    };
+
+    setAdmins((prev) => [createdAdmin, ...prev]);
+    setAdminPermissions((prev) => ({
+      ...prev,
+      [createdAdmin.name]: buildPermissionsForAdmin(createdAdmin.name),
+    }));
+    setSelectedAdmin(createdAdmin.name);
+    setNewAdminName("");
+    setNewAdminEmail("");
+    setIsAddAdminOpen(false);
+  };
+
   return (
     <div className="min-h-screen bg-[#101418] px-6 py-8 text-white">
       <div className="mb-6 flex items-center justify-between">
@@ -174,6 +203,7 @@ export default function Admins() {
         <div className="flex items-center gap-3">
           <button
             type="button"
+            onClick={() => setIsAddAdminOpen(true)}
             className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-500"
           >
             <Plus className="h-4 w-4" />
@@ -181,6 +211,66 @@ export default function Admins() {
           </button>
         </div>
       </div>
+
+      {isAddAdminOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-[#151a1f] p-6 shadow-xl">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-slate-400">Admins</p>
+                <h2 className="text-xl font-semibold">Add Admin</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddAdminOpen(false)}
+                className="rounded-lg border border-slate-700 px-2 py-1 text-sm text-slate-300 transition hover:border-slate-500"
+              >
+                Close
+              </button>
+            </div>
+
+            <form onSubmit={handleAddAdmin} className="mt-6 space-y-4">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                  Admin name
+                </label>
+                <input
+                  value={newAdminName}
+                  onChange={(event) => setNewAdminName(event.target.value)}
+                  placeholder="Enter full name"
+                  className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-slate-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                  Email (optional)
+                </label>
+                <input
+                  value={newAdminEmail}
+                  onChange={(event) => setNewAdminEmail(event.target.value)}
+                  placeholder="admin@dmtransport.io"
+                  className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-slate-500 focus:outline-none"
+                />
+              </div>
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsAddAdminOpen(false)}
+                  className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:border-slate-500"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-full bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-sky-400"
+                >
+                  Save Admin
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
         <div className="rounded-2xl border border-slate-800 bg-[#151a1f] p-4 shadow-lg">
