@@ -408,8 +408,8 @@ export default function Drivers() {
         </div>
       </section>
 
-      <section className="grid flex-1 gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <div className="flex h-full flex-col rounded-2xl border border-slate-800 bg-slate-950/60">
+      <section className="grid flex-1 min-h-0 items-start gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <div className="flex min-h-0 flex-col rounded-2xl border border-slate-800 bg-slate-950/60">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 p-4">
             <div className="relative flex-1 min-w-[240px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -546,7 +546,7 @@ export default function Drivers() {
           </div>
         </div>
 
-        <aside className="flex h-full flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-950/60 p-5">
+        <aside className="flex flex-col gap-4 self-start rounded-2xl border border-slate-800 bg-slate-950/60 p-5">
           {selectedDriver ? (
             <>
               <div className="flex items-start justify-between gap-4">
