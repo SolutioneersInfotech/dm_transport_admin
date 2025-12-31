@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import NotesNotifications from "./NotesNotifications";
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
@@ -17,6 +18,7 @@ export default function Navbar() {
   return (
     <div className="relative flex justify-end items-center p-4 bg-[#161b22] border-b border-gray-700">
       <div className="flex items-center gap-6">
+        <NotesNotifications />
         {/* Settings Icon */}
         <div className="cursor-pointer" onClick={() => setOpen(!open)}>
           <Settings className="w-5 h-5" />
