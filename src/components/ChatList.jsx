@@ -16,14 +16,20 @@ const ChatList = ({ onSelectDriver, chatApi }) => {
   };
 
   function getDriverId(driver) {
-    return (
-      driver?.userid ||
-      driver?.userId ||
-      driver?.contactId ||
-      driver?.contactid ||
-      driver?.id ||
-      null
-    );
+    const candidate =
+      driver?.userid ??
+      driver?.userId ??
+      driver?.contactId ??
+      driver?.contactid ??
+      driver?.uid ??
+      driver?.id ??
+      null;
+
+    if (candidate === "" || candidate === null || candidate === undefined) {
+      return null;
+    }
+
+    return candidate;
   }
 
   useEffect(() => {

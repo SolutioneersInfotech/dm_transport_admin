@@ -216,13 +216,22 @@ export default function ChatWindow({ driver, chatApi }) {
   const [selected, setSelected] = useState([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
-  const driverId =
-    driver?.userid ||
-    driver?.userId ||
-    driver?.contactId ||
-    driver?.contactid ||
-    driver?.id ||
-    null;
+  const driverId = (() => {
+    const candidate =
+      driver?.userid ??
+      driver?.userId ??
+      driver?.contactId ??
+      driver?.contactid ??
+      driver?.uid ??
+      driver?.id ??
+      null;
+
+    if (candidate === "" || candidate === null || candidate === undefined) {
+      return null;
+    }
+
+    return candidate;
+  })();
   const {
     fetchMessages,
     sendMessage,
@@ -239,9 +248,13 @@ export default function ChatWindow({ driver, chatApi }) {
 
   /* ================= LOAD MESSAGES ================= */
   useEffect(() => {
-    if (driverId) {
-      loadMessages();
+    if (!driverId) {
+      setMessages([]);
+      setSelected([]);
+      return;
     }
+
+    loadMessages();
   }, [driverId]);
 
   async function loadMessages() {

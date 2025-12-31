@@ -176,7 +176,24 @@ export async function fetchUsersForChat() {
    2️⃣ Fetch Chat Messages
 ------------------------------------------------------------------ */
 export async function fetchMessages(userid) {
-  return await api(fetchChatHistoryRoute(userid), "GET");
+  const result = await api(fetchChatHistoryRoute(userid), "GET");
+  const fallbackMessages =
+    result?.messages ||
+    result?.chatHistory ||
+    result?.chats ||
+    result?.data?.messages ||
+    result?.data ||
+    result?.message ||
+    [];
+
+  return {
+    ...result,
+    messages: Array.isArray(result)
+      ? result
+      : Array.isArray(fallbackMessages)
+      ? fallbackMessages
+      : [],
+  };
 }
 
 /* ------------------------------------------------------------------
