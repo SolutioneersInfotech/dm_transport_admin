@@ -59,6 +59,7 @@ import Dashboard from "./pages/Dashboard";
 import Chat from "./pages/Chat";
 import Documents from "./pages/Document";
 import MaintenanceChat from "./pages/MaintenanceChat";
+import Drivers from "./pages/Drivers";
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -79,6 +80,8 @@ export default function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/chat" element={<Chat />} />
               <Route path="/documents" element={<Documents />} />
+              <Route path="/maintenance-chat" element={<MaintenanceChat />} />
+              <Route path="/drivers" element={<Drivers />} />
             </Routes>
           </div>
         </div>
