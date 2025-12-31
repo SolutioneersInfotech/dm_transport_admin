@@ -559,8 +559,8 @@ export default function Admins() {
         </div>
       )}
 
-      <div className="grid flex-1 gap-6 overflow-hidden lg:grid-cols-[320px_1fr]">
-        <div className="flex flex-col rounded-2xl border border-slate-800 bg-[#151a1f] p-4 shadow-lg">
+      <div className="grid flex-1 min-h-0 gap-6 overflow-hidden lg:grid-cols-[320px_1fr]">
+        <div className="flex min-h-0 flex-col rounded-2xl border border-slate-800 bg-[#151a1f] p-4 shadow-lg">
           <div className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-2">
             <Search className="h-4 w-4 text-slate-400" />
             <input
@@ -571,9 +571,9 @@ export default function Admins() {
             />
           </div>
 
-          <div className="mt-4 flex flex-1 flex-col overflow-y-auto">
+          <div className="mt-4 flex min-h-0 flex-1 flex-col">
             <p className="text-sm text-slate-400">Admins</p>
-            <div className="mt-3 space-y-1 pr-1">
+            <div className="admin-scroll mt-3 flex-1 space-y-1 overflow-y-auto pr-1">
               {isLoading ? (
                 <div className="rounded-lg border border-dashed border-slate-700 px-4 py-6 text-center text-sm text-slate-500">
                   Loading admins...
@@ -609,108 +609,152 @@ export default function Admins() {
                   </button>
                 ))
               )}
+              {!isLoading && !error && (
+                <div className="sticky bottom-0 border-t border-slate-800 bg-[#151a1f] pt-3 text-xs text-slate-400">
+                  Total admins:{" "}
+                  <span className="font-semibold text-slate-200">
+                    {filteredAdmins.length}
+                  </span>
+                </div>
+              )}
             </div>
-            {!isLoading && !error && (
-              <div className="mt-4 border-t border-slate-800 pt-3 text-xs text-slate-400">
-                Total admins:{" "}
-                <span className="font-semibold text-slate-200">
-                  {filteredAdmins.length}
-                </span>
-              </div>
-            )}
           </div>
         </div>
 
-        <div className="flex flex-col rounded-2xl border border-slate-800 bg-[#151a1f] px-6 py-5 shadow-lg">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 text-sm font-semibold">
-                {selectedAdmin?.charAt(0) || "A"}
-              </div>
-              <div>
-                <p className="text-sm text-slate-400">Admin</p>
-                <p className="text-lg font-semibold">
-                  {selectedAdmin || "Select Admin"}
-                </p>
-                {selectedAdminMeta?.raw?.email && (
-                  <p className="text-xs text-slate-500">
-                    {selectedAdminMeta.raw.email}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="rounded-lg border border-slate-700 bg-slate-900 p-2 text-slate-300 transition hover:border-slate-500"
-                aria-label="Save permissions"
-              >
-                <Save className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsChangePasswordOpen(true)}
-                disabled={!selectedAdmin}
-                className="rounded-full border border-slate-700 px-4 py-1.5 text-xs text-slate-300 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Change Password
-              </button>
-              <button
-                type="button"
-                className="rounded-lg border border-slate-700 bg-slate-900 p-2 text-rose-300 transition hover:border-rose-400"
-                aria-label="Delete admin"
-                onClick={() => setIsDeleteModalOpen(true)}
-                disabled={!selectedAdmin}
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-6 flex items-center gap-2 text-sm font-semibold text-slate-200">
-            <ShieldCheck className="h-4 w-4 text-slate-400" />
-            Permissions
-          </div>
-
-          <div className="mt-4 flex-1 space-y-6 overflow-y-auto pr-1">
-            {permissionSections.map((section) => (
-              <div key={section.title}>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                  {section.title}
-                </p>
-                <div className="mt-3 space-y-2">
-                  {section.items.map((permission) => (
-                    <div
-                      key={permission}
-                      className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3"
-                    >
-                      <span className="text-sm text-slate-200">
-                        {permission}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => togglePermission(permission)}
-                        disabled={!selectedAdmin}
-                        className={`flex h-7 w-12 items-center rounded-full border transition ${
-                          permissions?.[permission]
-                            ? "border-sky-400 bg-sky-500"
-                            : "border-slate-700 bg-slate-800"
-                        } ${!selectedAdmin ? "cursor-not-allowed opacity-60" : ""}`}
-                      >
-                        <span
-                          className={`h-5 w-5 rounded-full bg-white shadow transition ${
-                            permissions?.[permission]
-                              ? "translate-x-6"
-                              : "translate-x-1"
-                          }`}
-                        />
-                      </button>
-                    </div>
-                  ))}
+        <div className="flex min-h-0 flex-col rounded-2xl border border-slate-800 bg-[#151a1f] px-6 py-5 shadow-lg">
+          {isLoading ? (
+            <div className="flex h-full flex-col gap-6">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 animate-pulse rounded-full bg-slate-800" />
+                  <div className="space-y-2">
+                    <div className="h-3 w-20 animate-pulse rounded-full bg-slate-800" />
+                    <div className="h-5 w-40 animate-pulse rounded-full bg-slate-700" />
+                    <div className="h-3 w-28 animate-pulse rounded-full bg-slate-800" />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="h-9 w-9 animate-pulse rounded-lg bg-slate-800" />
+                  <div className="h-8 w-28 animate-pulse rounded-full bg-slate-800" />
+                  <div className="h-9 w-9 animate-pulse rounded-lg bg-slate-800" />
                 </div>
               </div>
-            ))}
-          </div>
+
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+                <ShieldCheck className="h-4 w-4 text-slate-700" />
+                Permissions
+              </div>
+
+              <div className="admin-scroll flex-1 space-y-4 overflow-y-auto pr-1">
+                {["CTPAT", "Operational Forms", "Admin Tools"].map((title) => (
+                  <div key={title} className="space-y-3">
+                    <div className="h-3 w-24 animate-pulse rounded-full bg-slate-800" />
+                    {[0, 1, 2].map((item) => (
+                      <div
+                        key={`${title}-${item}`}
+                        className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3"
+                      >
+                        <div className="h-4 w-40 animate-pulse rounded-full bg-slate-800" />
+                        <div className="h-6 w-12 animate-pulse rounded-full bg-slate-800" />
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 text-sm font-semibold">
+                    {selectedAdmin?.charAt(0) || "A"}
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-400">Admin</p>
+                    <p className="text-lg font-semibold">
+                      {selectedAdmin || "Select Admin"}
+                    </p>
+                    {selectedAdminMeta?.raw?.email && (
+                      <p className="text-xs text-slate-500">
+                        {selectedAdminMeta.raw.email}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded-lg border border-slate-700 bg-slate-900 p-2 text-slate-300 transition hover:border-slate-500"
+                    aria-label="Save permissions"
+                  >
+                    <Save className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsChangePasswordOpen(true)}
+                    disabled={!selectedAdmin}
+                    className="rounded-full border border-slate-700 px-4 py-1.5 text-xs text-slate-300 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Change Password
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-slate-700 bg-slate-900 p-2 text-rose-300 transition hover:border-rose-400"
+                    aria-label="Delete admin"
+                    onClick={() => setIsDeleteModalOpen(true)}
+                    disabled={!selectedAdmin}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-6 flex items-center gap-2 text-sm font-semibold text-slate-200">
+                <ShieldCheck className="h-4 w-4 text-slate-400" />
+                Permissions
+              </div>
+
+              <div className="admin-scroll mt-4 flex-1 space-y-6 overflow-y-auto pr-1">
+                {permissionSections.map((section) => (
+                  <div key={section.title}>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                      {section.title}
+                    </p>
+                    <div className="mt-3 space-y-2">
+                      {section.items.map((permission) => (
+                        <div
+                          key={permission}
+                          className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3"
+                        >
+                          <span className="text-sm text-slate-200">
+                            {permission}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => togglePermission(permission)}
+                            disabled={!selectedAdmin}
+                            className={`flex h-7 w-12 items-center rounded-full border transition ${
+                              permissions?.[permission]
+                                ? "border-sky-400 bg-sky-500"
+                                : "border-slate-700 bg-slate-800"
+                            } ${!selectedAdmin ? "cursor-not-allowed opacity-60" : ""}`}
+                          >
+                            <span
+                              className={`h-5 w-5 rounded-full bg-white shadow transition ${
+                                permissions?.[permission]
+                                  ? "translate-x-6"
+                                  : "translate-x-1"
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
