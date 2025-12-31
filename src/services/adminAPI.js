@@ -27,3 +27,32 @@ async function api(url, method = "GET", body = null) {
 export async function fetchAdmins() {
   return api("fetchadmin", "GET");
 }
+
+export async function updateAdmin(payload) {
+  return api("updateadmin", "POST", payload);
+}
+
+export async function createAdmin(payload) {
+  return api("createadmin", "POST", payload);
+}
+
+export async function deleteAdmin(userid) {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("userid", userid);
+
+  const res = await fetch(`${BASE_URL}/deleteadmin`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const message = await res.text();
+    throw new Error(message || "Failed to delete admin.");
+  }
+
+  return res.json().catch(() => ({}));
+}

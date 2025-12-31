@@ -7,7 +7,12 @@ import {
   Trash2,
   ShieldCheck,
 } from "lucide-react";
-import { fetchAdmins } from "../services/adminAPI";
+import {
+  createAdmin,
+  deleteAdmin,
+  fetchAdmins,
+  updateAdmin,
+} from "../services/adminAPI";
 
 const permissionSections = [
   {
@@ -51,6 +56,27 @@ const permissionDefaults = permissionSections
     return acc;
   }, {});
 
+const permissionKeyMap = {
+  CTPAT: "CTPAT",
+  "Delivery Proof": "delivery",
+  "Driver expense": "driver_expense_sheet",
+  "Load Image": "load_image",
+  "Stamp Paper": "paper_logs",
+  "Pickup Doc": "pick_up",
+  "Repair and maintenance": "repair_and_maintenance",
+  "DM Transport Trip Envelope": "dm_transport_trip_envelope",
+  "DM Trans Inc Trip Envelope": "dm_trans_inc_trip_envelope",
+  "DM Transport City Worksheet": "dm_transport_city_worksheet_trip_envelope",
+  "Fuel Receipt": "fuel_recipt",
+  "Manage Drivers": "manage_drivers",
+  "View Drivers": "view_drivers",
+  "Maintenance Chat": "maintenance_chat",
+  "View Admin": "view_admin",
+  "Manage Admin": "manage_admin",
+  Chat: "chat",
+  "Delete Multiple Users Chart": "delete_multiple_users_chart",
+};
+
 const buildPermissionsForAdmin = (name) => {
   const seed = name.length % 2 === 0;
   return Object.keys(permissionDefaults).reduce((acc, permission, index) => {
@@ -92,7 +118,22 @@ export default function Admins() {
   const [error, setError] = useState("");
   const [isAddAdminOpen, setIsAddAdminOpen] = useState(false);
   const [newAdminName, setNewAdminName] = useState("");
-  const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [newAdminPassword, setNewAdminPassword] = useState("");
+  const [newAdminPermissions, setNewAdminPermissions] = useState(() =>
+    permissionSections[0].items.reduce((acc, permission) => {
+      acc[permission] = false;
+      return acc;
+    }, {})
+  );
+  const [isCreatingAdmin, setIsCreatingAdmin] = useState(false);
+  const [createAdminError, setCreateAdminError] = useState("");
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [updatedPassword, setUpdatedPassword] = useState("");
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [passwordUpdateError, setPasswordUpdateError] = useState("");
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeletingAdmin, setIsDeletingAdmin] = useState(false);
+  const [deleteAdminError, setDeleteAdminError] = useState("");
   const [adminPermissions, setAdminPermissions] = useState({});
 
   useEffect(() => {
@@ -167,30 +208,124 @@ export default function Admins() {
     (admin) => admin.name === selectedAdmin
   );
 
-  const handleAddAdmin = (event) => {
+  const handleAddAdmin = async (event) => {
     event.preventDefault();
     const trimmedName = newAdminName.trim();
     if (!trimmedName) {
       return;
     }
 
-    const createdAdmin = {
-      id: `local-${Date.now()}`,
-      name: trimmedName,
-      raw: {
-        email: newAdminEmail.trim() || undefined,
-      },
-    };
+    const permissions = Object.entries(newAdminPermissions)
+      .filter(([, enabled]) => enabled)
+      .map(([label]) => permissionKeyMap[label] || label)
+      .filter(Boolean);
 
-    setAdmins((prev) => [createdAdmin, ...prev]);
-    setAdminPermissions((prev) => ({
+    try {
+      setIsCreatingAdmin(true);
+      setCreateAdminError("");
+      const response = await createAdmin({
+        permissions,
+        userid: trimmedName,
+        password: newAdminPassword.trim(),
+      });
+
+      const createdAdmin = {
+        id: response?.userid || `local-${Date.now()}`,
+        name: trimmedName,
+        raw: response || {},
+      };
+
+      setAdmins((prev) => [createdAdmin, ...prev]);
+      setAdminPermissions((prev) => ({
+        ...prev,
+        [createdAdmin.name]: {
+          ...buildPermissionsForAdmin(createdAdmin.name),
+          ...newAdminPermissions,
+        },
+      }));
+      setSelectedAdmin(createdAdmin.name);
+      setNewAdminName("");
+      setNewAdminPassword("");
+      setNewAdminPermissions(
+        permissionSections[0].items.reduce((acc, permission) => {
+          acc[permission] = false;
+          return acc;
+        }, {})
+      );
+      setIsAddAdminOpen(false);
+    } catch (err) {
+      setCreateAdminError(
+        err?.message || "Unable to create admin right now."
+      );
+    } finally {
+      setIsCreatingAdmin(false);
+    }
+  };
+
+  const toggleNewAdminPermission = (permission) => {
+    setNewAdminPermissions((prev) => ({
       ...prev,
-      [createdAdmin.name]: buildPermissionsForAdmin(createdAdmin.name),
+      [permission]: !prev[permission],
     }));
-    setSelectedAdmin(createdAdmin.name);
-    setNewAdminName("");
-    setNewAdminEmail("");
-    setIsAddAdminOpen(false);
+  };
+
+  const handleChangePassword = async (event) => {
+    event.preventDefault();
+    if (!updatedPassword.trim()) return;
+    if (!selectedAdmin) return;
+    const permissionsForAdmin =
+      adminPermissions[selectedAdmin] || permissionDefaults;
+
+    const permissions = Object.entries(permissionsForAdmin)
+      .filter(([, enabled]) => enabled)
+      .map(([label]) => permissionKeyMap[label] || label)
+      .filter(Boolean);
+
+    const userid = selectedAdminMeta?.raw?.userid || selectedAdmin;
+
+    try {
+      setIsUpdatingPassword(true);
+      setPasswordUpdateError("");
+      await updateAdmin({
+        permissions,
+        userid,
+        password: updatedPassword.trim(),
+      });
+      setUpdatedPassword("");
+      setIsChangePasswordOpen(false);
+    } catch (err) {
+      setPasswordUpdateError(
+        err?.message || "Unable to update password right now."
+      );
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
+
+  const handleDeleteAdmin = async () => {
+    if (!selectedAdmin) return;
+    const userid = selectedAdminMeta?.raw?.userid || selectedAdmin;
+    try {
+      setIsDeletingAdmin(true);
+      setDeleteAdminError("");
+      await deleteAdmin(userid);
+      setAdmins((prev) =>
+        prev.filter((admin) => admin.name !== selectedAdmin)
+      );
+      setAdminPermissions((prev) => {
+        const next = { ...prev };
+        delete next[selectedAdmin];
+        return next;
+      });
+      setSelectedAdmin("");
+      setIsDeleteModalOpen(false);
+    } catch (err) {
+      setDeleteAdminError(
+        err?.message || "Unable to delete admin right now."
+      );
+    } finally {
+      setIsDeletingAdmin(false);
+    }
   };
 
   return (
@@ -214,60 +349,186 @@ export default function Admins() {
 
       {isAddAdminOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-[#151a1f] p-6 shadow-xl">
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-800 bg-[#151a1f] p-6 shadow-xl">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-slate-400">Admins</p>
-                <h2 className="text-xl font-semibold">Add Admin</h2>
+                <h2 className="text-lg font-semibold text-slate-100">
+                  Enter the following details
+                </h2>
               </div>
               <button
                 type="button"
                 onClick={() => setIsAddAdminOpen(false)}
                 className="rounded-lg border border-slate-700 px-2 py-1 text-sm text-slate-300 transition hover:border-slate-500"
+                aria-label="Close add admin modal"
               >
-                Close
+                ×
               </button>
             </div>
 
-            <form onSubmit={handleAddAdmin} className="mt-6 space-y-4">
-              <div>
-                <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                  Admin name
-                </label>
-                <input
-                  value={newAdminName}
-                  onChange={(event) => setNewAdminName(event.target.value)}
-                  placeholder="Enter full name"
-                  className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-slate-500 focus:outline-none"
-                />
+            <form onSubmit={handleAddAdmin} className="mt-6 space-y-6">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="text-sm text-slate-300">Admin ID</label>
+                  <input
+                    value={newAdminName}
+                    onChange={(event) => setNewAdminName(event.target.value)}
+                    placeholder="Enter Admin ID"
+                    className="mt-2 w-full border-b border-slate-700 bg-transparent px-1 py-2 text-sm text-slate-100 focus:border-slate-400 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-slate-300">Password</label>
+                  <input
+                    type="password"
+                    value={newAdminPassword}
+                    onChange={(event) => setNewAdminPassword(event.target.value)}
+                    placeholder="Enter Password"
+                    className="mt-2 w-full border-b border-slate-700 bg-transparent px-1 py-2 text-sm text-slate-100 focus:border-slate-400 focus:outline-none"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                  Email (optional)
-                </label>
-                <input
-                  value={newAdminEmail}
-                  onChange={(event) => setNewAdminEmail(event.target.value)}
-                  placeholder="admin@dmtransport.io"
-                  className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-slate-500 focus:outline-none"
-                />
-              </div>
-              <div className="flex items-center justify-end gap-3">
+              {createAdminError && (
+                <p className="text-xs text-rose-300">{createAdminError}</p>
+              )}
+
+              <div className="flex items-center justify-between text-sm font-semibold text-slate-200">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-slate-400" />
+                  Permissions
+                </div>
                 <button
                   type="button"
-                  onClick={() => setIsAddAdminOpen(false)}
-                  className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:border-slate-500"
+                  className="rounded-full border border-slate-700 px-4 py-1 text-xs text-slate-400"
+                  disabled
                 >
-                  Cancel
+                  Save
                 </button>
+              </div>
+
+              <div className="space-y-2">
+                {permissionSections[0].items.map((permission) => (
+                  <div
+                    key={permission}
+                    className="flex items-center justify-between border-b border-slate-800 py-3"
+                  >
+                    <span className="text-sm text-slate-200">
+                      {permission}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => toggleNewAdminPermission(permission)}
+                      className={`flex h-7 w-12 items-center rounded-full border transition ${
+                        newAdminPermissions[permission]
+                          ? "border-sky-400 bg-sky-500"
+                          : "border-slate-700 bg-slate-800"
+                      }`}
+                    >
+                      <span
+                        className={`h-5 w-5 rounded-full bg-white shadow transition ${
+                          newAdminPermissions[permission]
+                            ? "translate-x-6"
+                            : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-center">
                 <button
                   type="submit"
-                  className="rounded-full bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-sky-400"
+                  disabled={isCreatingAdmin}
+                  className="flex items-center gap-2 rounded-full border border-slate-700 px-6 py-2 text-sm text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Save Admin
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-base">
+                    →
+                  </span>
+                  {isCreatingAdmin ? "Submitting..." : "Submit"}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {isChangePasswordOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-800 bg-[#151a1f] p-8 shadow-xl">
+            <div className="flex items-start justify-between">
+              <h2 className="text-lg font-semibold text-slate-100">
+                Change Password
+              </h2>
+              <button
+                type="button"
+                onClick={() => setIsChangePasswordOpen(false)}
+                className="rounded-lg border border-slate-700 px-2 py-1 text-sm text-slate-300 transition hover:border-slate-500"
+                aria-label="Close change password modal"
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleChangePassword} className="mt-6 space-y-6">
+              <div>
+                <label className="text-sm text-slate-300">
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  value={updatedPassword}
+                  onChange={(event) => setUpdatedPassword(event.target.value)}
+                  placeholder="Enter new password"
+                  className="mt-3 w-full border-b border-slate-700 bg-transparent px-1 py-2 text-sm text-slate-100 focus:border-slate-400 focus:outline-none"
+                />
+                {passwordUpdateError && (
+                  <p className="mt-3 text-xs text-rose-300">
+                    {passwordUpdateError}
+                  </p>
+                )}
+              </div>
+              <div className="flex justify-center">
+                <button
+                  type="submit"
+                  disabled={isUpdatingPassword}
+                  className="rounded-full border border-slate-700 px-6 py-2 text-sm text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isUpdatingPassword ? "Updating..." : "Change Password"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-[#151a1f] p-6 shadow-xl">
+            <h2 className="text-lg font-semibold text-slate-100">
+              Delete Admin
+            </h2>
+            <p className="mt-2 text-sm text-slate-400">Are you sure?</p>
+            {deleteAdminError && (
+              <p className="mt-3 text-xs text-rose-300">{deleteAdminError}</p>
+            )}
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="rounded-full border border-slate-700 px-5 py-2 text-sm text-slate-200 transition hover:border-slate-500"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAdmin}
+                disabled={isDeletingAdmin}
+                className="rounded-full border border-transparent bg-rose-500/20 px-5 py-2 text-sm text-rose-200 transition hover:bg-rose-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isDeletingAdmin ? "Deleting..." : "OK"}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -354,8 +615,18 @@ export default function Admins() {
               </button>
               <button
                 type="button"
+                onClick={() => setIsChangePasswordOpen(true)}
+                disabled={!selectedAdmin}
+                className="rounded-full border border-slate-700 px-4 py-1.5 text-xs text-slate-300 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Change Password
+              </button>
+              <button
+                type="button"
                 className="rounded-lg border border-slate-700 bg-slate-900 p-2 text-rose-300 transition hover:border-rose-400"
                 aria-label="Delete admin"
+                onClick={() => setIsDeleteModalOpen(true)}
+                disabled={!selectedAdmin}
               >
                 <Trash2 className="h-4 w-4" />
               </button>
