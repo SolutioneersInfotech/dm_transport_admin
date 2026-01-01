@@ -269,11 +269,11 @@ export default function Notes() {
 
   return (
     <div className="flex min-h-screen flex-col bg-[#0d1117] text-white">
-      <div className="border-b border-gray-800 px-6 py-5">
+      <div className="border-b border-gray-800 px-3 py-4">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">Note</h1>
-            <p className="text-sm text-gray-400">
+            <p className="text-xs text-gray-400">
               Send updates, attachments, and priorities in real time.
             </p>
           </div>
@@ -293,12 +293,11 @@ export default function Notes() {
           </div>
         </div>
       </div>
-
-      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col overflow-hidden px-4 pb-6 pt-4">
+      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col overflow-hidden px-0 pb-6 pt-3">
         <div
           ref={listRef}
           onScroll={handleScroll}
-          className="notes-scroll flex-1 max-h-[65vh] overflow-y-auto rounded-2xl border border-gray-800 bg-[#0f131a] px-4 py-6"
+          className="notes-scroll flex-1 max-h-[73vh] overflow-y-auto rounded-2xl border border-gray-800 bg-[#0f131a] px-4 py-6"
         >
           {groupedMessages.length === 0 ? (
             <div className="flex h-full items-center justify-center text-sm text-gray-500">
