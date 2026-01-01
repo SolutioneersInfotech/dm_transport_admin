@@ -8,6 +8,7 @@ import Documents from "./pages/Document";
 import MaintenanceChat from "./pages/MaintenanceChat";
 import Drivers from "./pages/Drivers";
 import Admins from "./pages/Admins";
+import Notes from "./pages/Notes";
 import ProtectedLayout from "./layout/ProtectedLayout";
 import NotFoundPage from "./pages/NotFoundPage";
 
@@ -24,6 +25,7 @@ function App() {
             <Route exact path="/maintenance-chat" element={<MaintenanceChat />} />
             <Route exact path="/admins" element={<Admins />} />
             <Route exact path="/drivers" element={<Drivers />} />
+            <Route exact path="/note" element={<Notes />} />
           </Route>
 
           {/* Public Routes */}
