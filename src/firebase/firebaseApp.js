@@ -2,6 +2,7 @@ import { initializeApp, getApp, getApps } from "firebase/app";
 import { getDatabase } from "firebase/database";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
+import { getAuth } from "firebase/auth";
 
 const fallbackConfig = {
   apiKey: "AIzaSyB1es2F0tPhDZnYvikI7D6lAUZsokfBPGo",
@@ -39,9 +40,10 @@ const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const database = getDatabase(app);
 const firestore = getFirestore(app);
 const storage = getStorage(app);
+const auth = getAuth(app);
 
 if (import.meta.env.DEV) {
   console.log("[Firebase] projectId:", firebaseConfig.projectId);
 }
 
-export { app, database, firestore, storage };
+export { app, database, firestore, storage, auth };

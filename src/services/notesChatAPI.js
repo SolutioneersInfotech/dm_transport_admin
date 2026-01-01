@@ -10,8 +10,9 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
+import { signInAnonymously } from "firebase/auth";
 import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
-import { firestore, storage } from "../firebase/firebaseApp";
+import { auth, firestore, storage } from "../firebase/firebaseApp";
 
 const PRIORITY_FILTERS = {
   all: () => true,
@@ -19,6 +20,24 @@ const PRIORITY_FILTERS = {
   medium: (priority) => priority === 2,
   low: (priority) => priority === 1,
 };
+
+let authPromise = null;
+
+async function ensureAnonymousAuth() {
+  if (auth.currentUser) {
+    return auth.currentUser;
+  }
+
+  if (!authPromise) {
+    authPromise = signInAnonymously(auth).catch((error) => {
+      authPromise = null;
+      throw error;
+    });
+  }
+
+  const credential = await authPromise;
+  return credential.user;
+}
 
 function getAdminUser() {
   try {
@@ -156,8 +175,9 @@ export const addReaction = async ({ messageId, emoji, userId }) => {
   });
 };
 
-export const uploadNotesAttachment = (file, type) => {
+export const uploadNotesAttachment = async (file, type) => {
   void type;
+  await ensureAnonymousAuth();
   const safeName = file?.name || "file";
   const storageRef = ref(storage, `uploads/${Date.now()}_${safeName}`);
   const uploadTask = uploadBytesResumable(storageRef, file);
