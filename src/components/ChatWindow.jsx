@@ -187,7 +187,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  fetchMessages as defaultFetchMessages,
+  subscribeMessages as defaultSubscribeMessages,
   sendMessage as defaultSendMessage,
   deleteChatHistory as defaultDeleteChatHistory,
   deleteSpecificMessage as defaultDeleteSpecificMessage,
@@ -233,12 +233,12 @@ export default function ChatWindow({ driver, chatApi }) {
     return candidate;
   })();
   const {
-    fetchMessages,
+    subscribeMessages,
     sendMessage,
     deleteChatHistory,
     deleteSpecificMessage,
   } = chatApi || {
-    fetchMessages: defaultFetchMessages,
+    subscribeMessages: defaultSubscribeMessages,
     sendMessage: defaultSendMessage,
     deleteChatHistory: defaultDeleteChatHistory,
     deleteSpecificMessage: defaultDeleteSpecificMessage,
@@ -251,25 +251,26 @@ export default function ChatWindow({ driver, chatApi }) {
     if (!driverId) {
       setMessages([]);
       setSelected([]);
+      setLoading(false);
       return;
     }
 
-    loadMessages();
-  }, [driverId]);
+    setLoading(true);
+    setMessages([]);
+    setSelected([]);
 
-  async function loadMessages() {
-    try {
-      setLoading(true);
-      setMessages([]);
-      setSelected([]);
-
-      const res = await fetchMessages(driverId);
-      setMessages(res?.messages || []);
-      scrollToBottom();
-    } finally {
+    const unsubscribe = subscribeMessages(driverId, (nextMessages) => {
+      setMessages(nextMessages || []);
       setLoading(false);
-    }
-  }
+      scrollToBottom();
+    });
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [driverId, subscribeMessages]);
 
   function scrollToBottom() {
     setTimeout(() => {

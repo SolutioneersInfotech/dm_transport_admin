@@ -7,11 +7,14 @@ export function groupMessagesByDate(messages) {
 
   messages.forEach((msg) => {
     const msgDateObj = new Date(msg.dateTime);
-    const msgDateStr = msgDateObj.toDateString();
+    const isValidDate = !Number.isNaN(msgDateObj.getTime());
+    const msgDateStr = isValidDate ? msgDateObj.toDateString() : "";
 
     let label = "";
 
-    if (msgDateStr === today.toDateString()) {
+    if (!isValidDate) {
+      label = "Unknown";
+    } else if (msgDateStr === today.toDateString()) {
       label = "Today";
     } else if (msgDateStr === yesterday.toDateString()) {
       label = "Yesterday";
