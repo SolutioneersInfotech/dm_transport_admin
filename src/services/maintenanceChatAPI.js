@@ -1,5 +1,6 @@
 import {
   get,
+  onValue,
   push,
   ref,
   remove,
@@ -170,6 +171,26 @@ export async function fetchMessages(userid) {
   );
 
   return { messages };
+}
+
+export function subscribeMessages(userid, onChange) {
+  const messagesRef = ref(
+    database,
+    `${ADMIN_MAINTENANCE_PATH}/${userid}`
+  );
+
+  const unsubscribe = onValue(messagesRef, (snapshot) => {
+    const messagesObject = snapshot.exists() ? snapshot.val() : {};
+    const messages = sortByDateTimeAsc(
+      Object.entries(messagesObject || {}).map(([id, msg]) =>
+        normalizeMessage(id, msg)
+      )
+    );
+
+    onChange(messages);
+  });
+
+  return unsubscribe;
 }
 
 export async function sendMessage(userid, text, adminUser = getAdminUser()) {
