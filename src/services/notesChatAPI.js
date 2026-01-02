@@ -10,8 +10,9 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
+import { signInAnonymously } from "firebase/auth";
 import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
-import { firestore, storage } from "../firebase/firebaseApp";
+import { auth, firestore, storage } from "../firebase/firebaseApp";
 
 const PRIORITY_FILTERS = {
   all: () => true,
@@ -19,6 +20,24 @@ const PRIORITY_FILTERS = {
   medium: (priority) => priority === 2,
   low: (priority) => priority === 1,
 };
+
+let authPromise = null;
+
+async function ensureAnonymousAuth() {
+  if (auth.currentUser) {
+    return auth.currentUser;
+  }
+
+  if (!authPromise) {
+    authPromise = signInAnonymously(auth).catch((error) => {
+      authPromise = null;
+      throw error;
+    });
+  }
+
+  const credential = await authPromise;
+  return credential.user;
+}
 
 function getAdminUser() {
   try {
@@ -158,6 +177,24 @@ export const addReaction = async ({ messageId, emoji, userId }) => {
 
 export const uploadNotesAttachment = async (file, type) => {
   void type;
+  try {
+    await ensureAnonymousAuth();
+  } catch (error) {
+    const errorCode = error?.code || "";
+    const errorMessage = error?.message || "";
+    const isAdminOnly =
+      errorCode === "auth/admin-restricted-operation" ||
+      errorMessage.includes("ADMIN_ONLY_OPERATION");
+
+    if (!isAdminOnly) {
+      throw error;
+    }
+
+    console.warn(
+      "[Notes] Anonymous auth disabled; continuing without sign-in.",
+      error
+    );
+  }
   const safeName = file?.name || "file";
   const storageRef = ref(storage, `uploads/${Date.now()}_${safeName}`);
   const uploadTask = uploadBytesResumable(storageRef, file);
