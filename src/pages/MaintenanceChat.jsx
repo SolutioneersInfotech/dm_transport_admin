@@ -11,6 +11,7 @@ const MaintenanceChat = () => {
       <div className="w-[320px] min-w-[280px] max-w-[340px] border-r border-gray-700 h-full overflow-hidden">
         <ChatList
           onSelectDriver={setSelectedDriver}
+          selectedDriver={selectedDriver}
           chatApi={maintenanceChatAPI}
         />
       </div>
