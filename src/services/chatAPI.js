@@ -58,6 +58,10 @@ function normalizeMessage(messageId, msg) {
   const dateTime = Number.isNaN(date.getTime())
     ? new Date().toISOString()
     : date.toISOString();
+  const type =
+    msg?.type === 0 ? 1 :
+    msg?.type === 1 ? 0 :
+    msg?.type;
 
   return {
     msgId: messageId,
@@ -68,7 +72,7 @@ function normalizeMessage(messageId, msg) {
       attachmentUrl: msg?.content?.attachmentUrl ?? msg?.attachmentUrl ?? "",
     },
     status: msg?.status ?? 0,
-    type: typeof msg?.type === "number" ? msg.type : 0,
+    type: typeof type === "number" ? type : 0,
     contactId: msg?.contactId ?? msg?.userid ?? null,
     sendername: msg?.sendername ?? "Unknown",
     replyTo: msg?.replyTo ?? null,
