@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import DocumentTable from "../components/DocumentTable";
 import DocumentPreview from "../components/DocumentPreview";
@@ -34,6 +34,10 @@ export default function Documents() {
 
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [cursor, setCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
   const [selectedDoc, setSelectedDoc] = useState(null);
 
   const [searchParams] = useSearchParams();
@@ -48,12 +52,16 @@ export default function Documents() {
   const [statusFilter, setStatusFilter] = useState("all"); // all | seen | unseen
   const [categoryFilter, setCategoryFilter] = useState(null); // C D F
 
-  async function fetchDocs() {
-    try {
-      setLoading(true);
+  const scrollContainerRef = useRef(null);
+  const PAGE_LIMIT = 30;
 
+  const fetchPage = useCallback(
+    async (pageCursor) => {
       const token = localStorage.getItem("adminToken");
-      const url = fetchDocumentsRoute(startDate, endDate);
+      const url = fetchDocumentsRoute(startDate, endDate, {
+        limit: PAGE_LIMIT,
+        cursor: pageCursor,
+      });
 
       const res = await fetch(url, {
         method: "GET",
@@ -65,27 +73,77 @@ export default function Documents() {
 
       const data = await res.json();
 
-      if (!res.ok) return;
+      if (!res.ok) {
+        throw new Error("Failed to fetch documents.");
+      }
 
-      const sorted = (data.documents || []).sort(
-        (a, b) => new Date(b.date) - new Date(a.date)
-      );
+      const nextCursor = data?.nextCursor ?? null;
+      const hasMoreResult =
+        typeof data?.hasMore === "boolean" ? data.hasMore : Boolean(nextCursor);
 
-      setDocuments(sorted);
+      return {
+        documents: Array.isArray(data?.documents) ? data.documents : [],
+        nextCursor,
+        hasMore: hasMoreResult,
+      };
+    },
+    [endDate, startDate]
+  );
+
+  const fetchFirstPage = useCallback(async () => {
+    try {
+      setLoading(true);
+      setLoadingMore(false);
+      setFetchError(null);
+      setDocuments([]);
+      setCursor(null);
+      setHasMore(true);
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = 0;
+      }
+
+      const data = await fetchPage(null);
+
+      setDocuments(data.documents);
+      setCursor(data.nextCursor);
+      setHasMore(data.hasMore);
     } catch (err) {
       console.log("Fetch error:", err);
+      setFetchError("Unable to load documents.");
+      setHasMore(false);
     } finally {
       setLoading(false);
     }
-  }
+  }, [fetchPage]);
+
+  const fetchNextPage = useCallback(async () => {
+    if (loadingMore || loading || !hasMore) return;
+
+    try {
+      setLoadingMore(true);
+      setFetchError(null);
+
+      const data = await fetchPage(cursor);
+
+      setDocuments((prev) => {
+        if (!data.documents.length) return prev;
+        const existingIds = new Set(prev.map((doc) => doc.id));
+        const nextDocs = data.documents.filter((doc) => !existingIds.has(doc.id));
+        return [...prev, ...nextDocs];
+      });
+      setCursor(data.nextCursor);
+      setHasMore(data.hasMore);
+    } catch (err) {
+      console.log("Fetch error:", err);
+      setFetchError("Unable to load more documents.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [cursor, fetchPage, hasMore, loading, loadingMore]);
 
   useEffect(() => {
-    fetchDocs();
-  }, []);
-
-  useEffect(() => {
-    fetchDocs();
-  }, [startDate, endDate]);
+    fetchFirstPage();
+  }, [fetchFirstPage]);
 
   useEffect(() => {
     const typeParam = searchParams.get("type");
@@ -129,6 +187,13 @@ export default function Documents() {
     const { start, end } = getDefaultDates();
     setStartDate(start);
     setEndDate(end);
+  }
+
+  function handleScroll(event) {
+    const { scrollTop, clientHeight, scrollHeight } = event.currentTarget;
+    if (scrollTop + clientHeight >= scrollHeight - 200) {
+      fetchNextPage();
+    }
   }
 
   return (
@@ -267,12 +332,34 @@ export default function Documents() {
   </div>
 
   {/* 📜 TABLE (ONLY THIS SCROLLS) */}
-  <div className="flex-1 overflow-y-auto chat-list-scroll">
+  <div
+    ref={scrollContainerRef}
+    className="flex-1 overflow-y-auto chat-list-scroll"
+    onScroll={handleScroll}
+  >
     <DocumentTable
       documents={filteredDocuments}
       loading={loading}
       setSelectedDoc={setSelectedDoc}
     />
+
+    {!loading && loadingMore && (
+      <div className="py-3 text-center text-sm text-gray-400">
+        Loading more...
+      </div>
+    )}
+
+    {!loading && !loadingMore && !hasMore && documents.length > 0 && (
+      <div className="py-3 text-center text-sm text-gray-500">
+        End of results
+      </div>
+    )}
+
+    {!loading && fetchError && (
+      <div className="py-3 text-center text-sm text-red-400">
+        {fetchError}
+      </div>
+    )}
   </div>
 
 </div>
