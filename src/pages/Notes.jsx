@@ -516,7 +516,7 @@ export default function Notes() {
                 + Attachment
               </button>
               {attachmentMenuOpen && (
-                <div className="absolute left-0 top-12 z-20 w-40 rounded-lg border border-gray-700 bg-[#161b22] py-2 text-sm">
+                <div className="absolute left-0 bottom-12 z-20 w-40 rounded-lg border border-gray-700 bg-[#161b22] py-2 text-sm">
                   <button
                     type="button"
                     onClick={() => handleAttachmentClick("photo")}
