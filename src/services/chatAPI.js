@@ -1,7 +1,9 @@
 import {
   get,
+  limitToLast,
   onValue,
   push,
+  query,
   ref,
   remove,
   set,
@@ -10,8 +12,8 @@ import { database } from "../firebase/firebaseApp";
 
 const ADMIN_GENERAL_PATH = "chat/users/admin/general";
 const USER_MIRROR_BASE = "chat/users";
-const FETCH_USERS_URL =
-  "https://northamerica-northeast1-dmtransport-1.cloudfunctions.net/api/admin/fetchUsers";
+const FETCH_CHAT_THREADS_URL =
+  "https://northamerica-northeast1-dmtransport-1.cloudfunctions.net/api/admin/fetchchatthreads?chatType=general";
 
 function getToken() {
   return localStorage.getItem("adminToken");
@@ -19,37 +21,6 @@ function getToken() {
 
 function getAdminUser() {
   return JSON.parse(localStorage.getItem("adminUser"));
-}
-
-function getDriverId(driver) {
-  return (
-    driver?.userid ||
-    driver?.userId ||
-    driver?.contactId ||
-    driver?.contactid ||
-    driver?.id ||
-    null
-  );
-}
-
-function getDriverName(driver, fallback) {
-  return (
-    driver?.name ||
-    driver?.driver_name ||
-    driver?.fullName ||
-    driver?.username ||
-    fallback
-  );
-}
-
-function getDriverImage(driver) {
-  return (
-    driver?.image ||
-    driver?.profilePic ||
-    driver?.photoUrl ||
-    driver?.avatar ||
-    null
-  );
 }
 
 function normalizeMessage(messageId, msg) {
@@ -87,29 +58,9 @@ function sortByDateTimeAsc(messages) {
   });
 }
 
-function getLastMessage(messagesObject) {
-  if (!messagesObject) {
-    return null;
-  }
-
-  let latestMessage = null;
-  let latestTime = -1;
-
-  Object.entries(messagesObject).forEach(([id, msg]) => {
-    const normalized = normalizeMessage(id, msg);
-    const time = new Date(normalized.dateTime).getTime();
-    if (!Number.isNaN(time) && time > latestTime) {
-      latestTime = time;
-      latestMessage = normalized;
-    }
-  });
-
-  return latestMessage;
-}
-
-async function fetchDriverDirectory() {
+export async function fetchUsersForChat() {
   const token = getToken();
-  const response = await fetch(FETCH_USERS_URL, {
+  const response = await fetch(FETCH_CHAT_THREADS_URL, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -117,68 +68,19 @@ async function fetchDriverDirectory() {
   });
 
   if (!response.ok) {
-    throw new Error("Failed to fetch driver directory.");
+    throw new Error("Failed to fetch chat threads.");
   }
 
   const data = await response.json();
-  if (Array.isArray(data)) {
-    return data;
-  }
-
-  return data?.users || data?.drivers || [];
-}
-
-export async function fetchUsersForChat() {
-  const adminRef = ref(database, ADMIN_GENERAL_PATH);
-  const snapshot = await get(adminRef);
-  const threads = snapshot.exists() ? snapshot.val() : {};
-
-  const contacts = Object.keys(threads || {});
-
-  if (contacts.length === 0) {
-    return { users: [] };
-  }
-
-  let drivers = [];
-  try {
-    drivers = await fetchDriverDirectory();
-  } catch {
-    drivers = [];
-  }
-
-  const driverMap = new Map(
-    drivers
-      .map((driver) => {
-        const driverId = getDriverId(driver);
-        return driverId ? [String(driverId), driver] : null;
-      })
-      .filter(Boolean)
-  );
-
-  const users = contacts
-    .map((contactId) => {
-      const driver = driverMap.get(String(contactId));
-      if (!driver) {
-        return null;
-      }
-
-      const lastMessage = getLastMessage(threads?.[contactId]);
-
-      return {
-        userid: contactId,
-        name: getDriverName(driver, contactId),
-        image: getDriverImage(driver),
-        last_message: lastMessage?.content?.message || "",
-        last_chat_time: lastMessage?.dateTime || null,
-      };
-    })
-    .filter(Boolean);
-
+  const users = Array.isArray(data?.users) ? data.users : [];
   return { users };
 }
 
 export async function fetchMessages(userid) {
-  const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
+  const messagesRef = query(
+    ref(database, `${ADMIN_GENERAL_PATH}/${userid}`),
+    limitToLast(100)
+  );
   const snapshot = await get(messagesRef);
   const messagesObject = snapshot.exists() ? snapshot.val() : {};
 
@@ -192,7 +94,10 @@ export async function fetchMessages(userid) {
 }
 
 export function subscribeMessages(userid, onChange) {
-  const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
+  const messagesRef = query(
+    ref(database, `${ADMIN_GENERAL_PATH}/${userid}`),
+    limitToLast(100)
+  );
 
   const unsubscribe = onValue(messagesRef, (snapshot) => {
     const messagesObject = snapshot.exists() ? snapshot.val() : {};
