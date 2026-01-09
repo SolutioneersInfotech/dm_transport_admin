@@ -222,33 +222,62 @@ export default function Dashboard() {
             {unseenTotal} pending
           </span>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
-          {documentTiles.map((doc) => (
-            <div key={doc.title} className="relative">
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full justify-start p-0 h-auto"
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+          {documentTiles.map((doc) => {
+            const count = documentCounts[doc.filterType] || 0;
+            const hasUnseen = count > 0;
+            
+            return (
+              <div
+                key={doc.title}
+                className="group relative bg-[#161b22] border border-gray-700 rounded-xl p-5 hover:border-gray-600 hover:bg-[#1d232a] transition-all duration-200 cursor-pointer"
                 onClick={() => handleTileClick(doc.filterType)}
               >
-                <DocumentCard
-                  title={doc.title}
-                  count={documentCounts[doc.filterType] || 0}
-                />
-              </Button>
-              <span
-                className={`absolute top-4 right-4 text-[10px] uppercase tracking-wide px-2 py-1 rounded-full ${
-                  doc.priority === "High"
-                    ? "bg-red-500/20 text-red-300"
-                    : doc.priority === "Low"
-                    ? "bg-gray-500/20 text-gray-300"
-                    : "bg-amber-500/20 text-amber-200"
-                }`}
-              >
-                {doc.priority}
-              </span>
-            </div>
-          ))}
+                {/* Priority Badge */}
+                <div className="absolute top-3 right-3">
+                  <span
+                    className={`inline-flex items-center text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full ${
+                      doc.priority === "High"
+                        ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                        : doc.priority === "Low"
+                        ? "bg-gray-500/20 text-gray-400 border border-gray-500/30"
+                        : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                    }`}
+                  >
+                    {doc.priority}
+                  </span>
+                </div>
+
+                {/* Content */}
+                <div className="space-y-3 pr-16">
+                  <h3 className="text-sm font-medium text-gray-300 group-hover:text-gray-200 transition-colors line-clamp-2">
+                    {doc.title}
+                  </h3>
+                  <div className="flex items-baseline gap-2">
+                    <p
+                      className={`text-3xl font-bold transition-colors ${
+                        hasUnseen
+                          ? "text-blue-400 group-hover:text-blue-300"
+                          : "text-gray-500 group-hover:text-gray-400"
+                      }`}
+                    >
+                      {count}
+                    </p>
+                    <span className="text-xs text-gray-500 font-medium">
+                      {count === 1 ? "document" : "documents"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Unseen Indicator */}
+                {hasUnseen && (
+                  <div className="absolute bottom-3 right-3">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </section>
     </div>
