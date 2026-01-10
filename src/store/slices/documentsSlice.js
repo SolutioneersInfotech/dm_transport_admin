@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import { fetchDocumentsRoute } from "../../utils/apiRoutes";
+import { fetchDocumentsRoute, fetchDocumentCountRoute } from "../../utils/apiRoutes";
 
 // Async thunk for fetching initial documents
 export const fetchDocuments = createAsyncThunk(
@@ -116,6 +116,50 @@ export const fetchMoreDocuments = createAsyncThunk(
   }
 );
 
+// Async thunk for fetching document counts
+export const fetchDocumentCount = createAsyncThunk(
+  "documents/fetchDocumentCount",
+  async (
+    {
+      startDate,
+      endDate,
+      isSeen = null,
+      isFlagged = null,
+    },
+    { rejectWithValue }
+  ) => {
+    try {
+      const token = localStorage.getItem("adminToken");
+      const url = fetchDocumentCountRoute(startDate, endDate, {
+        isSeen,
+        isFlagged,
+      });
+
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        return rejectWithValue(data.message || "Failed to fetch document counts");
+      }
+
+      return {
+        counts: data.counts || {},
+        total: data.total || 0,
+        filters: data.filters || {},
+      };
+    } catch (error) {
+      return rejectWithValue(error.message || "Failed to fetch document counts");
+    }
+  }
+);
+
 const documentsSlice = createSlice({
   name: "documents",
   initialState: {
@@ -130,6 +174,12 @@ const documentsSlice = createSlice({
     limit: 10,
     total: 0,
     totalDocuments: 0,
+    // Document counts state
+    documentCounts: {},
+    countsLoading: false,
+    countsError: null,
+    countsTotal: 0,
+    lastCountsFetched: null,
   },
   reducers: {
     clearDocuments: (state) => {
@@ -193,6 +243,22 @@ const documentsSlice = createSlice({
       .addCase(fetchMoreDocuments.rejected, (state, action) => {
         state.loadingMore = false;
         state.error = action.payload;
+      })
+      // Document counts
+      .addCase(fetchDocumentCount.pending, (state) => {
+        state.countsLoading = true;
+        state.countsError = null;
+      })
+      .addCase(fetchDocumentCount.fulfilled, (state, action) => {
+        state.countsLoading = false;
+        state.documentCounts = action.payload.counts;
+        state.countsTotal = action.payload.total;
+        state.countsError = null;
+        state.lastCountsFetched = Date.now();
+      })
+      .addCase(fetchDocumentCount.rejected, (state, action) => {
+        state.countsLoading = false;
+        state.countsError = action.payload;
       });
   },
 });

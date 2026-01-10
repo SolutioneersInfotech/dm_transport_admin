@@ -79,6 +79,44 @@ export const fetchDocumentsRoute = (startDate, endDate, options = {}) => {
   return queryString ? `${baseUrl}?${queryString}` : baseUrl;
 };
 
+// Document count route
+export const fetchDocumentCountRoute = (startDate, endDate, options = {}) => {
+  const baseUrl = `${baseBackendUrl}/fetchdocumentcount`;
+  const params = new URLSearchParams();
+
+  // Required parameters
+  if (startDate && endDate) {
+    params.append("start_date", startDate);
+    params.append("end_date", endDate);
+  }
+
+  // Status filters
+  if (options.isSeen !== undefined && options.isSeen !== null) {
+    params.append("isSeen", options.isSeen);
+  }
+
+  // Flagged filter
+  if (options.isFlagged !== undefined && options.isFlagged !== null) {
+    params.append("isFlagged", options.isFlagged);
+  }
+
+  const queryString = params.toString();
+  return queryString ? `${baseUrl}?${queryString}` : baseUrl;
+};
+
+// Fetch document by ID route
+export const fetchDocumentByIdRoute = (documentId, type) => {
+  const baseUrl = `${baseBackendUrl}/fetchdocumentbyid`;
+  const params = new URLSearchParams();
+  
+  params.append("document_id", documentId);
+  if (type) {
+    params.append("type", type);
+  }
+  
+  return `${baseUrl}?${params.toString()}`;
+};
+
 // Maintenance chat routes
 export const maintenanceFetchUsersRoute = `${baseBackendUrl}/fetchusers`;
 export const maintenanceFetchChatHistoryRoute = (userid) => `${baseBackendUrl}/fetchchathistory?userid=${userid}`;

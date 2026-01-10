@@ -25,7 +25,7 @@ export const fetchUsers = createAsyncThunk(
 
       // Handle API response format with pagination object
       const pagination = data.pagination || {};
-      
+
       return {
         users: data.users || [],
         hasMore: pagination.hasMore !== undefined ? pagination.hasMore : false,
@@ -65,7 +65,7 @@ export const fetchMoreUsers = createAsyncThunk(
 
       // Handle API response format with pagination object
       const pagination = data.pagination || {};
-      
+
       return {
         users: data.users || [],
         hasMore: pagination.hasMore !== undefined ? pagination.hasMore : false,

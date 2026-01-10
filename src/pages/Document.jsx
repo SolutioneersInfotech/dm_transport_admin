@@ -24,9 +24,6 @@ import {
 } from "../components/ui/drawer";
 import { X, Search, Calendar, Flag, ChevronDown, Check } from "lucide-react";
 import DocumentTableSkeleton from "../components/skeletons/DocumentTableSkeleton";
-import { Calendar as CalendarComponent } from "../components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
-import { format } from "date-fns";
 
 // Last 60 Days
 function getDefaultDates() {
@@ -88,10 +85,6 @@ export default function Documents() {
   const [flagFilter, setFlagFilter] = useState(null); // null | true | false (null = all)
   const [showDocumentTypeDropdown, setShowDocumentTypeDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  const [dateRange, setDateRange] = useState({
-    from: new Date(start),
-    to: new Date(end),
-  });
 
   // Debounce search input
   useEffect(() => {
@@ -216,26 +209,20 @@ export default function Documents() {
     });
   }
 
-  // Handle date range change from calendar
-  const handleDateRangeChange = (range) => {
-    setDateRange(range);
-    if (range?.from && range?.to) {
-      const formatDate = (d) => {
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      };
-      setStartDate(formatDate(range.from));
-      setEndDate(formatDate(range.to));
-    } else if (range?.from) {
-      const formatDate = (d) => {
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      };
-      setStartDate(formatDate(range.from));
+  // Handle native date input changes
+  const handleStartDateChange = (e) => {
+    const value = e.target.value;
+    setStartDate(value);
+    if (value && endDate && value > endDate) {
+      setEndDate(value); // If start date is after end date, update end date
+    }
+  };
+
+  const handleEndDateChange = (e) => {
+    const value = e.target.value;
+    setEndDate(value);
+    if (value && startDate && value < startDate) {
+      setStartDate(value); // If end date is before start date, update start date
     }
   };
 
@@ -366,13 +353,13 @@ export default function Documents() {
                   className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1f6feb] text-white text-sm"
                 >
                   <span>{filterLabel}</span>
-                  <button
+          <button
                     onClick={() => removeFilter(filterValue)}
                     className="hover:bg-[#1a5fd4] rounded-full p-0.5 transition-colors"
                     aria-label={`Remove ${filterLabel} filter`}
-                  >
+          >
                     <X className="h-3.5 w-3.5" />
-                  </button>
+          </button>
                 </div>
               );
             })}
@@ -448,7 +435,7 @@ export default function Documents() {
               <ChevronDown className={`h-4 w-4 transition-transform ${showDocumentTypeDropdown ? "rotate-180" : ""}`} />
             </button>
             {(selectedFilters.length > 0 || statusFilter !== "all") && (
-              <button
+          <button
                 onClick={() => {
                   setSelectedFilters([]);
                   setStatusFilter("all");
@@ -459,9 +446,9 @@ export default function Documents() {
                 aria-label="Clear filters"
               >
                 <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
+          </button>
+        )}
+      </div>
 
           {/* Dropdown Menu */}
           {showDocumentTypeDropdown && (
@@ -545,71 +532,40 @@ export default function Documents() {
           <Flag className={`h-4 w-4 ${flagFilter === true ? "text-white" : "text-gray-400"}`} />
         </Button>
 
-        {/* Date Range Picker */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              className={`h-9 px-3 bg-[#1d232a] border-gray-700 text-gray-300 hover:bg-[#161b22] hover:border-gray-600 ${
-                dateRange?.from && dateRange?.to ? "text-[#1f6feb]" : ""
-              }`}
-            >
-              <Calendar className="mr-2 h-4 w-4" />
-              {dateRange?.from ? (
-                dateRange.to ? (
-                  <>
-                    {format(dateRange.from, "LLL dd, y")} -{" "}
-                    {format(dateRange.to, "LLL dd, y")}
-                  </>
-                ) : (
-                  format(dateRange.from, "LLL dd, y")
-                )
-              ) : (
-                <span>Pick a date range</span>
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0 bg-[#161b22] border-gray-700" align="start">
-            <CalendarComponent
-              initialFocus
-              mode="range"
-              defaultMonth={dateRange?.from}
-              selected={dateRange}
-              onSelect={handleDateRangeChange}
-              numberOfMonths={2}
-              className="bg-[#161b22] text-white"
+        {/* Date Range Picker - Native Inputs */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex items-center">
+            <Calendar className="absolute left-2 h-4 w-4 text-gray-400 pointer-events-none" />
+            <Input
+              type="date"
+              value={startDate}
+              onChange={handleStartDateChange}
+              max={endDate || undefined}
+              className="h-9 pl-9 pr-3 bg-[#1d232a] border-gray-700 text-gray-300 hover:bg-[#161b22] hover:border-gray-600 focus:border-[#1f6feb] focus:ring-1 focus:ring-[#1f6feb] [color-scheme:dark]"
             />
-            <div className="p-3 border-t border-gray-700 flex items-center justify-between">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={resetDates}
-                className="bg-[#1d232a] border-gray-700 text-gray-300 hover:bg-[#161b22]"
-              >
-                Reset
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  if (dateRange?.from && dateRange?.to) {
-                    const formatDate = (d) => {
-                      const year = d.getFullYear();
-                      const month = String(d.getMonth() + 1).padStart(2, '0');
-                      const day = String(d.getDate()).padStart(2, '0');
-                      return `${year}-${month}-${day}`;
-                    };
-                    setStartDate(formatDate(dateRange.from));
-                    setEndDate(formatDate(dateRange.to));
-                  }
-                }}
-                className="bg-[#1f6feb] border-[#1f6feb] text-white hover:bg-[#1a5fd4]"
-              >
-                Apply
-              </Button>
-            </div>
-          </PopoverContent>
-        </Popover>
+          </div>
+          <span className="text-gray-400 text-sm">to</span>
+          <div className="relative flex items-center">
+            <Input
+              type="date"
+              value={endDate}
+              onChange={handleEndDateChange}
+              min={startDate || undefined}
+              className="h-9 px-3 bg-[#1d232a] border-gray-700 text-gray-300 hover:bg-[#161b22] hover:border-gray-600 focus:border-[#1f6feb] focus:ring-1 focus:ring-[#1f6feb] [color-scheme:dark]"
+            />
+          </div>
+          {(startDate !== start || endDate !== end) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={resetDates}
+              className="h-9 px-2 text-gray-400 hover:text-gray-300 hover:bg-[#1d232a]"
+              title="Reset dates"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* MAIN LAYOUT */}
@@ -648,6 +604,9 @@ export default function Documents() {
                 <TableHead className="h-12 text-xs font-semibold text-gray-400 uppercase tracking-wider">
                   Category
                 </TableHead>
+                <TableHead className="h-12 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                  Flag
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -655,7 +614,7 @@ export default function Documents() {
                 <DocumentTableSkeleton rows={8} />
               ) : Object.keys(groupedDocuments).length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-64 text-center">
+                  <TableCell colSpan={7} className="h-64 text-center">
                     <div className="flex flex-col items-center justify-center text-gray-400">
                       <p className="text-sm font-medium">No documents found</p>
                       <p className="text-xs mt-1">Try adjusting your filters</p>
@@ -667,7 +626,7 @@ export default function Documents() {
                   <>
                     {/* Group Header */}
                     <TableRow key={`group-${group}`} className="bg-[#0d1117] border-gray-800 hover:bg-[#0d1117]">
-                      <TableCell colSpan={6} className="px-4 py-3">
+                      <TableCell colSpan={7} className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <div className="h-px flex-1 bg-gradient-to-r from-transparent via-blue-500/30 to-transparent" />
                           <span className="text-sm font-semibold text-blue-400 px-3">
@@ -738,8 +697,15 @@ export default function Documents() {
                         </TableCell>
                         <TableCell className="px-4 py-3">
                           <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-800/50 text-gray-300 border border-gray-700">
-                            {doc.feature || "—"}
+                            {doc.category || "—"}
                           </span>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          {doc.flag?.flagged || doc.flagged || doc.isFlagged ? (
+                            <Flag className="h-4 w-4 text-[#1f6feb]" fill="#1f6feb" />
+                          ) : (
+                            <Flag className="h-4 w-4 text-gray-600" />
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -750,7 +716,7 @@ export default function Documents() {
               {/* Infinite Scroll Trigger */}
               {hasMore && !loading && (
                 <TableRow>
-                  <TableCell colSpan={6} ref={observerTarget} className="h-16">
+                  <TableCell colSpan={7} ref={observerTarget} className="h-16">
                     {loadingMore && (
                       <div className="flex items-center justify-center gap-2 text-gray-400">
                         <div className="w-4 h-4 border-2 border-gray-600 border-t-blue-500 rounded-full animate-spin" />
@@ -764,7 +730,7 @@ export default function Documents() {
               {/* End of Results */}
               {!hasMore && !loading && filteredDocuments?.length > 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-12 text-center">
+                  <TableCell colSpan={7} className="h-12 text-center">
                     <p className="text-xs text-gray-500">No more documents to load</p>
                   </TableCell>
                 </TableRow>
