@@ -115,14 +115,12 @@ export const fetchMoreDocuments = createAsyncThunk(
     }
   }
 );
-
-// Async thunk for fetching document counts
 export const fetchDocumentCount = createAsyncThunk(
   "documents/fetchDocumentCount",
   async (
     {
-      startDate,
-      endDate,
+      start_date,
+      end_date,
       isSeen = null,
       isFlagged = null,
     },
@@ -130,7 +128,8 @@ export const fetchDocumentCount = createAsyncThunk(
   ) => {
     try {
       const token = localStorage.getItem("adminToken");
-      const url = fetchDocumentCountRoute(startDate, endDate, {
+
+      const url = fetchDocumentCountRoute(start_date, end_date, {
         isSeen,
         isFlagged,
       });
@@ -159,6 +158,7 @@ export const fetchDocumentCount = createAsyncThunk(
     }
   }
 );
+
 
 const documentsSlice = createSlice({
   name: "documents",
