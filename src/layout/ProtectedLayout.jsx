@@ -8,8 +8,9 @@ const ProtectedLayout = () => {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#101418] flex items-center justify-center">
-        <div className="text-white">Loading...</div>
-      </div>
+  <div className="w-12 h-12 border-4 border-gray-600 border-t-white rounded-full animate-spin"></div>
+</div>
+
     );
   }
 
