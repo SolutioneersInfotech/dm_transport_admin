@@ -266,19 +266,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     // 🔥 SORT → latest chat first, but prioritize unread messages
     const driversWithIds = withLastChat.filter(Boolean);
 
-    driversWithIds.sort((a, b) => {
-      // First sort by unread count (unread messages first)
-      if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
-      if (a.unreadCount === 0 && b.unreadCount > 0) return 1;
-      
-      // Then by last chat time
-      if (!a.last_chat_time) return 1;
-      if (!b.last_chat_time) return -1;
-      return (
-        new Date(b.last_chat_time).getTime() -
-        new Date(a.last_chat_time).getTime()
-      );
-    });
+   
 
     return driversWithIds;
   }, [users, unreadCounts]);

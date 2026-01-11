@@ -341,7 +341,7 @@ export default function Documents() {
       {/* CHIP FILTER INPUT - Document Type Filters */}
       <div className="mb-4">
         {/* Selected Filters as Chips */}
-        {selectedFilters.length > 0 && (
+        {/* {selectedFilters.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-3">
             {selectedFilters.map((filterValue) => {
               const filterLabel = Object.keys(FILTER_MAP).find(
@@ -364,7 +364,7 @@ export default function Documents() {
               );
             })}
           </div>
-        )}
+        )} */}
 
         {/* Filter Options */}
         <div className="flex flex-wrap gap-3">
@@ -611,7 +611,7 @@ export default function Documents() {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <DocumentTableSkeleton rows={8} />
+                <DocumentTableSkeleton rows={12} />
               ) : Object.keys(groupedDocuments).length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="h-64 text-center">
@@ -739,7 +739,7 @@ export default function Documents() {
           </Table>
 
           {!loading && (
-            <div className="mt-4 flex items-center justify-between text-sm text-gray-400">
+            <div className="mt-4 sticky bottom-0 items-center justify-between text-sm text-gray-400 w-full bg-gray-900 p-2 rounded-b-lg">
               <div className="flex items-center gap-4">
                 <span>
                   Showing: <span className="font-semibold text-white">{filteredDocuments?.length || 0}</span> of{" "}
