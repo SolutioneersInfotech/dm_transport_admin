@@ -65,6 +65,7 @@ export default function Documents() {
     lastFetchParams,
     lastFetched,
   } = useAppSelector((state) => state.documents);
+  const documentDropDownRef = useRef(null);
 
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [selectedDocIds, setSelectedDocIds] = useState(new Set());
@@ -275,6 +276,24 @@ export default function Documents() {
     }
     setSelectedDocIds(newSelected);
   };
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (
+        documentDropDownRef.current &&
+        !documentDropDownRef.current.contains(event.target)
+      ) {
+        setShowDocumentTypeDropdown(false);
+        setShowStatusDropdown(false);
+      }
+    }
+  
+    document.addEventListener("mousedown", handleClickOutside);
+  
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+  
 
   // Infinite scroll handler
   const handleLoadMore = useCallback(() => {
@@ -422,7 +441,7 @@ export default function Documents() {
         ))}
 
         {/* All Documents Dropdown with Status Filter */}
-        <div className="relative">
+        <div className="relative" ref={documentDropDownRef} >
           <div className="flex items-center gap-2">
             <button
               onClick={() => {
@@ -431,7 +450,8 @@ export default function Documents() {
               }}
               className="flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:text-white transition-colors border-b border-gray-700 hover:border-gray-600"
             >
-              <span>All Documents</span>
+              {statusFilter === "all" ? "All" : statusFilter === "seen" ? "Seen" : "Unseen Only"}
+
               <ChevronDown className={`h-4 w-4 transition-transform ${showDocumentTypeDropdown ? "rotate-180" : ""}`} />
             </button>
             {(selectedFilters.length > 0 || statusFilter !== "all") && (
@@ -485,7 +505,7 @@ export default function Documents() {
                 </div>
 
                 {/* Document Type Filter Section */}
-                <div className="max-h-[200px] overflow-y-auto">
+                {/* <div className="max-h-[200px] overflow-y-auto">
                   <div className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
                     Document Types
                   </div>
@@ -509,7 +529,7 @@ export default function Documents() {
                       </button>
                     );
                   })}
-                </div>
+                </div> */}
               </div>
             </>
           )}
