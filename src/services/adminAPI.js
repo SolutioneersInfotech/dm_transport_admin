@@ -1,6 +1,9 @@
-const BASE_URL =
+const resolvedBaseUrl =
   import.meta.env.VITE_API_BASE_URL ??
   "https://northamerica-northeast1-dmtransport-1.cloudfunctions.net/api/admin";
+const BASE_URL = resolvedBaseUrl.endsWith("/admin")
+  ? resolvedBaseUrl
+  : `${resolvedBaseUrl}/admin`;
 
 function getToken() {
   return localStorage.getItem("adminToken");

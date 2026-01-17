@@ -1,7 +1,11 @@
 // Base URL configuration
-export const baseBackendUrl = import.meta.env.VITE_API_BASE_URL
-  ? `${import.meta.env.VITE_API_BASE_URL}/admin`
-  : "https://northamerica-northeast1-dmtransport-1.cloudfunctions.net/api/admin";
+const resolvedBaseUrl =
+  import.meta.env.VITE_API_BASE_URL ??
+  "https://northamerica-northeast1-dmtransport-1.cloudfunctions.net/api/admin";
+
+export const baseBackendUrl = resolvedBaseUrl.endsWith("/admin")
+  ? resolvedBaseUrl
+  : `${resolvedBaseUrl}/admin`;
 
 
 // Auth routes
