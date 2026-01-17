@@ -10,6 +10,7 @@ import {
   update,
 } from "firebase/database";
 import { database } from "../firebase/firebaseApp";
+import { fetchChatThreads as fetchChatThreadsRequest, markThreadRead as markThreadReadRequest } from "./adminAPI";
 
 const ADMIN_GENERAL_PATH = "chat/users/admin/general";
 const USER_MIRROR_BASE = "chat/users";
@@ -75,6 +76,20 @@ export async function fetchUsersForChat() {
   const data = await response.json();
   const users = Array.isArray(data?.users) ? data.users : [];
   return { users };
+}
+
+export async function fetchChatThreads({
+  page = 1,
+  limit = 10,
+  search = undefined,
+  type = "general",
+} = {}) {
+  return fetchChatThreadsRequest({ page, limit, search, type });
+}
+
+export async function markThreadRead(driverId, { lastReadAt } = {}) {
+  const payload = lastReadAt ? { lastReadAt } : undefined;
+  return markThreadReadRequest(driverId, payload);
 }
 
 export async function fetchMessages(userid) {
@@ -208,56 +223,4 @@ export async function markMessagesAsSeen(userid) {
     console.error("Error marking messages as seen:", error);
     return { success: false, error: error.message };
   }
-}
-
-// Get unread message count for a user
-export async function getUnreadCount(userid) {
-  try {
-    const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
-    const snapshot = await get(messagesRef);
-    
-    if (!snapshot.exists()) {
-      return 0;
-    }
-
-    const messagesObject = snapshot.val();
-    let unreadCount = 0;
-
-    Object.values(messagesObject).forEach((msg) => {
-      // Count messages from user (type === 1) that haven't been seen
-      if (msg.type === 1 && !msg.seenByAdmin) {
-        unreadCount++;
-      }
-    });
-
-    return unreadCount;
-  } catch (error) {
-    console.error("Error getting unread count:", error);
-    return 0;
-  }
-}
-
-// Subscribe to unread count changes for a user
-export function subscribeUnreadCount(userid, onChange) {
-  const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
-  
-  const unsubscribe = onValue(messagesRef, (snapshot) => {
-    if (!snapshot.exists()) {
-      onChange(0);
-      return;
-    }
-
-    const messagesObject = snapshot.val();
-    let unreadCount = 0;
-
-    Object.values(messagesObject).forEach((msg) => {
-      if (msg.type === 1 && !msg.seenByAdmin) {
-        unreadCount++;
-      }
-    });
-
-    onChange(unreadCount);
-  });
-
-  return unsubscribe;
 }
