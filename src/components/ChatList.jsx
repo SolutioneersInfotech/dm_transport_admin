@@ -40,6 +40,33 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     return candidate;
   }
 
+  function normalizeTimestamp(value) {
+    if (!value) return null;
+
+    if (value instanceof Date) {
+      return value.getTime();
+    }
+
+    if (typeof value === "number") {
+      return value;
+    }
+
+    if (typeof value === "string") {
+      const parsed = Date.parse(value);
+      return Number.isNaN(parsed) ? null : parsed;
+    }
+
+    if (typeof value === "object") {
+      const seconds = value?._seconds ?? value?.seconds;
+      const nanoseconds = value?._nanoseconds ?? value?.nanoseconds ?? 0;
+      if (typeof seconds === "number") {
+        return seconds * 1000 + Math.floor(nanoseconds / 1e6);
+      }
+    }
+
+    return null;
+  }
+
   // Debounce search input
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -257,7 +284,12 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
           driver_image: u.profilePic || u.image || null,
           lastSeen: u.lastSeen || null,
           last_message: u.last_message || "",
-          last_chat_time: u.last_chat_time || null,
+          last_chat_time: normalizeTimestamp(
+            u.last_chat_time ??
+              u.lastMessageTimeStamp ??
+              u.lastMessageTimestamp ??
+              null
+          ),
           unreadCount: unreadCounts[userId] || 0,
         };
       })
@@ -266,9 +298,11 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     // 🔥 SORT → latest chat first, but prioritize unread messages
     const driversWithIds = withLastChat.filter(Boolean);
 
-   
-
-    return driversWithIds;
+    return driversWithIds.sort((a, b) => {
+      const left = a?.last_chat_time ?? 0;
+      const right = b?.last_chat_time ?? 0;
+      return right - left;
+    });
   }, [users, unreadCounts]);
 
   // No client-side filtering - API handles search

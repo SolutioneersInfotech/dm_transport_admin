@@ -27,12 +27,21 @@
 // export default ChatListItem;
 
 const ChatListItem = ({ driver, onClick, isSelected }) => {
-  const time = driver.last_chat_time
-    ? new Date(driver.last_chat_time).toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "short",
-      })
-    : "";
+  const time = (() => {
+    if (!driver.last_chat_time) {
+      return "";
+    }
+
+    const date = new Date(driver.last_chat_time);
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    return date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+    });
+  })();
 
   const unreadCount = driver.unreadCount || 0;
 
@@ -84,4 +93,3 @@ const ChatListItem = ({ driver, onClick, isSelected }) => {
 };
 
 export default ChatListItem;
-
