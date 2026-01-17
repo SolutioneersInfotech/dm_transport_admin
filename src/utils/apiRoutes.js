@@ -27,30 +27,6 @@ export const fetchChatHistoryRoute = (userid) => `${baseBackendUrl}/fetchchathis
 export const sendChatMessageRoute = `${baseBackendUrl}/sendchatmessage`;
 export const deleteChatHistoryRoute = `${baseBackendUrl}/deletechathistory`;
 export const deleteSpecificChatRoute = `${baseBackendUrl}/deletespecificchats`;
-export const fetchChatThreadsRoute = (
-  page = 1,
-  limit = 10,
-  search = undefined,
-  type = "general"
-) => {
-  const baseUrl = `${baseBackendUrl}/chat/threads`;
-  const params = new URLSearchParams();
-
-  params.append("page", page);
-  params.append("limit", limit);
-
-  if (search !== undefined) {
-    params.append("search", search);
-  }
-
-  if (type) {
-    params.append("type", type);
-  }
-
-  return `${baseUrl}?${params.toString()}`;
-};
-export const markChatThreadReadRoute = (driverId) =>
-  `${baseBackendUrl}/chat/threads/${driverId}/read`;
 
 // Document routes
 export const fetchDocumentsRoute = (startDate, endDate, options = {}) => {

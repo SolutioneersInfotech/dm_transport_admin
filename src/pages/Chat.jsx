@@ -14,7 +14,6 @@ const Chat = () => {
           onSelectDriver={setSelectedDriver}
           selectedDriver={selectedDriver}
           chatApi={chatAPI}
-          chatType="general"
         />
       </div>
 
