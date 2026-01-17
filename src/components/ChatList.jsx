@@ -290,7 +290,8 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
               u.lastMessageTimestamp ??
               null
           ),
-          unreadCount: unreadCounts[userId] || 0,
+          last_seen_time: normalizeTimestamp(u.lastSeen ?? u.last_seen ?? null),
+          unreadCount: unreadCounts[userId] ?? 0,
         };
       })
       .filter(Boolean);
@@ -298,10 +299,22 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     // 🔥 SORT → latest chat first, but prioritize unread messages
     const driversWithIds = withLastChat.filter(Boolean);
 
-    return driversWithIds.sort((a, b) => {
+    const sortedDrivers = driversWithIds.sort((a, b) => {
       const left = a?.last_chat_time ?? 0;
       const right = b?.last_chat_time ?? 0;
       return right - left;
+    });
+    
+    return sortedDrivers.map((driver) => {
+      const lastChatTime = driver.last_chat_time ?? 0;
+      const lastSeenTime = driver.last_seen_time ?? 0;
+      const fallbackUnread = lastChatTime > lastSeenTime ? 1 : 0;
+      const unreadCount = driver.unreadCount > 0 ? driver.unreadCount : fallbackUnread;
+
+      return {
+        ...driver,
+        unreadCount,
+      };
     });
   }, [users, unreadCounts]);
 
