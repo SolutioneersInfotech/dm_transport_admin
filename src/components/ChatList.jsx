@@ -1,27 +1,38 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
-import { fetchUsers, fetchMoreUsers, updateUserLastMessage } from "../store/slices/usersSlice";
+import {
+  fetchChatThreads,
+  fetchMoreChatThreads,
+  markThreadReadOptimistic,
+  rollbackThreadRead,
+} from "../store/slices/chatThreadsSlice";
 import ChatListItem from "./ChatListItem";
 import SkeletonLoader from "./skeletons/Skeleton";
 import { Input } from "./ui/input";
-import { fetchMessages as defaultFetchMessages } from "../services/chatAPI";
+import { markThreadRead as defaultMarkThreadRead } from "../services/chatAPI";
 
-const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
+const ChatList = ({
+  onSelectDriver,
+  selectedDriver,
+  chatApi,
+  chatType = "general",
+}) => {
   const dispatch = useAppDispatch();
-  const { users, loading, loadingMore, lastFetched, hasMore, page, limit, lastSearch } = useAppSelector(
-    (state) => state.users
-  );
+  const {
+    threads,
+    loading,
+    loadingMore,
+    hasMore,
+    page,
+    limit,
+    searchTerm,
+  } = useAppSelector((state) => state.chatThreads);
   const [search, setSearch] = useState("");
   const [searchDebounced, setSearchDebounced] = useState("");
   const observerTarget = useRef(null);
   const hasInitiallyFetched = useRef(false);
-  const [fetchingMessages, setFetchingMessages] = useState(new Set());
-  const fetchedUsersRef = useRef(new Set()); // Track users we've already fetched messages for
-  const [unreadCounts, setUnreadCounts] = useState({}); // Track unread counts per user
-  const unsubscribeUnreadRefs = useRef({}); // Track unsubscribe functions for unread counts
   
-  const fetchMessages = chatApi?.fetchMessages || defaultFetchMessages;
-  const subscribeUnreadCount = chatApi?.subscribeUnreadCount;
+  const markThreadRead = chatApi?.markThreadRead || defaultMarkThreadRead;
 
   function getDriverId(driver) {
     const candidate =
@@ -80,22 +91,20 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   useEffect(() => {
     if (!hasInitiallyFetched.current && !loading) {
       hasInitiallyFetched.current = true;
-      dispatch(fetchUsers({ page: 1, limit }));
+      dispatch(fetchChatThreads({ page: 1, limit, type: chatType }));
     }
-  }, [dispatch, limit, loading]);
+  }, [dispatch, limit, loading, chatType]);
 
   // Refetch when search changes
   useEffect(() => {
     // Only refetch if search actually changed (using strict comparison)
     const searchValue = searchDebounced.trim() || undefined;
-    const lastSearchValue = lastSearch !== undefined ? lastSearch : undefined;
+    const lastSearchValue = searchTerm !== undefined ? searchTerm : undefined;
     
     if (searchValue !== lastSearchValue && !loading && hasInitiallyFetched.current) {
-      // Clear fetched users cache when search changes to allow refetching
-      fetchedUsersRef.current.clear();
-      dispatch(fetchUsers({ page: 1, limit, search: searchValue }));
+      dispatch(fetchChatThreads({ page: 1, limit, search: searchValue, type: chatType }));
     }
-  }, [dispatch, limit, searchDebounced, lastSearch, loading]);
+  }, [dispatch, limit, searchDebounced, searchTerm, loading, chatType]);
 
   // Infinite scroll observer - prevent duplicate calls
   const isLoadingRef = useRef(false);
@@ -105,11 +114,27 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       isLoadingRef.current = true;
       const nextPage = page + 1;
       const searchValue = searchDebounced.trim() || undefined;
-      dispatch(fetchMoreUsers({ page: nextPage, limit, search: searchValue })).finally(() => {
+      dispatch(
+        fetchMoreChatThreads({
+          page: nextPage,
+          limit,
+          search: searchValue,
+          type: chatType,
+        })
+      ).finally(() => {
         isLoadingRef.current = false;
       });
     }
-  }, [dispatch, hasMore, loadingMore, loading, page, limit, searchDebounced]);
+  }, [
+    dispatch,
+    hasMore,
+    loadingMore,
+    loading,
+    page,
+    limit,
+    searchDebounced,
+    chatType,
+  ]);
 
   useEffect(() => {
     // Only set up observer if we have more to load and not currently loading
@@ -141,182 +166,65 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     };
   }, [handleLoadMore, hasMore, loadingMore, loading]);
 
-  // Fetch last message for users that don't have one
-  useEffect(() => {
-    if (!users?.length || !fetchMessages) return;
+  const handleSelectDriver = useCallback(
+    (driver) => {
+      onSelectDriver(driver);
+      const driverId = getDriverId(driver);
+      if (!driverId) return;
 
-    const fetchLastMessages = async () => {
-      const usersToFetch = users.filter((u) => {
-        const userId = getDriverId(u);
-        if (!userId) return false;
-        // Only fetch if:
-        // 1. User doesn't have last_message from API
-        // 2. We haven't already fetched for this user
-        // 3. We're not currently fetching for this user
-        return (
-          !u.last_message &&
-          !fetchedUsersRef.current.has(userId) &&
-          !fetchingMessages.has(userId)
+      const thread = threads.find((item) => item.driverId === driverId);
+      const previousUnreadCount = thread?.unreadCount ?? 0;
+      const previousLastReadAt = thread?.lastReadAt ?? null;
+      const lastReadAt = Date.now();
+
+      dispatch(markThreadReadOptimistic({ driverId, lastReadAt }));
+      markThreadRead(driverId, { lastReadAt }).catch(() => {
+        dispatch(
+          rollbackThreadRead({
+            driverId,
+            unreadCount: previousUnreadCount,
+            lastReadAt: previousLastReadAt,
+          })
         );
       });
+    },
+    [dispatch, markThreadRead, onSelectDriver, threads]
+  );
 
-      if (usersToFetch.length === 0) return;
+  const sortedThreads = useMemo(() => {
+    if (!threads?.length) return [];
 
-      // Mark users as being fetched
-      const newFetchingSet = new Set(fetchingMessages);
-      usersToFetch.forEach((u) => {
-        const userId = getDriverId(u);
-        if (userId) {
-          newFetchingSet.add(userId);
-          fetchedUsersRef.current.add(userId);
-        }
-      });
-      setFetchingMessages(newFetchingSet);
-
-      // Fetch messages for all users in parallel (with a limit to avoid too many requests)
-      const fetchPromises = usersToFetch.slice(0, 10).map(async (u) => {
-        const userId = getDriverId(u);
-        if (!userId) return null;
-
-        try {
-          const { messages } = await fetchMessages(userId);
-          if (messages && messages.length > 0) {
-            const lastMessage = messages[messages.length - 1];
-            const lastMessageText = lastMessage?.content?.message || "";
-            const lastChatTime = lastMessage?.dateTime || null;
-
-            // Update Redux store with last message
-            dispatch(
-              updateUserLastMessage({
-                userid: userId,
-                lastMessage: lastMessageText,
-                lastChatTime: lastChatTime,
-              })
-            );
-          } else {
-            // Even if no messages, mark as fetched to avoid refetching
-            dispatch(
-              updateUserLastMessage({
-                userid: userId,
-                lastMessage: "",
-                lastChatTime: null,
-              })
-            );
-          }
-        } catch (error) {
-          console.error(`Failed to fetch messages for user ${userId}:`, error);
-          // On error, still mark as fetched to avoid infinite retries
-          fetchedUsersRef.current.add(userId);
-        } finally {
-          // Remove from fetching set
-          setFetchingMessages((prev) => {
-            const next = new Set(prev);
-            next.delete(userId);
-            return next;
-          });
-        }
-      });
-
-      await Promise.all(fetchPromises);
-    };
-
-    fetchLastMessages();
-  }, [users, fetchMessages, dispatch, fetchingMessages]);
-
-  // Subscribe to unread counts for all users
-  useEffect(() => {
-    if (!subscribeUnreadCount || !users?.length) return;
-
-    // Subscribe to unread counts for each user
-    users.forEach((u) => {
-      const userId = getDriverId(u);
-      if (!userId) return;
-
-      // If already subscribed, skip
-      if (unsubscribeUnreadRefs.current[userId]) return;
-
-      // Subscribe to unread count changes
-      const unsubscribe = subscribeUnreadCount(userId, (count) => {
-        setUnreadCounts((prev) => ({
-          ...prev,
-          [userId]: count,
-        }));
-      });
-
-      unsubscribeUnreadRefs.current[userId] = unsubscribe;
+    return [...threads].sort((left, right) => {
+      const leftTime = normalizeTimestamp(left?.lastMessageAt) ?? 0;
+      const rightTime = normalizeTimestamp(right?.lastMessageAt) ?? 0;
+      return rightTime - leftTime;
     });
+  }, [threads]);
 
-    // Cleanup: unsubscribe from users that are no longer in the list
-    return () => {
-      const currentUserIds = new Set(users.map((u) => getDriverId(u)).filter(Boolean));
-      Object.keys(unsubscribeUnreadRefs.current).forEach((userId) => {
-        if (!currentUserIds.has(userId)) {
-          const unsubscribe = unsubscribeUnreadRefs.current[userId];
-          if (unsubscribe) {
-            unsubscribe();
-            delete unsubscribeUnreadRefs.current[userId];
-          }
-          // Remove from unread counts
-          setUnreadCounts((prev) => {
-            const next = { ...prev };
-            delete next[userId];
-            return next;
-          });
-        }
-      });
-    };
-  }, [users, subscribeUnreadCount]);
-
-  // Transform users from Redux to drivers format
+  // Transform threads from Redux to drivers format
   const drivers = useMemo(() => {
-    if (!users?.length) return [];
+    if (!sortedThreads?.length) return [];
 
-    const withLastChat = users
-      .map((u) => {
-        const userId = getDriverId(u);
-        if (!userId) {
+    return sortedThreads
+      .map((thread) => {
+        if (!thread?.driverId) {
           return null;
         }
 
         return {
-          userid: userId,
-          driver_name: u.name || u.driver_name,
-          driver_image: u.profilePic || u.image || null,
-          lastSeen: u.lastSeen || null,
-          last_message: u.last_message || "",
-          last_chat_time: normalizeTimestamp(
-            u.last_chat_time ??
-              u.lastMessageTimeStamp ??
-              u.lastMessageTimestamp ??
-              null
-          ),
-          last_seen_time: normalizeTimestamp(u.lastSeen ?? u.last_seen ?? null),
-          unreadCount: unreadCounts[userId] ?? 0,
+          userid: thread.driverId,
+          driver_name: thread.name || thread.driverName,
+          driver_image: thread.avatarUrl || null,
+          lastSeen: thread.lastReadAt || null,
+          last_message: thread.lastMessageText || "",
+          last_chat_time: normalizeTimestamp(thread.lastMessageAt),
+          last_read_at: normalizeTimestamp(thread.lastReadAt),
+          unreadCount: thread.unreadCount ?? 0,
+          phone: thread.phone || null,
         };
       })
       .filter(Boolean);
-
-    // 🔥 SORT → latest chat first, but prioritize unread messages
-    const driversWithIds = withLastChat.filter(Boolean);
-
-    const sortedDrivers = driversWithIds.sort((a, b) => {
-      const left = a?.last_chat_time ?? 0;
-      const right = b?.last_chat_time ?? 0;
-      return right - left;
-    });
-    
-    return sortedDrivers.map((driver) => {
-      const lastChatTime = driver.last_chat_time ?? 0;
-      const lastSeenTime = driver.last_seen_time ?? 0;
-      const fallbackUnread = lastChatTime > lastSeenTime ? 1 : 0;
-      const unreadCount = driver.unreadCount > 0 ? driver.unreadCount : fallbackUnread;
-
-      return {
-        ...driver,
-        unreadCount,
-      };
-    });
-  }, [users, unreadCounts]);
+  }, [sortedThreads]);
 
   // No client-side filtering - API handles search
   const filtered = drivers;
@@ -338,7 +246,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       {/* 📜 DRIVER LIST (ONLY THIS SCROLLS) */}
       <div className="flex-1 overflow-y-auto chat-list-scroll">
         {/* Initial loading skeleton - only show on first load */}
-        {loading && users.length === 0 && <SkeletonLoader count={10} />}
+        {loading && threads.length === 0 && <SkeletonLoader count={10} />}
 
         {/* Show list items - even when loading more */}
         {!loading && filtered.length > 0 && (
@@ -348,21 +256,21 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
                 key={driver.userid}
                 driver={driver}
                 isSelected={selectedDriverId === driver.userid}
-                onClick={() => onSelectDriver(driver)}
+                onClick={() => handleSelectDriver(driver)}
               />
             ))}
           </>
         )}
 
         {/* Show existing items while loading more */}
-        {loading && users.length > 0 && (
+        {loading && threads.length > 0 && (
           <>
             {filtered.map((driver) => (
               <ChatListItem
                 key={driver.userid}
                 driver={driver}
                 isSelected={selectedDriverId === driver.userid}
-                onClick={() => onSelectDriver(driver)}
+                onClick={() => handleSelectDriver(driver)}
               />
             ))}
           </>
@@ -386,7 +294,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         )}
 
         {/* Empty state */}
-        {!loading && users.length === 0 && filtered.length === 0 && (
+        {!loading && threads.length === 0 && filtered.length === 0 && (
           <p className="text-center text-gray-500 text-sm mt-4">
             No drivers found
           </p>

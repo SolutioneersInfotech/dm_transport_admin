@@ -56,3 +56,21 @@ export async function deleteAdmin(userid) {
 
   return res.json().catch(() => ({}));
 }
+
+export async function fetchChatThreads({ page = 1, limit = 10, search, type = "general" } = {}) {
+  const params = new URLSearchParams();
+  params.append("page", page);
+  params.append("limit", limit);
+  if (search !== undefined) {
+    params.append("search", search);
+  }
+  if (type) {
+    params.append("type", type);
+  }
+
+  return api(`chat/threads?${params.toString()}`, "GET");
+}
+
+export async function markThreadRead(driverId, payload) {
+  return api(`chat/threads/${driverId}/read`, "POST", payload);
+}
