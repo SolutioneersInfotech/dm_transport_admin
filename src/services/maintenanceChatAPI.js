@@ -10,11 +10,13 @@ import {
   update,
 } from "firebase/database";
 import { database } from "../firebase/firebaseApp";
+import { fetchChatThreadsRoute, markChatThreadReadRoute } from "../utils/apiRoutes";
 
 const ADMIN_MAINTENANCE_PATH = "chat/users/admin/maintenance";
 const USER_MAINTENANCE_PATH = "chat/users";
 const FETCH_CHAT_THREADS_URL =
   "https://northamerica-northeast1-dmtransport-1.cloudfunctions.net/api/admin/fetchchatthreads?chatType=maintenance";
+export const chatType = "maintenance";
 
 function getToken() {
   return localStorage.getItem("adminToken");
@@ -62,6 +64,44 @@ export async function fetchUsersForChat() {
   const data = await response.json();
   const users = Array.isArray(data?.users) ? data.users : [];
   return { users };
+}
+
+export async function fetchChatThreads({ page = 1, limit = 20, search = undefined, type = chatType } = {}) {
+  const token = getToken();
+  const url = fetchChatThreadsRoute({ page, limit, search, type });
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch chat threads.");
+  }
+
+  return response.json();
+}
+
+export async function markThreadRead(driverId, { lastReadAt = Date.now(), type = chatType } = {}) {
+  const token = getToken();
+  const response = await fetch(markChatThreadReadRoute(driverId), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      lastReadAt,
+      type,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to mark thread as read.");
+  }
+
+  return response.json();
 }
 
 export async function fetchMessages(userid) {
