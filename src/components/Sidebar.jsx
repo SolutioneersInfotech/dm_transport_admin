@@ -308,8 +308,12 @@ export default function Sidebar() {
           )}
           {!isCollapsed && (
             <div className="flex-1">
-              <p className="text-sm font-semibold">Admin Team</p>
-              <p className="text-xs text-slate-400">admin@dmtransport.io</p>
+              <p className="text-sm font-semibold">
+                {user?.name || user?.username || user?.userid || "Admin"}
+              </p>
+              <p className="text-xs text-slate-400">
+                {user?.email || user?.userid || "admin@dmtransport.io"}
+              </p>
             </div>
           )}
           <button
