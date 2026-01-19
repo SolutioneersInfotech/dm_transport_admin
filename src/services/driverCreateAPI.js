@@ -1,10 +1,10 @@
 const BASE_URL =
   import.meta.env.VITE_API_BASE_URL ??
-  "https://northamerica-northeast1-dmtransport-1.cloudfunctions.net/api/admin";
+  "https://northamerica-northeast1-dmtransport-1.cloudfunctions.net/api";
 
 export async function createDriver(payload) {
   const token = localStorage.getItem("adminToken");
-  const response = await fetch(`${BASE_URL}/createuser`, {
+  const response = await fetch(`${BASE_URL}/admin/createuser`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

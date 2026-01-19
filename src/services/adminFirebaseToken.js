@@ -20,7 +20,7 @@ export async function getAdminFirebaseCustomToken() {
     throw new Error("Missing admin token for Firebase authentication.");
   }
 
-  const response = await fetch(`${BASE_URL}/firebase/token`, {
+  const response = await fetch(`${BASE_URL}/admin/firebase/token`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${adminToken}`,
