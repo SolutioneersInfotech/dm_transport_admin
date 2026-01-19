@@ -215,6 +215,7 @@ function formatLastSeen(lastSeen) {
 
 export default function ChatWindow({ driver, chatApi }) {
   const [messages, setMessages] = useState([]);
+
   const [selected, setSelected] = useState([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
@@ -272,6 +273,7 @@ export default function ChatWindow({ driver, chatApi }) {
     }
 
     const unsubscribe = subscribeMessages(driverId, (nextMessages) => {
+      console.log(nextMessages);
       setMessages(nextMessages || []);
       setLoading(false);
       scrollToBottom();

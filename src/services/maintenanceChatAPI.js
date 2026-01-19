@@ -1,6 +1,5 @@
 import {
   get,
-  limitToLast,
   onValue,
   push,
   query,
@@ -24,17 +23,33 @@ function getAdminUser() {
   return JSON.parse(localStorage.getItem("adminUser"));
 }
 
-function normalizeMessage(messageId, message) {
+function normalizeMessage(messageId, msg) {
+  const rawDate = msg?.dateTime || msg?.datetime;
+  const date = rawDate ? new Date(rawDate) : new Date();
+  const dateTime = Number.isNaN(date.getTime())
+    ? new Date().toISOString()
+    : date.toISOString();
   const type =
-    message?.type === 0 ? 1 :
-    message?.type === 1 ? 0 :
-    message?.type;
+    msg?.type === 0 ? 1 :
+    msg?.type === 1 ? 0 :
+    msg?.type;
 
   return {
-    ...message,
-    msgId: message?.msgId || message?.id || messageId,
-    id: message?.id || messageId,
-    type,
+    msgId: messageId,
+    id: messageId,
+    dateTime,
+    content: {
+      message: msg?.content?.message ?? msg?.message ?? "",
+      attachmentUrl: msg?.content?.attachmentUrl ?? msg?.attachmentUrl ?? "",
+    },
+    status: msg?.status ?? 0,
+    type: typeof type === "number" ? type : 0,
+    contactId: msg?.contactId ?? msg?.userid ?? null,
+    sendername: msg?.sendername ?? "Unknown",
+    replyTo: msg?.replyTo ?? null,
+    seenByAdmin: msg?.seenByAdmin ?? false,
+    seenAt: msg?.seenAt ?? null,
+    seenBy: msg?.seenBy ?? null,
   };
 }
 
@@ -64,31 +79,52 @@ export async function fetchUsersForChat() {
   return { users };
 }
 
-export async function fetchMessages(userid) {
-  const messagesRef = query(
-    ref(database, `${ADMIN_MAINTENANCE_PATH}/${userid}`),
-    limitToLast(100)
-  );
+/**
+ * Fetch messages for a specific user with pagination
+ * @param {string} userid - User ID
+ * @param {number} messageLimit - Number of messages to fetch (default: 10)
+ * @returns {Promise<{messages: Array}>}
+ */
+export async function fetchMessages(userid, messageLimit = 10) {
+  // FIX: Fetch all messages and sort by timestamp to get the actual most recent
+  // Firebase key order is not timestamp order, so we need to sort all messages
+  // to ensure we get the most recent messages correctly
+  
+  const messagesRef = ref(database, `${ADMIN_MAINTENANCE_PATH}/${userid}`);
+  
   const snapshot = await get(messagesRef);
   const messagesObject = snapshot.exists() ? snapshot.val() : {};
 
+  // Sort all messages by dateTime to get the actual most recent
   const messages = sortByDateTimeAsc(
     Object.entries(messagesObject).map(([id, msg]) =>
       normalizeMessage(id, msg)
     )
   );
 
-  return { messages };
+  // If we only need 1 message, return just the most recent (last in sorted array)
+  if (messageLimit === 1 && messages.length > 0) {
+    return { messages: [messages[messages.length - 1]] };
+  }
+
+  // Return the last N messages (most recent)
+  return { messages: messages.slice(-messageLimit) };
 }
 
+/**
+ * Subscribe to messages for a specific user - fetches all messages
+ * @param {string} userid - User ID
+ * @param {function} onChange - Callback function called when messages change
+ * @returns {function} Unsubscribe function
+ */
 export function subscribeMessages(userid, onChange) {
-  const messagesRef = query(
-    ref(database, `${ADMIN_MAINTENANCE_PATH}/${userid}`),
-    limitToLast(100)
-  );
+  // Fetch all messages without limit to ensure no messages are missed
+  const messagesRef = ref(database, `${ADMIN_MAINTENANCE_PATH}/${userid}`);
 
   const unsubscribe = onValue(messagesRef, (snapshot) => {
     const messagesObject = snapshot.exists() ? snapshot.val() : {};
+    
+    // Normalize and sort all messages by dateTime
     const messages = sortByDateTimeAsc(
       Object.entries(messagesObject || {}).map(([id, msg]) =>
         normalizeMessage(id, msg)

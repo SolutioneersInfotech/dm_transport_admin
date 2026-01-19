@@ -15,7 +15,7 @@ import { database } from "../firebase/firebaseApp";
 const ADMIN_GENERAL_PATH = "chat/users/admin/general";
 const USER_MIRROR_BASE = "chat/users";
 const FETCH_USERS_URL =
-  "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin/fetchUsers";
+  "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin/fetchusers";
 
 function getToken() {
   return localStorage.getItem("adminToken");
@@ -49,6 +49,9 @@ function normalizeMessage(messageId, msg) {
     contactId: msg?.contactId ?? msg?.userid ?? null,
     sendername: msg?.sendername ?? "Unknown",
     replyTo: msg?.replyTo ?? null,
+    seenByAdmin: msg?.seenByAdmin ?? false,
+    seenAt: msg?.seenAt ?? null,
+    seenBy: msg?.seenBy ?? null,
   };
 }
 
@@ -60,6 +63,10 @@ function sortByDateTimeAsc(messages) {
   });
 }
 
+/**
+ * Fetch users for chat from the API
+ * @returns {Promise<{users: Array}>}
+ */
 export async function fetchUsersForChat() {
   const token = getToken();
   const response = await fetch(FETCH_USERS_URL, {
@@ -78,6 +85,12 @@ export async function fetchUsersForChat() {
   return { users };
 }
 
+/**
+ * Fetch messages for a specific user with pagination
+ * @param {string} userid - User ID
+ * @param {number} messageLimit - Number of messages to fetch (default: 10)
+ * @returns {Promise<{messages: Array}>}
+ */
 export async function fetchMessages(userid, messageLimit = 10) {
   // FIX: Fetch more messages and sort by timestamp to get the actual most recent
   // limitToLast() uses Firebase key order, not timestamp order, so we need to sort
@@ -85,8 +98,7 @@ export async function fetchMessages(userid, messageLimit = 10) {
   const fetchLimit = messageLimit === 1 ? 20 : messageLimit; // Fetch more if we only need 1
   
   const messagesRef = query(
-    ref(database, `${ADMIN_GENERAL_PATH}/${userid}`),
-    limitToLast(fetchLimit)
+    ref(database, `${ADMIN_GENERAL_PATH}/${userid}`)
   );
   
   const snapshot = await get(messagesRef);
@@ -108,15 +120,20 @@ export async function fetchMessages(userid, messageLimit = 10) {
   return { messages: messages.slice(-messageLimit) };
 }
 
+/**
+ * Subscribe to messages for a specific user - fetches all messages
+ * @param {string} userid - User ID
+ * @param {function} onChange - Callback function called when messages change
+ * @returns {function} Unsubscribe function
+ */
 export function subscribeMessages(userid, onChange) {
-  const messagesRef = query(
-    ref(database, `${ADMIN_GENERAL_PATH}/${userid}`),
-    
-    limitToLast(100)
-  );
+  // Fetch all messages without limit to ensure no messages are missed
+  const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
 
   const unsubscribe = onValue(messagesRef, (snapshot) => {
     const messagesObject = snapshot.exists() ? snapshot.val() : {};
+    
+    // Normalize and sort all messages by dateTime
     const messages = sortByDateTimeAsc(
       Object.entries(messagesObject || {}).map(([id, msg]) =>
         normalizeMessage(id, msg)
@@ -129,6 +146,13 @@ export function subscribeMessages(userid, onChange) {
   return unsubscribe;
 }
 
+/**
+ * Send a message to a user
+ * @param {string} userid - User ID
+ * @param {string} text - Message text
+ * @param {object} adminUser - Admin user object (optional, will fetch if not provided)
+ * @returns {Promise<{message: object}>}
+ */
 export async function sendMessage(userid, text, adminUser = getAdminUser()) {
   const messageId = push(ref(database, `${ADMIN_GENERAL_PATH}/${userid}`)).key;
 
@@ -160,6 +184,12 @@ export async function sendMessage(userid, text, adminUser = getAdminUser()) {
   return { message: payload };
 }
 
+/**
+ * Delete a specific message
+ * @param {string} messageId - Message ID
+ * @param {string} userid - User ID
+ * @returns {Promise<{success: boolean}>}
+ */
 export async function deleteSpecificMessage(messageId, userid) {
   await Promise.all([
     remove(ref(database, `${ADMIN_GENERAL_PATH}/${userid}/${messageId}`)),
@@ -169,6 +199,11 @@ export async function deleteSpecificMessage(messageId, userid) {
   return { success: true };
 }
 
+/**
+ * Delete entire chat history for a user
+ * @param {string} userid - User ID
+ * @returns {Promise<{success: boolean}>}
+ */
 export async function deleteChatHistory(userid) {
   await Promise.all([
     remove(ref(database, `${ADMIN_GENERAL_PATH}/${userid}`)),
@@ -178,7 +213,11 @@ export async function deleteChatHistory(userid) {
   return { success: true };
 }
 
-// Mark messages as seen/read for a specific user
+/**
+ * Mark messages as seen/read for a specific user
+ * @param {string} userid - User ID
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
 export async function markMessagesAsSeen(userid) {
   try {
     const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
@@ -225,7 +264,11 @@ export async function markMessagesAsSeen(userid) {
   }
 }
 
-// Get unread message count for a user
+/**
+ * Get unread message count for a user
+ * @param {string} userid - User ID
+ * @returns {Promise<number>}
+ */
 export async function getUnreadCount(userid) {
   try {
     const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
@@ -252,7 +295,12 @@ export async function getUnreadCount(userid) {
   }
 }
 
-// Subscribe to unread count changes for a user
+/**
+ * Subscribe to unread count changes for a user
+ * @param {string} userid - User ID
+ * @param {function} onChange - Callback function called when unread count changes
+ * @returns {function} Unsubscribe function
+ */
 export function subscribeUnreadCount(userid, onChange) {
   const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
   

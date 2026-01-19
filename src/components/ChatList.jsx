@@ -8,19 +8,17 @@ import { fetchMessages as defaultFetchMessages } from "../services/chatAPI";
 
 const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const dispatch = useAppDispatch();
-  const { users, loading, loadingMore, lastFetched, hasMore, page, limit, lastSearch } = useAppSelector(
+  const { users, loading, loadingMore, hasMore, page, limit } = useAppSelector(
     (state) => state.users
   );
   // console.log(users);
   const [search, setSearch] = useState("");
-  const [searchDebounced, setSearchDebounced] = useState("");
   const observerTarget = useRef(null);
   const hasInitiallyFetched = useRef(false);
-  const [isFetchingMessages, setIsFetchingMessages] = useState(false); // Track if we're fetching messages for sorting
-  const fetchedUsersRef = useRef(new Set()); // Track users we've already fetched messages for
-  const isMountedRef = useRef(false); // Track if component is mounted
-  const [unreadCounts, setUnreadCounts] = useState({}); // Track unread counts per user
-  const unsubscribeUnreadRefs = useRef({}); // Track unsubscribe functions for unread counts
+  const [isFetchingMessages, setIsFetchingMessages] = useState(false);
+  const fetchedUsersRef = useRef(new Set());
+  const [unreadCounts, setUnreadCounts] = useState({});
+  const unsubscribeUnreadRefs = useRef({});
   
   const fetchMessages = chatApi?.fetchMessages || defaultFetchMessages;
   const subscribeUnreadCount = chatApi?.subscribeUnreadCount;
@@ -42,27 +40,9 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     return candidate;
   }
 
-  // Debounce search input
+  // Clear cache on mount
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setSearchDebounced(search);
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [search]);
-
-  // FIX: Clear cache when component mounts/remounts (navigate back)
-  useEffect(() => {
-    if (!isMountedRef.current) {
-      isMountedRef.current = true;
-      // Clear cache on mount to allow fresh fetch when navigating back
-      fetchedUsersRef.current.clear();
-    }
-    
-    return () => {
-      // Don't clear on unmount - keep cache for better performance
-      // Cache will be cleared on next mount
-    };
+    fetchedUsersRef.current.clear();
   }, []);
 
   // Initial fetch on mount - fetch all users with limit=-1
@@ -73,20 +53,6 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     }
   }, [dispatch, loading]);
 
-  // Refetch when search changes
-  useEffect(() => {
-    // Only refetch if search actually changed (using strict comparison)
-    const searchValue = searchDebounced.trim() || undefined;
-    const lastSearchValue = lastSearch !== undefined ? lastSearch : undefined;
-    
-    if (searchValue !== lastSearchValue && !loading && hasInitiallyFetched.current) {
-      // Clear fetched users cache when search changes to allow refetching messages
-      fetchedUsersRef.current.clear();
-      setIsFetchingMessages(false); // Reset fetching state
-      dispatch(fetchUsers({ page: 1, limit: -1, search: searchValue }));
-    }
-  }, [dispatch, searchDebounced, lastSearch, loading]);
-
   // Infinite scroll observer - prevent duplicate calls
   const isLoadingRef = useRef(false);
   
@@ -94,12 +60,11 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     if (hasMore && !loadingMore && !loading && !isLoadingRef.current) {
       isLoadingRef.current = true;
       const nextPage = page + 1;
-      const searchValue = searchDebounced.trim() || undefined;
-      dispatch(fetchMoreUsers({ page: nextPage, limit, search: searchValue })).finally(() => {
+      dispatch(fetchMoreUsers({ page: nextPage, limit })).finally(() => {
         isLoadingRef.current = false;
       });
     }
-  }, [dispatch, hasMore, loadingMore, loading, page, limit, searchDebounced]);
+  }, [dispatch, hasMore, loadingMore, loading, page, limit]);
 
   useEffect(() => {
     // Only set up observer if we have more to load and not currently loading
@@ -185,10 +150,21 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
               // Messages are already sorted ascending by fetchMessages, so last element is most recent
               const lastMessage = messages[messages.length - 1];
               
-              // FIX: Get actual message text - check both content.message and message fields
-              const lastMessageText = lastMessage?.content?.message || 
-                                    lastMessage?.message || 
-                                    (lastMessage?.content ? "" : "");
+              // Get actual message text - check both content.message and message fields
+              let lastMessageText = lastMessage?.content?.message || 
+                                  lastMessage?.message || 
+                                  (lastMessage?.content ? "" : "");
+              
+              // If message is empty but there's an attachment, show "Attachment"
+              if (!lastMessageText || lastMessageText.trim() === "") {
+                const attachmentUrl = lastMessage?.content?.attachmentUrl || 
+                                     lastMessage?.attachmentUrl || 
+                                     "";
+                if (attachmentUrl && attachmentUrl.trim() !== "") {
+                  lastMessageText = "Attachment";
+                }
+              }
+              
               const lastChatTime = lastMessage?.dateTime || null;
 
               // Update Redux store with last message
@@ -322,8 +298,24 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     return driversWithIds;
   }, [users, unreadCounts]);
 
-  // No client-side filtering - API handles search
-  const filtered = drivers;
+  // Client-side filtering - filter from a copy of drivers array
+  const filtered = useMemo(() => {
+    // Create a copy of the drivers array to avoid mutating the original
+    const driversCopy = [...drivers];
+    
+    // If no search term, return all drivers
+    if (!search || !search.trim()) {
+      return driversCopy;
+    }
+    
+    // Filter drivers by name (case-insensitive)
+    const searchTerm = search.toLowerCase().trim();
+    return driversCopy.filter((driver) => {
+      const driverName = (driver.driver_name || "").toLowerCase();
+      return driverName.includes(searchTerm);
+    });
+  }, [drivers, search]);
+  
   const selectedDriverId = getDriverId(selectedDriver);
 
   return (
