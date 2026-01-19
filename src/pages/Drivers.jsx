@@ -344,7 +344,7 @@ export default function Drivers() {
       setPage(1);
       await refetch();
     } catch (error) {
-      setSubmitError(error?.message || "Failed to create driver.");
+      setSubmitError(error?.message ?? "Something went wrong");
     } finally {
       setIsSubmitting(false);
     }
