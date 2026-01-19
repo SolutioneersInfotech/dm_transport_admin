@@ -1,6 +1,13 @@
-const BASE_URL =
+const rawBase =
   import.meta.env.VITE_API_BASE_URL ??
   "https://northamerica-northeast1-dmtransport-1.cloudfunctions.net/api/admin";
+
+const BASE_URL = (() => {
+  const base = String(rawBase).replace(/\/+$/, "");
+  if (base.endsWith("/api/admin")) return base;
+  if (base.endsWith("/api")) return `${base}/admin`;
+  return base;
+})();
 
 export async function uploadDriverProfilePic({ phone, file }) {
   if (!file) {
@@ -10,7 +17,7 @@ export async function uploadDriverProfilePic({ phone, file }) {
   const token = localStorage.getItem("adminToken");
   const formData = new FormData();
   formData.append("phone", phone ?? "");
-  formData.append("file", file);
+  formData.append("profilePic", file);
 
   const response = await fetch(`${BASE_URL}/driver/uploadProfilePic`, {
     method: "POST",
