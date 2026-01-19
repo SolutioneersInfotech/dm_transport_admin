@@ -16,6 +16,10 @@ import {
   Pencil,
 } from "lucide-react";
 import { useDriversQuery } from "../services/driverQueries";
+import {
+  createDriver,
+  uploadDriverImage,
+} from "../services/driverCreateAPI";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 
@@ -62,6 +66,16 @@ function getInitials(name) {
     .toUpperCase();
 }
 
+const initialFormState = {
+  name: "",
+  email: "",
+  password: "",
+  phone: "",
+  category: "C",
+  country: "IN",
+  image: null,
+};
+
 export default function Drivers() {
   const [drivers, setDrivers] = useState([]);
   const [search, setSearch] = useState("");
@@ -75,18 +89,12 @@ export default function Drivers() {
   const scrollContainerRef = useRef(null);
   const loadMoreRef = useRef(null);
   const limit = 20;
-  const [formState, setFormState] = useState({
-    name: "",
-    email: "",
-    password: "",
-    phone: "",
-    category: "C",
-    country: "IN",
-    image: null,
-  });
+  const [formState, setFormState] = useState(initialFormState);
   const [passwordState, setPasswordState] = useState({
     password: "",
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const {
     data: driverData,
     isLoading,
@@ -239,16 +247,10 @@ export default function Drivers() {
   }
 
   function openModal(type) {
+    setSubmitError("");
+    setIsSubmitting(false);
     if (type === "add") {
-      setFormState({
-        name: "",
-        email: "",
-        password: "",
-        phone: "",
-        category: "C",
-        country: "IN",
-        image: null,
-      });
+      setFormState(initialFormState);
     }
 
     if (type === "edit" && selectedDriver) {
@@ -272,6 +274,8 @@ export default function Drivers() {
 
   function closeModal() {
     setActiveModal(null);
+    setSubmitError("");
+    setIsSubmitting(false);
   }
 
   function handleFormChange(event) {
@@ -286,6 +290,58 @@ export default function Drivers() {
 
   function handlePasswordChange(event) {
     setPasswordState({ password: event.target.value });
+  }
+
+  const requiredFields = useMemo(
+    () => ["name", "email", "phone", "password", "country", "category"],
+    []
+  );
+  const isSubmitDisabled =
+    isSubmitting ||
+    (activeModal === "add" &&
+      requiredFields.some((field) => {
+        const value = formState[field];
+        return !String(value ?? "").trim();
+      }));
+
+  async function handleSubmit() {
+    if (activeModal !== "add") {
+      return;
+    }
+
+    if (isSubmitDisabled) {
+      setSubmitError("Please fill in all required fields.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError("");
+
+    try {
+      const imageUrl = await uploadDriverImage({
+        file: formState.image,
+        phone: formState.phone,
+      });
+
+      await createDriver({
+        name: formState.name.trim(),
+        email: formState.email.trim(),
+        phone: formState.phone.trim(),
+        password: formState.password,
+        country: formState.country,
+        category: formState.category,
+        image: imageUrl,
+      });
+
+      closeModal();
+      setFormState(initialFormState);
+      setPage(1);
+      await refetch();
+    } catch (error) {
+      setSubmitError(error?.message || "Failed to create driver.");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   const isModalOpen = activeModal !== null;
@@ -823,11 +879,22 @@ export default function Drivers() {
                 <div className="flex justify-center">
                   <button
                     type="button"
-                    className="rounded-full border border-slate-700 px-10 py-2 text-sm font-semibold text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
+                    onClick={handleSubmit}
+                    disabled={isSubmitDisabled}
+                    className={`rounded-full border px-10 py-2 text-sm font-semibold transition ${
+                      isSubmitDisabled
+                        ? "cursor-not-allowed border-slate-800 text-slate-500"
+                        : "border-sky-500/60 bg-sky-500/10 text-sky-100 hover:border-sky-400 hover:bg-sky-500/20"
+                    }`}
                   >
-                    Submit
+                    {isSubmitting ? "Submitting..." : "Submit"}
                   </button>
                 </div>
+                {submitError && (
+                  <p className="text-center text-sm text-rose-300">
+                    {submitError}
+                  </p>
+                )}
               </div>
             )}
           </div>
