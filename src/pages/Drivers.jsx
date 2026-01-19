@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { useDriversQuery } from "../services/driverQueries";
 import { createDriver } from "../services/driverCreateAPI";
-import { uploadDriverProfilePic } from "../services/driverActionsAPI";
+import { uploadDriverProfilePhoto } from "../services/driverPhotoUpload";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 
@@ -91,6 +91,10 @@ export default function Drivers() {
   const [passwordState, setPasswordState] = useState({
     password: "",
   });
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [uploadedPhone, setUploadedPhone] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const {
@@ -249,6 +253,10 @@ export default function Drivers() {
     setIsSubmitting(false);
     if (type === "add") {
       setFormState(initialFormState);
+      setUploadingPhoto(false);
+      setPhotoError("");
+      setPhotoUrl("");
+      setUploadedPhone("");
     }
 
     if (type === "edit" && selectedDriver) {
@@ -274,6 +282,10 @@ export default function Drivers() {
     setActiveModal(null);
     setSubmitError("");
     setIsSubmitting(false);
+    setUploadingPhoto(false);
+    setPhotoError("");
+    setPhotoUrl("");
+    setUploadedPhone("");
   }
 
   function handleFormChange(event) {
@@ -281,9 +293,34 @@ export default function Drivers() {
     setFormState((prev) => ({ ...prev, [name]: value }));
   }
 
-  function handleFileChange(event) {
+  async function handleFileChange(event) {
     const file = event.target.files?.[0] ?? null;
     setFormState((prev) => ({ ...prev, image: file }));
+
+    if (!file) {
+      return;
+    }
+
+    setPhotoError("");
+    setPhotoUrl("");
+    setUploadedPhone("");
+    setUploadingPhoto(true);
+
+    try {
+      const url = await uploadDriverProfilePhoto({
+        phone: formState.phone,
+        file,
+      });
+      if (!url) {
+        throw new Error("Profile image upload failed. Please try again.");
+      }
+      setPhotoUrl(url);
+      setUploadedPhone(formState.phone.trim());
+    } catch (error) {
+      setPhotoError(error?.message || "Failed to upload profile photo.");
+    } finally {
+      setUploadingPhoto(false);
+    }
   }
 
   function handlePasswordChange(event) {
@@ -296,6 +333,7 @@ export default function Drivers() {
   );
   const isSubmitDisabled =
     isSubmitting ||
+    uploadingPhoto ||
     (activeModal === "add" &&
       requiredFields.some((field) => {
         const value = formState[field];
@@ -316,18 +354,7 @@ export default function Drivers() {
     setSubmitError("");
 
     try {
-      let imageUrl = null;
-
-      if (formState.image) {
-        imageUrl = await uploadDriverProfilePic({
-          file: formState.image,
-          phone: formState.phone,
-        });
-
-        if (!imageUrl) {
-          throw new Error("Profile image upload failed. Please try again.");
-        }
-      }
+      const imageUrl = photoUrl || null;
 
       await createDriver({
         name: formState.name.trim(),
@@ -337,6 +364,8 @@ export default function Drivers() {
         country: formState.country,
         category: formState.category,
         image: imageUrl,
+        profilePic: imageUrl,
+        profilepic: imageUrl,
       });
 
       closeModal();
@@ -357,6 +386,17 @@ export default function Drivers() {
       : activeModal === "edit"
         ? "Edit driver details"
         : "Change Password";
+
+  useEffect(() => {
+    if (!uploadedPhone) return;
+    if (!String(formState.phone ?? "").trim()) return;
+    if (formState.phone.trim() === uploadedPhone) return;
+
+    setPhotoUrl("");
+    setUploadedPhone("");
+    setPhotoError("Phone changed. Please re-upload photo.");
+    setFormState((prev) => ({ ...prev, image: null }));
+  }, [formState.phone, uploadedPhone]);
 
   return (
     <div className="flex h-full flex-col gap-3 p-3">
@@ -863,12 +903,22 @@ export default function Drivers() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-800 bg-slate-900">
-                    <UploadCloud className="h-4 w-4 text-slate-400" />
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full border border-slate-800 bg-slate-900">
+                    {photoUrl ? (
+                      <img
+                        src={photoUrl}
+                        alt="Driver profile preview"
+                        className="h-16 w-16 rounded-full object-cover"
+                      />
+                    ) : (
+                      <UploadCloud className="h-4 w-4 text-slate-400" />
+                    )}
                   </div>
                   <div className="flex flex-1 items-center justify-between gap-4 rounded-full border border-slate-800 bg-slate-900/60 px-4 py-2">
                     <span className="text-sm text-slate-400">
-                      {formState.image ? formState.image.name : "No image selected"}
+                      {formState.image
+                        ? formState.image.name
+                        : "No image selected"}
                     </span>
                     <label className="cursor-pointer rounded-full border border-slate-700 px-4 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-slate-500">
                       Browse
@@ -880,6 +930,14 @@ export default function Drivers() {
                       />
                     </label>
                   </div>
+                </div>
+                <div className="space-y-1">
+                  {uploadingPhoto && (
+                    <p className="text-xs text-slate-400">Uploading...</p>
+                  )}
+                  {photoError && (
+                    <p className="text-xs text-rose-300">{photoError}</p>
+                  )}
                 </div>
 
                 <div className="flex justify-center">
