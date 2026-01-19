@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Search,
   Phone,
@@ -72,6 +72,8 @@ export default function Drivers() {
   const [activeModal, setActiveModal] = useState(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
+  const scrollContainerRef = useRef(null);
+  const loadMoreRef = useRef(null);
   const limit = 20;
   const [formState, setFormState] = useState({
     name: "",
@@ -196,6 +198,33 @@ export default function Drivers() {
 
   const isInitialLoading = isLoading && drivers.length === 0;
   const isLoadingMore = isFetching && page > 1;
+
+  const handleLoadMore = useCallback(() => {
+    if (!hasMore || isFetching || isInitialLoading) return;
+    setPage((prev) => prev + 1);
+  }, [hasMore, isFetching, isInitialLoading]);
+
+  useEffect(() => {
+    const sentinel = loadMoreRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          handleLoadMore();
+        }
+      },
+      {
+        root: scrollContainerRef.current,
+        rootMargin: "120px",
+        threshold: 0.1,
+      }
+    );
+
+    observer.observe(sentinel);
+
+    return () => observer.disconnect();
+  }, [handleLoadMore]);
 
   function toggleMaintenanceChat() {
     if (!selectedDriver) return;
@@ -360,7 +389,10 @@ export default function Drivers() {
             <span className="col-span-2 text-right">Last seen</span>
           </div>
 
-          <div className="drivers-scroll flex-1 overflow-y-auto">
+          <div
+            ref={scrollContainerRef}
+            className="drivers-scroll flex-1 overflow-y-auto"
+          >
             {isInitialLoading && (
               <div className="space-y-3 px-4 py-6">
                 {Array.from({ length: 6 }).map((_, index) => (
@@ -450,21 +482,11 @@ export default function Drivers() {
                 Loading more drivers…
               </div>
             )}
+            <div ref={loadMoreRef} className="h-1" />
           </div>
 
           <div className="sticky bottom-0 flex items-center justify-between border-t border-slate-800 bg-slate-950/95 px-4 py-3 text-sm text-slate-400 backdrop-blur">
             <span>Total drivers: {totalDrivers}</span>
-            {hasMore && !isError && (
-              <Button
-                type="button"
-                variant="outline"
-                className="border-slate-700 text-slate-200 hover:bg-slate-900/60"
-                onClick={() => setPage((prev) => prev + 1)}
-                disabled={isFetching}
-              >
-                {isFetching ? "Loading…" : "Load more"}
-              </Button>
-            )}
             <button
               type="button"
               onClick={() => openModal("add")}
