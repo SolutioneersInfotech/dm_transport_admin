@@ -16,10 +16,8 @@ import {
   Pencil,
 } from "lucide-react";
 import { useDriversQuery } from "../services/driverQueries";
-import {
-  createDriver,
-  uploadDriverImage,
-} from "../services/driverCreateAPI";
+import { createDriver } from "../services/driverCreateAPI";
+import { uploadDriverProfilePic } from "../services/driverActionsAPI";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 
@@ -318,10 +316,18 @@ export default function Drivers() {
     setSubmitError("");
 
     try {
-      const imageUrl = await uploadDriverImage({
-        file: formState.image,
-        phone: formState.phone,
-      });
+      let imageUrl = null;
+
+      if (formState.image) {
+        imageUrl = await uploadDriverProfilePic({
+          file: formState.image,
+          phone: formState.phone,
+        });
+
+        if (!imageUrl) {
+          throw new Error("Profile image upload failed. Please try again.");
+        }
+      }
 
       await createDriver({
         name: formState.name.trim(),
