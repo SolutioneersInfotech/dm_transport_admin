@@ -295,11 +295,11 @@ export default function Notes() {
           </div>
         </div>
       </div>
-      <div className="mx-auto flex w-full flex-1 flex-col overflow-hidden px-4 pb-6 pt-3">
+      <div className="mx-auto flex w-full flex-1 min-h-0 flex-col overflow-hidden px-4 pb-6 pt-3">
         <div
           ref={listRef}
           onScroll={handleScroll}
-          className="notes-scroll flex-1 max-h-[73vh] overflow-y-auto rounded-2xl border border-gray-800 bg-[#0f131a] px-4 py-6"
+          className="notes-scroll flex-1 min-h-0 overflow-y-auto rounded-2xl border border-gray-800 bg-[#0f131a] px-4 py-6"
         >
           {groupedMessages.length === 0 ? (
             <div className="flex h-full items-center justify-center text-sm text-gray-500">
@@ -531,7 +531,7 @@ export default function Notes() {
                 variant="outline"
                 size="sm"
                 onClick={() => setAttachmentMenuOpen((prev) => !prev)}
-                className="rounded-full border border-gray-700 px-3 py-2 text-sm text-gray-200"
+                className="rounded-full border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-100"
               >
                 + Attachment
               </Button>
