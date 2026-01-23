@@ -431,8 +431,8 @@ export default function Drivers() {
         </div>
       </section> */}
 
-      <section className="grid flex-1 min-h-0 items-stretch gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <div className="flex h-full min-h-0 flex-col rounded-2xl border border-slate-800 bg-slate-950/60">
+      <section className="flex flex-1 min-h-0 flex-col items-stretch gap-3 xl:flex-row">
+        <div className="flex h-full min-h-0 flex-1 flex-col rounded-2xl border border-slate-800 bg-slate-950/60">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 p-4">
             <div className="relative flex-1 min-w-[240px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 z-10" />
@@ -599,9 +599,14 @@ export default function Drivers() {
           </div>
         </div>
 
-        <aside className="flex resize-y flex-col gap-4 self-start overflow-auto rounded-2xl border border-slate-800 bg-slate-950/60 p-7">
-          {selectedDriver ? (
-            <>
+        {!isInitialLoading && (
+          <aside
+            className="flex max-w-full flex-none resize-x flex-col gap-4 self-start overflow-auto rounded-2xl border border-slate-800 bg-slate-950/60 p-7 xl:w-[360px]"
+            dir="rtl"
+          >
+            <div className="flex flex-1 flex-col gap-4" dir="ltr">
+              {selectedDriver ? (
+                <>
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-4">
                   <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-slate-800 text-lg font-semibold text-slate-100">
@@ -766,12 +771,14 @@ export default function Drivers() {
                 </div>
               </div>
             </>
-          ) : (
-            <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
-              Select a driver to view details.
+              ) : (
+                <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
+                  Select a driver to view details.
+                </div>
+              )}
             </div>
-          )}
-        </aside>
+          </aside>
+        )}
       </section>
 
       {isModalOpen && (
