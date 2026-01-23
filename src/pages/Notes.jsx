@@ -106,6 +106,7 @@ export default function Notes() {
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [inputValue, setInputValue] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [activeEmojiMenu, setActiveEmojiMenu] = useState(null);
   const [activePriorityMenu, setActivePriorityMenu] = useState(null);
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
@@ -119,9 +120,16 @@ export default function Notes() {
   const adminUser = useMemo(() => getAdminUser(), []);
 
   useEffect(() => {
+    setIsLoading(true);
     const unsubscribe = subscribeNotesMessages({
-      onChange: setMessages,
-      onError: (error) => console.error("Notes subscription error", error),
+      onChange: (nextMessages) => {
+        setMessages(nextMessages);
+        setIsLoading(false);
+      },
+      onError: (error) => {
+        console.error("Notes subscription error", error);
+        setIsLoading(false);
+      },
       priorityFilter,
     });
 
@@ -301,7 +309,12 @@ export default function Notes() {
           onScroll={handleScroll}
           className="notes-scroll flex-1 min-h-0 overflow-y-auto rounded-2xl border border-gray-800 bg-[#0f131a] px-4 py-6"
         >
-          {groupedMessages.length === 0 ? (
+          {isLoading ? (
+            <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-gray-400">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-600 border-t-[#1f6feb]" />
+              <span>Loading notes...</span>
+            </div>
+          ) : groupedMessages.length === 0 ? (
             <div className="flex h-full items-center justify-center text-sm text-gray-500">
               No notes yet.
             </div>
