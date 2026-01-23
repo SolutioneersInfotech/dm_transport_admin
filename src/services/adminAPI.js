@@ -1,13 +1,8 @@
 const rawBase =
   import.meta.env.VITE_API_BASE_URL ??
-  "https://northamerica-northeast1-dmtransport-1.cloudfunctions.net/api/admin";
+  "https://northamerica-northeast1-dmtransport-1.cloudfunctions.net/api";
 
-const BASE_URL = (() => {
-  const base = String(rawBase).replace(/\/+$/, "");
-  if (base.endsWith("/api/admin")) return base;
-  if (base.endsWith("/api")) return `${base}/admin`;
-  return base;
-})();
+const BASE_URL = `${rawBase}/admin`;
 
 function getToken() {
   return localStorage.getItem("adminToken");
