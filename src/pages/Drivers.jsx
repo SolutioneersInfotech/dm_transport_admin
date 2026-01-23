@@ -95,8 +95,11 @@ export default function Drivers() {
   const [photoError, setPhotoError] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
   const [uploadedPhone, setUploadedPhone] = useState("");
+  const [detailsWidth, setDetailsWidth] = useState(360);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const isResizingRef = useRef(false);
+  const sectionRef = useRef(null);
   const {
     data: driverData,
     isLoading,
@@ -165,6 +168,48 @@ export default function Drivers() {
     if (drivers.some((driver) => driver.id === selectedId)) return;
     setSelectedId(drivers[0]?.id ?? null);
   }, [drivers, selectedId]);
+
+  useEffect(() => {
+    const handleMouseMove = (event) => {
+      if (!isResizingRef.current) return;
+      const section = sectionRef.current;
+      if (!section) return;
+      const rect = section.getBoundingClientRect();
+      const minWidth = 280;
+      const minListWidth = 320;
+      const maxWidth = Math.max(minWidth, rect.width - minListWidth);
+      const nextWidth = Math.min(
+        maxWidth,
+        Math.max(minWidth, rect.right - event.clientX)
+      );
+      setDetailsWidth(nextWidth);
+    };
+
+    const stopResize = () => {
+      if (!isResizingRef.current) return;
+      isResizingRef.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", stopResize);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", stopResize);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, []);
+
+  const handleResizeStart = useCallback((event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    isResizingRef.current = true;
+    document.body.style.cursor = "ew-resize";
+    document.body.style.userSelect = "none";
+  }, []);
 
   const filteredDrivers = useMemo(() => {
     return drivers.filter((driver) => {
@@ -431,7 +476,10 @@ export default function Drivers() {
         </div>
       </section> */}
 
-      <section className="flex flex-1 min-h-0 flex-col items-stretch gap-3 xl:flex-row">
+      <section
+        ref={sectionRef}
+        className="flex flex-1 min-h-0 flex-col items-stretch gap-3 xl:flex-row"
+      >
         <div className="flex h-full min-h-0 flex-1 flex-col rounded-2xl border border-slate-800 bg-slate-950/60">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 p-4">
             <div className="relative flex-1 min-w-[240px]">
@@ -601,10 +649,16 @@ export default function Drivers() {
 
         {!isInitialLoading && (
           <aside
-            className="flex max-w-full flex-none resize-x flex-col gap-4 self-start overflow-auto rounded-2xl border border-slate-800 bg-slate-950/60 p-7 xl:w-[360px]"
-            dir="rtl"
+            className="relative flex w-full max-w-full flex-none flex-col gap-4 self-start overflow-auto rounded-2xl border border-slate-800 bg-slate-950/60 p-7 xl:min-w-[280px]"
+            style={{ width: detailsWidth, maxWidth: "100%" }}
           >
-            <div className="flex flex-1 flex-col gap-4" dir="ltr">
+            <div
+              className="absolute left-0 top-0 h-full w-2 cursor-ew-resize"
+              role="separator"
+              aria-orientation="vertical"
+              onMouseDown={handleResizeStart}
+            />
+            <div className="flex flex-1 flex-col gap-4">
               {selectedDriver ? (
                 <>
               <div className="flex items-start justify-between gap-4">
