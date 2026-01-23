@@ -1,21 +1,10 @@
 const rawBase =
   import.meta.env.VITE_API_BASE_URL ??
-  "https://northamerica-northeast1-dmtransport-1.cloudfunctions.net/api/admin";
+  "https://northamerica-northeast1-dmtransport-1.cloudfunctions.net/api/";
 
-// Normalize so drivers always hit the admin router.
-// If env is ".../api" -> make it ".../api/admin"
-// If env already ends with ".../api/admin" -> keep it
-// If env accidentally ends with ".../api/" -> handle that too
-const BASE_URL = (() => {
-  const b = String(rawBase).replace(/\/+$/, ""); // trim trailing slashes
-  if (b.endsWith("/api/admin")) return b;
-  if (b.endsWith("/api")) return `${b}/admin`;
-  // If someone sets base to cloudfunctions root without /api/admin, keep it as-is.
-  // But for your current case, this should be enough.
-  return b;
-})();
 
-const DRIVERS_API_URL = `${BASE_URL}/fetchusers`;
+
+const DRIVERS_API_URL = `${rawBase}/admin/fetchusers`;
 
 
 function mapDriver(user) {
