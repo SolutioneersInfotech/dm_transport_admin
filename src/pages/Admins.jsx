@@ -352,7 +352,7 @@ export default function Admins() {
   };
 
   return (
-    <div className="flex min-h-screen h-full flex-col overflow-hidden bg-[#101418] px-4 py-4 text-white">
+    <div className="flex min-h-screen h-full flex-col overflow-hidden bg-[#101418] px-2 py-2 text-white">
 
       {isAddAdminOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
@@ -538,8 +538,8 @@ export default function Admins() {
         </div>
       )}
 
-      <div className="grid flex-1 min-h-0 gap-4 overflow-hidden lg:grid-cols-[320px_1fr]">
-        <div className="flex min-h-0 flex-col rounded-2xl border border-slate-800 bg-[#151a1f] p-3 shadow-lg">
+      <div className="grid flex-1 min-h-0 gap-2 overflow-hidden lg:grid-cols-[320px_1fr]">
+        <div className="flex min-h-0 flex-col rounded-m border border-slate-800 bg-[#151a1f] p-3 shadow-lg">
           <div className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-2">
             <Search className="h-4 w-4 text-slate-400" />
             <Input
@@ -613,7 +613,7 @@ export default function Admins() {
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-col rounded-2xl border border-slate-800 bg-[#151a1f] px-6 py-5 shadow-lg">
+        <div className="flex min-h-0 flex-col rounded-m border border-slate-800 bg-[#151a1f] px-6 py-5 shadow-lg">
           {isLoading ? (
             <div className="flex h-full flex-col gap-6">
               <div className="flex items-start justify-between">

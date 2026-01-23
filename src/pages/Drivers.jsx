@@ -444,7 +444,7 @@ export default function Drivers() {
   }, [formState.phone, uploadedPhone]);
 
   return (
-    <div className="flex h-full flex-col gap-3 p-3">
+    <div className="flex h-full flex-col gap-2 px-2 py-2">
       {/* <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
           <p className="text-sm text-slate-400">Total Drivers</p>
@@ -478,9 +478,9 @@ export default function Drivers() {
 
       <section
         ref={sectionRef}
-        className="flex flex-1 min-h-0 flex-col items-stretch gap-3 xl:flex-row"
+        className="flex flex-1 min-h-0 flex-col items-stretch gap-2 xl:flex-row"
       >
-        <div className="flex h-full min-h-0 flex-1 flex-col rounded-2xl border border-slate-800 bg-slate-950/60">
+        <div className="flex h-full min-h-0 flex-1 flex-col rounded-m border border-slate-800 bg-slate-950/60">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 p-4">
             <div className="relative flex-1 min-w-[240px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 z-10" />
@@ -535,7 +535,7 @@ export default function Drivers() {
             <span className="col-span-4">Driver</span>
             <span className="col-span-3">Phone</span>
             <span className="col-span-2">Country</span>
-            <span className="col-span-1">Cat</span>
+            <span className="col-span-1">Category</span>
             <span className="col-span-2 text-right">Last seen</span>
           </div>
 
@@ -649,7 +649,7 @@ export default function Drivers() {
 
         {!isInitialLoading && (
           <aside
-            className="relative flex w-full max-w-full flex-none flex-col gap-4 self-start overflow-auto rounded-2xl border border-slate-800 bg-slate-950/60 p-7 xl:min-w-[280px]"
+            className="relative flex w-full max-w-full flex-none flex-col gap-4 self-start overflow-auto rounded-m border border-slate-800 bg-slate-950/60 p-7 xl:min-w-[300px]"
             style={{ width: detailsWidth, maxWidth: "100%" }}
           >
             <div

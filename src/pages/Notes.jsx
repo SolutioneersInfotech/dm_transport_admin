@@ -303,7 +303,7 @@ export default function Notes() {
           </div>
         </div>
       </div>
-      <div className="mx-auto flex w-full flex-1 min-h-0 flex-col overflow-hidden px-4 pb-6 pt-3">
+      <div className="mx-auto flex w-full flex-1 min-h-0 flex-col overflow-hidden px-2 py-2 pb-2 pt-2">
         <div
           ref={listRef}
           onScroll={handleScroll}
@@ -536,7 +536,7 @@ export default function Notes() {
           )}
         </div>
 
-        <div className="mt-4 rounded-2xl border border-gray-800 bg-[#0f131a] px-4 py-4">
+        <div className="mt-2 rounded-2xl border border-gray-800 bg-[#0f131a] px-2 py-2">
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative">
               <Button
