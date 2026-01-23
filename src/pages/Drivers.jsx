@@ -599,8 +599,9 @@ export default function Drivers() {
           </div>
         </div>
 
-        <aside className="flex resize-y flex-col gap-4 self-start overflow-auto rounded-2xl border border-slate-800 bg-slate-950/60 p-7">
-          {selectedDriver ? (
+        {!isInitialLoading && (
+          <aside className="flex resize flex-col gap-4 self-start overflow-auto rounded-2xl border border-slate-800 bg-slate-950/60 p-7">
+            {selectedDriver ? (
             <>
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-4">
@@ -766,12 +767,13 @@ export default function Drivers() {
                 </div>
               </div>
             </>
-          ) : (
-            <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
-              Select a driver to view details.
-            </div>
-          )}
-        </aside>
+            ) : (
+              <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
+                Select a driver to view details.
+              </div>
+            )}
+          </aside>
+        )}
       </section>
 
       {isModalOpen && (
