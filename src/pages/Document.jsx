@@ -14,14 +14,6 @@ import {
   TableRow,
 } from "../components/ui/table";
 import { Checkbox } from "../components/ui/checkbox";
-import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerDescription,
-  DrawerHeader,
-  DrawerTitle,
-} from "../components/ui/drawer";
 import { X, Search, Calendar, Flag, ChevronDown, Check } from "lucide-react";
 import DocumentTableSkeleton from "../components/skeletons/DocumentTableSkeleton";
 
@@ -355,10 +347,10 @@ export default function Documents() {
 
 
   return (
-    <div className="text-white h-full overflow-hidden flex flex-col p-4">
+    <div className="text-white h-full overflow-hidden flex flex-col p-2">
 
       {/* CHIP FILTER INPUT - Document Type Filters */}
-      <div className="mb-4">
+      <div className="mb-2">
         {/* Selected Filters as Chips */}
         {/* {selectedFilters.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-3">
@@ -386,7 +378,7 @@ export default function Documents() {
         )} */}
 
         {/* Filter Options */}
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-2">
           {Object.keys(FILTER_MAP).map((item) => {
             const filterValue = FILTER_MAP[item];
             const isSelected = selectedFilters.includes(filterValue);
@@ -410,7 +402,7 @@ export default function Documents() {
       </div>
 
       {/* FILTER BAR - Horizontal Layout matching image */}
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
         {/* Search Bar */}
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -589,42 +581,42 @@ export default function Documents() {
       </div>
 
       {/* MAIN LAYOUT */}
-        <div className="flex-1 bg-[#161b22] p-4 rounded-lg border border-gray-700 overflow-hidden flex flex-col">
-
-  {/* Date Filter (FIXED) */}
-
-
-  {/* 📜 TABLE (ONLY THIS SCROLLS) */}
-        <div className="flex-1 overflow-y-auto chat-list-scroll">
-          <Table>
+      <div className="flex-1 bg-[#161b22] rounded-lg border border-gray-700 overflow-hidden flex flex-col">
+        {/* FLEX CONTAINER: TABLE + PREVIEW */}
+        <div className="flex-1 flex gap-0 overflow-hidden">
+          {/* 📜 TABLE SECTION */}
+          <div className="flex-[0_0_60%] overflow-hidden flex flex-col border-r border-gray-700">
+            <div className="flex-1 overflow-y-auto chat-list-scroll">
+              <Table>
             <TableHeader className="sticky top-0 bg-[#161b22] z-10 border-b border-gray-700">
               <TableRow className="hover:bg-transparent border-gray-700">
-                <TableHead className="w-14 h-12">
-                  <div className="flex items-center gap-2">
+                <TableHead className="w-12 h-8 px-2">
+                  <div className="flex items-center gap-1">
                     <Checkbox
                       checked={isAllSelected || isIndeterminate}
                       onCheckedChange={handleSelectAll}
                       aria-label="Select all"
+                      className="h-3.5 w-3.5"
                     />
-                    <span className="text-xs font-medium text-gray-400">Select All</span>
+                    <span className="text-[10px] font-medium text-gray-400">Select All</span>
                   </div>
                 </TableHead>
-                <TableHead className="h-12 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <TableHead className="h-8 px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   Status
                 </TableHead>
-                <TableHead className="h-12 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <TableHead className="h-8 px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   Uploaded By
                 </TableHead>
-                <TableHead className="h-12 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <TableHead className="h-8 px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   Date & Time
                 </TableHead>
-                <TableHead className="h-12 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <TableHead className="h-8 px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   Type
                 </TableHead>
-                <TableHead className="h-12 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <TableHead className="h-8 px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   Category
                 </TableHead>
-                <TableHead className="h-12 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <TableHead className="h-8 px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   Flag
                 </TableHead>
               </TableRow>
@@ -646,10 +638,10 @@ export default function Documents() {
                   <>
                     {/* Group Header */}
                     <TableRow key={`group-${group}`} className="bg-[#0d1117] border-gray-800 hover:bg-[#0d1117]">
-                      <TableCell colSpan={7} className="px-4 py-3">
+                      <TableCell colSpan={7} className="px-2 py-1">
                         <div className="flex items-center gap-2">
                           <div className="h-px flex-1 bg-gradient-to-r from-transparent via-blue-500/30 to-transparent" />
-                          <span className="text-sm font-semibold text-blue-400 px-3">
+                          <span className="text-xs font-semibold text-blue-400 px-2">
                             {group}
                           </span>
                           <div className="h-px flex-1 bg-gradient-to-r from-transparent via-blue-500/30 to-transparent" />
@@ -664,67 +656,68 @@ export default function Documents() {
                         className="border-gray-800 hover:bg-[#1d232a]/50 cursor-pointer transition-colors"
                         onClick={() => setSelectedDoc(doc)}
                       >
-                        <TableCell className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <TableCell className="px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
                           <Checkbox
                             checked={selectedDocIds.has(doc.id)}
                             onCheckedChange={(checked) => handleSelectDoc(doc.id, checked)}
                             onClick={(e) => e.stopPropagation()}
                             aria-label={`Select ${doc.driver_name}`}
+                            className="h-3.5 w-3.5"
                           />
                         </TableCell>
-                        <TableCell className="px-4 py-3">
-                          <div className="flex items-center gap-2">
+                        <TableCell className="px-2 py-1.5">
+                          <div className="flex items-center gap-1.5">
                             <span
-                              className={`w-2.5 h-2.5 rounded-full ${doc.seen === false
+                              className={`w-2 h-2 rounded-full ${doc.seen === false
                                   ? "bg-blue-500"
                                   : doc.seen === true
                                     ? "bg-green-500"
                                     : "bg-gray-500"
                                 }`}
                             />
-                            <span className="text-xs text-gray-400">
+                            <span className="text-[11px] text-gray-400">
                               {doc.seen === false ? "Unseen" : doc.seen === true ? "Seen" : "Unknown"}
                             </span>
-      </div>
+                          </div>
                         </TableCell>
-                        <TableCell className="px-4 py-3">
-                          <div className="flex items-center gap-3">
+                        <TableCell className="px-2 py-1.5">
+                          <div className="flex items-center gap-2">
                             {doc.driver_image && (
                               <img
                                 src={doc.driver_image}
                                 alt={doc.driver_name}
-                                className="w-8 h-8 rounded-full object-cover border border-gray-700"
+                                className="w-6 h-6 rounded-full object-cover border border-gray-700"
                                 onError={(e) => {
                                   e.target.style.display = "none";
                                 }}
                               />
                             )}
-                            <span className="text-sm font-medium text-white">
+                            <span className="text-xs font-medium text-white">
                               {doc.driver_name || "Unknown"}
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell className="px-4 py-3">
-                          <div className="text-sm text-gray-300">
+                        <TableCell className="px-2 py-1.5">
+                          <div className="text-xs text-gray-300">
                             {new Date(doc.date).toLocaleString("en-US", {
                               dateStyle: "short",
                               timeStyle: "short",
                             })}
-      </div>
+                          </div>
                         </TableCell>
-                        <TableCell className="px-4 py-3">
-                          <span className="text-sm text-gray-300">{doc.type || "—"}</span>
+                        <TableCell className="px-2 py-1.5">
+                          <span className="text-xs text-gray-300">{doc.type || "—"}</span>
                         </TableCell>
-                        <TableCell className="px-4 py-3">
-                          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-800/50 text-gray-300 border border-gray-700">
+                        <TableCell className="px-2 py-1.5">
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-800/50 text-gray-300 border border-gray-700">
                             {doc.category || "—"}
                           </span>
                         </TableCell>
-                        <TableCell className="px-4 py-3">
+                        <TableCell className="px-2 py-1.5">
                           {doc.flag?.flagged || doc.flagged || doc.isFlagged ? (
-                            <Flag className="h-4 w-4 text-[#1f6feb]" fill="#1f6feb" />
+                            <Flag className="h-3.5 w-3.5 text-[#1f6feb]" fill="#1f6feb" />
                           ) : (
-                            <Flag className="h-4 w-4 text-gray-600" />
+                            <Flag className="h-3.5 w-3.5 text-gray-600" />
                           )}
                         </TableCell>
                       </TableRow>
@@ -756,61 +749,44 @@ export default function Documents() {
                 </TableRow>
               )}
             </TableBody>
-          </Table>
+              </Table>
 
-          {!loading && (
-            <div className="mt-4 sticky bottom-0 items-center justify-between text-sm text-gray-400 w-full bg-gray-900 p-2 rounded-b-lg">
-              <div className="flex items-center gap-4">
-                <span>
-                  Showing: <span className="font-semibold text-white">{filteredDocuments?.length || 0}</span> of{" "}
-                  <span className="font-semibold text-white">{total || filteredDocuments?.length || 0}</span> documents
-                </span>
-                {selectedDocIds.size > 0 && (
-                  <span>
-                    Selected: <span className="font-semibold text-blue-400">{selectedDocIds.size}</span>
-                  </span>
-    )}
-  </div>
+              {!loading && (
+                <div className="mt-2 sticky bottom-0 items-center justify-between text-xs text-gray-400 w-full bg-gray-900 p-1.5 rounded-b-lg">
+                  <div className="flex items-center gap-3">
+                    <span>
+                      Showing: <span className="font-semibold text-white">{filteredDocuments?.length || 0}</span> of{" "}
+                      <span className="font-semibold text-white">{total || filteredDocuments?.length || 0}</span> documents
+                    </span>
+                    {selectedDocIds.size > 0 && (
+                      <span>
+                        Selected: <span className="font-semibold text-blue-400">{selectedDocIds.size}</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
 
-</div>
-          )}
+          {/* 📄 PREVIEW CONTAINER */}
+          <div className="flex-[0_0_40%] flex flex-col bg-[#161b22]">
+            {/* Preview Content */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {selectedDoc ? (
+                <DocumentPreviewContent selectedDoc={selectedDoc} />
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-gray-400 text-center text-sm">
+                    No Document Selected
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* DRAWER FOR DOCUMENT PREVIEW */}
-      <Drawer open={!!selectedDoc} onOpenChange={(open) => !open && setSelectedDoc(null)} direction="right">
-        <DrawerContent className="w-full sm:max-w-2xl h-full bg-[#161b22] border-gray-700">
-          <DrawerHeader className="border-b border-gray-700">
-            <div className="flex items-center justify-between">
-              <DrawerTitle className="text-xl font-semibold text-white">
-                Document Details
-              </DrawerTitle>
-              <DrawerClose asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-white">
-                  <X className="h-4 w-4" />
-                </Button>
-              </DrawerClose>
-            </div>
-            {selectedDoc && (
-              <DrawerDescription className="text-sm text-gray-400">
-                Preview and details for the selected document
-              </DrawerDescription>
-            )}
-          </DrawerHeader>
-
-          <div className="flex-1 overflow-y-auto p-6 bg-[#161b22]">
-            {selectedDoc ? (
-              <DocumentPreviewContent selectedDoc={selectedDoc} />
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <p className="text-gray-400 text-center">
-                  No document selected
-                </p>
-              </div>
-            )}
-          </div>
-        </DrawerContent>
-      </Drawer>
     </div>
   );
 }

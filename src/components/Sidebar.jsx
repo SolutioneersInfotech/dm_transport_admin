@@ -46,6 +46,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { useAppSelector } from "../store/hooks";
 import {
   Bell,
   Folder,
@@ -67,7 +68,7 @@ const menuSections = [
     items: [
       { title: "Dashboard", icon: LayoutDashboard, path: "/" },
       { title: "Documents", icon: Folder, path: "/documents" },
-      { title: "Chat", icon: MessageCircle, badge: 12, path: "/chat" },
+      { title: "Chat", icon: MessageCircle, badge: null, path: "/chat" }, // badge will be set dynamically
     ],
   },
   {
@@ -76,7 +77,7 @@ const menuSections = [
       {
         title: "Maintenance Chat",
         icon: Wrench,
-        badge: 1,
+        badge: null, // badge will be set dynamically
         path: "/maintenance-chat",
       },
       { title: "Drivers", icon: Truck, path: "/drivers" },
@@ -113,6 +114,27 @@ export default function Sidebar() {
     },
   ]);
   const unreadCount = useMemo(() => notifications.length, [notifications]);
+
+  // Get global unread counts from Redux
+  const { totalUnreadCount, regularChatUnreadCount, maintenanceChatUnreadCount } = useAppSelector(
+    (state) => state.chatUnread
+  );
+
+  // Create menu sections with dynamic badges
+  const menuSectionsWithBadges = useMemo(() => {
+    return menuSections.map((section) => ({
+      ...section,
+      items: section.items.map((item) => {
+        if (item.path === "/chat") {
+          return { ...item, badge: regularChatUnreadCount > 0 ? regularChatUnreadCount : null };
+        }
+        if (item.path === "/maintenance-chat") {
+          return { ...item, badge: maintenanceChatUnreadCount > 0 ? maintenanceChatUnreadCount : null };
+        }
+        return item;
+      }),
+    }));
+  }, [regularChatUnreadCount, maintenanceChatUnreadCount]);
 
   useEffect(() => {
     const savedUser = localStorage.getItem("adminUser");
@@ -195,7 +217,7 @@ export default function Sidebar() {
           isCollapsed ? "px-2 py-4" : "px-4 py-6"
         }`}
       >
-        {menuSections.map((section) => (
+        {menuSectionsWithBadges.map((section) => (
           <div key={section.label} className="space-y-3">
             {!isCollapsed && (
               <p className="px-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">

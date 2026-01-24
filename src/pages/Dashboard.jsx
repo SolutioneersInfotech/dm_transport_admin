@@ -1,7 +1,11 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { fetchDocumentCount } from "../store/slices/documentsSlice";
+import { fetchUsers } from "../store/slices/usersSlice";
+import { setUnreadCountForUser, removeUserUnreadCounts } from "../store/slices/chatUnreadSlice";
+import { subscribeUnreadCount as subscribeRegularChatUnread } from "../services/chatAPI";
+import { subscribeUnreadCount as subscribeMaintenanceChatUnread } from "../services/maintenanceChatAPI";
 
 /**
  * DASHBOARD – CLEAN, BUG-FREE, DATE SAFE VERSION
@@ -89,6 +93,14 @@ export default function Dashboard() {
     lastCountsFetched,
   } = useAppSelector((state) => state.documents);
 
+  const { users } = useAppSelector((state) => state.users);
+  const unsubscribeRefs = useRef({}); // { userId: { regular: unsubscribe, maintenance: unsubscribe } }
+
+  // Fetch users on mount
+  useEffect(() => {
+    dispatch(fetchUsers({ page: 1, limit: -1 }));
+  }, [dispatch]);
+
   /**
    * Fetch unseen documents for last 1 year
    * Backend expects: start_date, end_date as YYYY-MM-DD
@@ -116,6 +128,62 @@ export default function Dashboard() {
       );
     }
   }, [dispatch, lastCountsFetched]);
+
+  // Helper function to get user ID
+  function getUserId(user) {
+    return (
+      user?.userid ??
+      user?.userId ??
+      user?.contactId ??
+      user?.contactid ??
+      user?.uid ??
+      user?.id ??
+      null
+    );
+  }
+
+  // Subscribe to unread counts for all users from both chat systems
+  useEffect(() => {
+    if (!users?.length) return;
+
+    // Subscribe to unread counts for each user
+    users.forEach((user) => {
+      const userId = getUserId(user);
+      if (!userId) return;
+
+      // If already subscribed, skip
+      if (unsubscribeRefs.current[userId]) return;
+
+      // Subscribe to regular chat unread count
+      const unsubscribeRegular = subscribeRegularChatUnread(userId, (count) => {
+        dispatch(setUnreadCountForUser({ userId, chatType: "regular", count }));
+      });
+
+      // Subscribe to maintenance chat unread count
+      const unsubscribeMaintenance = subscribeMaintenanceChatUnread(userId, (count) => {
+        dispatch(setUnreadCountForUser({ userId, chatType: "maintenance", count }));
+      });
+
+      unsubscribeRefs.current[userId] = {
+        regular: unsubscribeRegular,
+        maintenance: unsubscribeMaintenance,
+      };
+    });
+
+    // Cleanup: unsubscribe from users that are no longer in the list
+    return () => {
+      const currentUserIds = new Set(users.map(getUserId).filter(Boolean));
+      Object.keys(unsubscribeRefs.current).forEach((userId) => {
+        if (!currentUserIds.has(userId)) {
+          const unsubscribes = unsubscribeRefs.current[userId];
+          if (unsubscribes?.regular) unsubscribes.regular();
+          if (unsubscribes?.maintenance) unsubscribes.maintenance();
+          delete unsubscribeRefs.current[userId];
+          dispatch(removeUserUnreadCounts(userId));
+        }
+      });
+    };
+  }, [users, dispatch]);
   
 
   const unseenTotal = useMemo(() => {
