@@ -16,6 +16,13 @@ import {
 import { Checkbox } from "../components/ui/checkbox";
 import { X, Search, Calendar, Flag, ChevronDown, Check } from "lucide-react";
 import DocumentTableSkeleton from "../components/skeletons/DocumentTableSkeleton";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerClose,
+} from "../components/ui/drawer";
 
 // Last 60 Days
 function getDefaultDates() {
@@ -78,6 +85,9 @@ export default function Documents() {
   const [flagFilter, setFlagFilter] = useState(null); // null | true | false (null = all)
   const [showDocumentTypeDropdown, setShowDocumentTypeDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showFilterTypeDropdown, setShowFilterTypeDropdown] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+  const filterTypeDropdownRef = useRef(null);
 
   // Debounce search input
   useEffect(() => {
@@ -277,6 +287,12 @@ export default function Documents() {
         setShowDocumentTypeDropdown(false);
         setShowStatusDropdown(false);
       }
+      if (
+        filterTypeDropdownRef.current &&
+        !filterTypeDropdownRef.current.contains(event.target)
+      ) {
+        setShowFilterTypeDropdown(false);
+      }
     }
   
     document.addEventListener("mousedown", handleClickOutside);
@@ -285,6 +301,20 @@ export default function Documents() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  // Handle mobile/desktop breakpoint
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 1024);
+      // Close drawer if switching to desktop
+      if (window.innerWidth >= 1024 && selectedDoc) {
+        // Keep selectedDoc but drawer will be hidden by CSS
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [selectedDoc]);
   
 
   // Infinite scroll handler
@@ -347,38 +377,96 @@ export default function Documents() {
 
 
   return (
-    <div className="text-white h-full overflow-hidden flex flex-col p-2">
+    <div className="text-white h-full overflow-hidden flex flex-col p-1 sm:p-2">
 
       {/* CHIP FILTER INPUT - Document Type Filters */}
       <div className="mb-2">
-        {/* Selected Filters as Chips */}
-        {/* {selectedFilters.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-3">
-            {selectedFilters.map((filterValue) => {
-              const filterLabel = Object.keys(FILTER_MAP).find(
-                (key) => FILTER_MAP[key] === filterValue
-              );
-              return (
-                <div
-                  key={filterValue}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1f6feb] text-white text-sm"
-                >
-                  <span>{filterLabel}</span>
-          <button
-                    onClick={() => removeFilter(filterValue)}
-                    className="hover:bg-[#1a5fd4] rounded-full p-0.5 transition-colors"
-                    aria-label={`Remove ${filterLabel} filter`}
-          >
-                    <X className="h-3.5 w-3.5" />
-          </button>
-                </div>
-              );
-            })}
-          </div>
-        )} */}
+        {/* Mobile: Dropdown for Document Type Filters */}
+        <div className="sm:hidden">
+          <div className="relative" ref={filterTypeDropdownRef}>
+            <button
+              onClick={() => setShowFilterTypeDropdown(!showFilterTypeDropdown)}
+              className="flex items-center justify-between w-full px-3 py-2 text-sm text-gray-300 bg-[#161b22] border border-gray-700 rounded-md hover:bg-[#1d232a] hover:border-gray-600 transition-colors"
+            >
+              <span>
+                {selectedFilters.length === 0
+                  ? "Document Types"
+                  : selectedFilters.length === 1
+                  ? Object.keys(FILTER_MAP).find((key) => FILTER_MAP[key] === selectedFilters[0]) || "1 selected"
+                  : `${selectedFilters.length} selected`}
+              </span>
+              <ChevronDown className={`h-4 w-4 transition-transform ${showFilterTypeDropdown ? "rotate-180" : ""}`} />
+            </button>
 
-        {/* Filter Options */}
-        <div className="flex flex-wrap gap-2">
+            {/* Dropdown Menu */}
+            {showFilterTypeDropdown && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setShowFilterTypeDropdown(false)}
+                />
+                <div className="absolute top-full left-0 right-0 mt-1 bg-[#161b22] border border-gray-700 rounded-md shadow-lg z-20 max-h-[60vh] overflow-y-auto">
+                  <div className="p-2">
+                    <div className="px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-700 mb-1">
+                      Document Types
+                    </div>
+                    {Object.keys(FILTER_MAP).map((item) => {
+                      const filterValue = FILTER_MAP[item];
+                      const isSelected = selectedFilters.includes(filterValue);
+                      return (
+                        <button
+                          key={item}
+                          onClick={() => {
+                            toggleFilter(filterValue);
+                          }}
+                          className={`w-full text-left px-3 py-2 text-sm hover:bg-[#1d232a] transition-colors flex items-center gap-2 rounded ${
+                            isSelected ? "text-[#1f6feb] bg-[#1d232a]" : "text-gray-300"
+                          }`}
+                        >
+                          <span className={`w-4 h-4 border rounded flex items-center justify-center ${
+                            isSelected ? "border-[#1f6feb] bg-[#1f6feb]" : "border-gray-600"
+                          }`}>
+                            {isSelected && <Check className="h-3 w-3 text-white" />}
+                          </span>
+                          {item}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Show selected filters as chips on mobile */}
+          {selectedFilters.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {selectedFilters.map((filterValue) => {
+                const filterLabel = Object.keys(FILTER_MAP).find(
+                  (key) => FILTER_MAP[key] === filterValue
+                );
+                return (
+                  <div
+                    key={filterValue}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#1f6feb] text-white text-xs"
+                  >
+                    <span>{filterLabel}</span>
+                    <button
+                      onClick={() => removeFilter(filterValue)}
+                      className="hover:bg-[#1a5fd4] rounded-full p-0.5 transition-colors"
+                      aria-label={`Remove ${filterLabel} filter`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Desktop: Filter Options as Chips */}
+        <div className="hidden sm:flex flex-wrap gap-1.5 sm:gap-2">
           {Object.keys(FILTER_MAP).map((item) => {
             const filterValue = FILTER_MAP[item];
             const isSelected = selectedFilters.includes(filterValue);
@@ -388,7 +476,7 @@ export default function Documents() {
                 onClick={() => toggleFilter(filterValue)}
                 variant={isSelected ? "default" : "outline"}
                 size="sm"
-                className={`rounded-full ${
+                className={`rounded-full text-xs md:text-sm whitespace-nowrap ${
                   isSelected
                     ? "bg-[#1f6feb] border-[#1f6feb] text-white"
                     : "border-gray-600 bg-[#161b22] text-gray-300 hover:bg-[#1d232a]"
@@ -402,49 +490,51 @@ export default function Documents() {
       </div>
 
       {/* FILTER BAR - Horizontal Layout matching image */}
-      <div className="flex items-center gap-2 mb-2 flex-wrap">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-2">
         {/* Search Bar */}
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative flex-1 w-full sm:min-w-[200px]">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
             type="text"
             placeholder="Search by driver name"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#1d232a] pl-9 border-gray-700 text-gray-300 placeholder:text-gray-500"
+            className="w-full bg-[#1d232a] pl-9 border-gray-700 text-gray-300 placeholder:text-gray-500 text-sm sm:text-base"
           />
         </div>
 
         {/* Category Filters (C, D, F) */}
-        {["C", "D", "F"].map((cat) => (
-          <Button
-            key={cat}
-            onClick={() => setCategoryFilter(categoryFilter === cat ? null : cat)}
-            variant={categoryFilter === cat ? "default" : "outline"}
-            size="sm"
-            className={`min-w-[40px] h-9 ${
-              categoryFilter === cat
-                ? "bg-[#1f6feb] text-white border-[#1f6feb] hover:bg-[#1a5fd4]"
-                : "bg-[#161b22] border-gray-700 text-gray-300 hover:bg-[#1d232a] hover:border-gray-600"
-            }`}
-          >
-            {cat}
-          </Button>
-        ))}
+        <div className="flex gap-1.5 sm:gap-2">
+          {["C", "D", "F"].map((cat) => (
+            <Button
+              key={cat}
+              onClick={() => setCategoryFilter(categoryFilter === cat ? null : cat)}
+              variant={categoryFilter === cat ? "default" : "outline"}
+              size="sm"
+              className={`min-w-[36px] sm:min-w-[40px] h-8 sm:h-9 text-xs sm:text-sm ${
+                categoryFilter === cat
+                  ? "bg-[#1f6feb] text-white border-[#1f6feb] hover:bg-[#1a5fd4]"
+                  : "bg-[#161b22] border-gray-700 text-gray-300 hover:bg-[#1d232a] hover:border-gray-600"
+              }`}
+            >
+              {cat}
+            </Button>
+          ))}
+        </div>
 
         {/* All Documents Dropdown with Status Filter */}
         <div className="relative" ref={documentDropDownRef} >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               onClick={() => {
                 setShowDocumentTypeDropdown(!showDocumentTypeDropdown);
                 setShowStatusDropdown(false);
               }}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:text-white transition-colors border-b border-gray-700 hover:border-gray-600"
+              className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-300 hover:text-white transition-colors border-b border-gray-700 hover:border-gray-600 whitespace-nowrap"
             >
               {statusFilter === "all" ? "All" : statusFilter === "seen" ? "Seen" : "Unseen Only"}
 
-              <ChevronDown className={`h-4 w-4 transition-transform ${showDocumentTypeDropdown ? "rotate-180" : ""}`} />
+              <ChevronDown className={`h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform ${showDocumentTypeDropdown ? "rotate-180" : ""}`} />
             </button>
             {(selectedFilters.length > 0 || statusFilter !== "all") && (
           <button
@@ -457,7 +547,7 @@ export default function Documents() {
                 className="text-gray-400 hover:text-white transition-colors p-1 rounded-full hover:bg-[#1d232a]"
                 aria-label="Clear filters"
               >
-                <X className="h-4 w-4" />
+                <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </button>
         )}
       </div>
@@ -534,36 +624,36 @@ export default function Documents() {
           }}
           variant="outline"
           size="sm"
-          className={`h-9 px-3 ${
+          className={`h-8 sm:h-9 px-2 sm:px-3 ${
             flagFilter === true
               ? "bg-[#1f6feb] text-white border-[#1f6feb] hover:bg-[#1a5fd4]"
               : "bg-[#161b22] border-gray-700 text-gray-400 hover:bg-[#1d232a] hover:border-gray-600 hover:text-gray-300"
           }`}
           title={flagFilter === true ? "Show flagged only" : "Show all documents"}
         >
-          <Flag className={`h-4 w-4 ${flagFilter === true ? "text-white" : "text-gray-400"}`} />
+          <Flag className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${flagFilter === true ? "text-white" : "text-gray-400"}`} />
         </Button>
 
         {/* Date Range Picker - Native Inputs */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex items-center">
-            <Calendar className="absolute left-2 h-4 w-4 text-gray-400 pointer-events-none" />
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+          <div className="relative flex items-center flex-1 sm:flex-none min-w-0">
+            <Calendar className="absolute left-2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-400 pointer-events-none z-10" />
             <Input
               type="date"
               value={startDate}
               onChange={handleStartDateChange}
               max={endDate || undefined}
-              className="h-9 pl-9 pr-3 bg-[#1d232a] border-gray-700 text-gray-300 hover:bg-[#161b22] hover:border-gray-600 focus:border-[#1f6feb] focus:ring-1 focus:ring-[#1f6feb] [color-scheme:dark]"
+              className="h-8 sm:h-9 pl-8 sm:pl-9 pr-2 sm:pr-3 text-xs sm:text-sm bg-[#1d232a] border-gray-700 text-gray-300 hover:bg-[#161b22] hover:border-gray-600 focus:border-[#1f6feb] focus:ring-1 focus:ring-[#1f6feb] [color-scheme:dark]"
             />
           </div>
-          <span className="text-gray-400 text-sm">to</span>
-          <div className="relative flex items-center">
+          <span className="text-gray-400 text-xs sm:text-sm whitespace-nowrap">to</span>
+          <div className="relative flex items-center flex-1 sm:flex-none min-w-0">
             <Input
               type="date"
               value={endDate}
               onChange={handleEndDateChange}
               min={startDate || undefined}
-              className="h-9 px-3 bg-[#1d232a] border-gray-700 text-gray-300 hover:bg-[#161b22] hover:border-gray-600 focus:border-[#1f6feb] focus:ring-1 focus:ring-[#1f6feb] [color-scheme:dark]"
+              className="h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm bg-[#1d232a] border-gray-700 text-gray-300 hover:bg-[#161b22] hover:border-gray-600 focus:border-[#1f6feb] focus:ring-1 focus:ring-[#1f6feb] [color-scheme:dark]"
             />
           </div>
           {(startDate !== start || endDate !== end) && (
@@ -571,10 +661,10 @@ export default function Documents() {
               variant="ghost"
               size="sm"
               onClick={resetDates}
-              className="h-9 px-2 text-gray-400 hover:text-gray-300 hover:bg-[#1d232a]"
+              className="h-8 sm:h-9 px-2 text-gray-400 hover:text-gray-300 hover:bg-[#1d232a]"
               title="Reset dates"
             >
-              <X className="h-4 w-4" />
+              <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </Button>
           )}
         </div>
@@ -583,40 +673,41 @@ export default function Documents() {
       {/* MAIN LAYOUT */}
       <div className="flex-1 bg-[#161b22] rounded-lg border border-gray-700 overflow-hidden flex flex-col">
         {/* FLEX CONTAINER: TABLE + PREVIEW */}
-        <div className="flex-1 flex gap-0 overflow-hidden">
+        <div className="flex-1 flex flex-col lg:flex-row gap-0 overflow-hidden">
           {/* 📜 TABLE SECTION */}
-          <div className="flex-[0_0_60%] overflow-hidden flex flex-col border-r border-gray-700">
+          <div className="flex-1 lg:flex-[0_0_60%] overflow-hidden flex flex-col lg:border-r border-gray-700">
             <div className="flex-1 overflow-y-auto chat-list-scroll">
+              <div className="overflow-x-auto">
               <Table>
             <TableHeader className="sticky top-0 bg-[#161b22] z-10 border-b border-gray-700">
               <TableRow className="hover:bg-transparent border-gray-700">
-                <TableHead className="w-12 h-8 px-2">
-                  <div className="flex items-center gap-1">
+                <TableHead className="w-10 sm:w-12 h-8 px-1 sm:px-2">
+                  <div className="flex items-center gap-0.5 sm:gap-1">
                     <Checkbox
                       checked={isAllSelected || isIndeterminate}
                       onCheckedChange={handleSelectAll}
                       aria-label="Select all"
-                      className="h-3.5 w-3.5"
+                      className="h-3 w-3 sm:h-3.5 sm:w-3.5"
                     />
-                    <span className="text-[10px] font-medium text-gray-400">Select All</span>
+                    <span className="text-[9px] sm:text-[10px] font-medium text-gray-400 hidden sm:inline">Select All</span>
                   </div>
                 </TableHead>
-                <TableHead className="h-8 px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   Status
                 </TableHead>
-                <TableHead className="h-8 px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   Uploaded By
                 </TableHead>
-                <TableHead className="h-8 px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider hidden md:table-cell">
                   Date & Time
                 </TableHead>
-                <TableHead className="h-8 px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider hidden sm:table-cell">
                   Type
                 </TableHead>
-                <TableHead className="h-8 px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   Category
                 </TableHead>
-                <TableHead className="h-8 px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   Flag
                 </TableHead>
               </TableRow>
@@ -656,68 +747,68 @@ export default function Documents() {
                         className="border-gray-800 hover:bg-[#1d232a]/50 cursor-pointer transition-colors"
                         onClick={() => setSelectedDoc(doc)}
                       >
-                        <TableCell className="px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
+                        <TableCell className="px-1 sm:px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
                           <Checkbox
                             checked={selectedDocIds.has(doc.id)}
                             onCheckedChange={(checked) => handleSelectDoc(doc.id, checked)}
                             onClick={(e) => e.stopPropagation()}
                             aria-label={`Select ${doc.driver_name}`}
-                            className="h-3.5 w-3.5"
+                            className="h-3 w-3 sm:h-3.5 sm:w-3.5"
                           />
                         </TableCell>
-                        <TableCell className="px-2 py-1.5">
-                          <div className="flex items-center gap-1.5">
+                        <TableCell className="px-1 sm:px-2 py-1.5">
+                          <div className="flex items-center gap-1 sm:gap-1.5">
                             <span
-                              className={`w-2 h-2 rounded-full ${doc.seen === false
+                              className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${doc.seen === false
                                   ? "bg-blue-500"
                                   : doc.seen === true
                                     ? "bg-green-500"
                                     : "bg-gray-500"
                                 }`}
                             />
-                            <span className="text-[11px] text-gray-400">
+                            <span className="text-[10px] sm:text-[11px] text-gray-400">
                               {doc.seen === false ? "Unseen" : doc.seen === true ? "Seen" : "Unknown"}
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell className="px-2 py-1.5">
-                          <div className="flex items-center gap-2">
+                        <TableCell className="px-1 sm:px-2 py-1.5">
+                          <div className="flex items-center gap-1.5 sm:gap-2">
                             {doc.driver_image && (
                               <img
                                 src={doc.driver_image}
                                 alt={doc.driver_name}
-                                className="w-6 h-6 rounded-full object-cover border border-gray-700"
+                                className="w-5 h-5 sm:w-6 sm:h-6 rounded-full object-cover border border-gray-700"
                                 onError={(e) => {
                                   e.target.style.display = "none";
                                 }}
                               />
                             )}
-                            <span className="text-xs font-medium text-white">
+                            <span className="text-[10px] sm:text-xs font-medium text-white truncate max-w-[100px] sm:max-w-none">
                               {doc.driver_name || "Unknown"}
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell className="px-2 py-1.5">
-                          <div className="text-xs text-gray-300">
+                        <TableCell className="px-1 sm:px-2 py-1.5 hidden md:table-cell">
+                          <div className="text-[10px] sm:text-xs text-gray-300">
                             {new Date(doc.date).toLocaleString("en-US", {
                               dateStyle: "short",
                               timeStyle: "short",
                             })}
                           </div>
                         </TableCell>
-                        <TableCell className="px-2 py-1.5">
-                          <span className="text-xs text-gray-300">{doc.type || "—"}</span>
+                        <TableCell className="px-1 sm:px-2 py-1.5 hidden sm:table-cell">
+                          <span className="text-[10px] sm:text-xs text-gray-300 truncate max-w-[80px]">{doc.type || "—"}</span>
                         </TableCell>
-                        <TableCell className="px-2 py-1.5">
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-800/50 text-gray-300 border border-gray-700">
+                        <TableCell className="px-1 sm:px-2 py-1.5">
+                          <span className="inline-flex items-center px-1 sm:px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-medium bg-gray-800/50 text-gray-300 border border-gray-700">
                             {doc.category || "—"}
                           </span>
                         </TableCell>
-                        <TableCell className="px-2 py-1.5">
+                        <TableCell className="px-1 sm:px-2 py-1.5">
                           {doc.flag?.flagged || doc.flagged || doc.isFlagged ? (
-                            <Flag className="h-3.5 w-3.5 text-[#1f6feb]" fill="#1f6feb" />
+                            <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-[#1f6feb]" fill="#1f6feb" />
                           ) : (
-                            <Flag className="h-3.5 w-3.5 text-gray-600" />
+                            <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-gray-600" />
                           )}
                         </TableCell>
                       </TableRow>
@@ -750,10 +841,11 @@ export default function Documents() {
               )}
             </TableBody>
               </Table>
+              </div>
 
               {!loading && (
-                <div className="mt-2 sticky bottom-0 items-center justify-between text-xs text-gray-400 w-full bg-gray-900 p-1.5 rounded-b-lg">
-                  <div className="flex items-center gap-3">
+                <div className="mt-2 sticky bottom-0 items-center justify-between text-[10px] sm:text-xs text-gray-400 w-full bg-gray-900 p-1 sm:p-1.5 rounded-b-lg">
+                  <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                     <span>
                       Showing: <span className="font-semibold text-white">{filteredDocuments?.length || 0}</span> of{" "}
                       <span className="font-semibold text-white">{total || filteredDocuments?.length || 0}</span> documents
@@ -769,8 +861,8 @@ export default function Documents() {
             </div>
           </div>
 
-          {/* 📄 PREVIEW CONTAINER */}
-          <div className="flex-[0_0_40%] flex flex-col bg-[#161b22]">
+          {/* 📄 PREVIEW CONTAINER - Hidden on mobile, shown in drawer */}
+          <div className="hidden lg:flex lg:flex-[0_0_40%] flex-col bg-[#161b22]">
             {/* Preview Content */}
             <div className="flex-1 overflow-y-auto p-4">
               {selectedDoc ? (
@@ -786,6 +878,25 @@ export default function Documents() {
           </div>
         </div>
       </div>
+
+      {/* Mobile Drawer for Document Preview */}
+      {isMobile && (
+        <Drawer open={!!selectedDoc} onOpenChange={(open) => !open && setSelectedDoc(null)}>
+          <DrawerContent className="max-h-[85vh] bg-[#161b22] border-gray-700">
+            <DrawerHeader className="border-b border-gray-700">
+              <div className="flex items-center justify-between">
+                <DrawerTitle className="text-white">Document Preview</DrawerTitle>
+                <DrawerClose className="text-gray-400 hover:text-white">
+                  <X className="h-5 w-5" />
+                </DrawerClose>
+              </div>
+            </DrawerHeader>
+            <div className="overflow-y-auto p-4">
+              {selectedDoc && <DocumentPreviewContent selectedDoc={selectedDoc} />}
+            </div>
+          </DrawerContent>
+        </Drawer>
+      )}
 
     </div>
   );
