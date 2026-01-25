@@ -939,13 +939,13 @@ export default function Documents() {
                   setSelectedDoc(null);
                   setIsPreviewOpen(false);
                 }}
-                className="absolute top-3 right-3 text-gray-400 hover:text-white rounded p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                className="absolute top-3 right-5 text-gray-400 hover:text-white rounded p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 aria-label="Close document preview"
               >
                 <X className="h-4 w-4" />
               </button>
               {/* Preview Content */}
-              <div className="flex-1 overflow-y-auto p-4">
+              <div className="document-preview-scroll flex-1 overflow-y-auto p-4">
                 <DocumentPreviewContent selectedDoc={selectedDoc} />
               </div>
             </div>
@@ -965,7 +965,7 @@ export default function Documents() {
                 </DrawerClose>
               </div>
             </DrawerHeader>
-            <div className="overflow-y-auto p-4">
+            <div className="document-preview-scroll overflow-y-auto p-4">
               {selectedDoc && <DocumentPreviewContent selectedDoc={selectedDoc} />}
             </div>
           </DrawerContent>
