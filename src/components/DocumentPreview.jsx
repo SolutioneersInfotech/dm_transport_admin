@@ -92,8 +92,9 @@
 
 
 export default function DocumentPreview({ selectedDoc }) {
-  if (!selectedDoc)
-    return <h2 className="text-gray-400 text-lg">No Document Selected</h2>;
+  if (!selectedDoc) {
+    return null;
+  }
 
   const url = selectedDoc.document_url;
 

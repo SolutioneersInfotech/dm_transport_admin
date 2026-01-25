@@ -68,7 +68,7 @@ export default function Documents() {
 
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [selectedDocIds, setSelectedDocIds] = useState(new Set());
-  const [isPreviewOpen, setIsPreviewOpen] = useState(true);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewWidth, setPreviewWidth] = useState(480);
   const observerTarget = useRef(null);
   const isResizingRef = useRef(false);
@@ -80,6 +80,12 @@ export default function Documents() {
   const [endDate, setEndDate] = useState(end);
 
   const [selectedFilters, setSelectedFilters] = useState([]); // Array of filter values
+
+  useEffect(() => {
+    if (!selectedDoc) {
+      setIsPreviewOpen(false);
+    }
+  }, [selectedDoc]);
 
   useEffect(() => {
     const handleMouseMove = (event) => {
@@ -916,7 +922,7 @@ export default function Documents() {
           </div>
 
           {/* 📄 PREVIEW CONTAINER - Hidden on mobile, shown in drawer */}
-          {isPreviewOpen && (
+          {isPreviewOpen && selectedDoc && (
             <div
               className="hidden lg:flex lg:flex-none min-w-[320px] max-w-[70%] flex-col bg-[#161b22] relative overflow-auto"
               style={{ width: previewWidth, maxWidth: "70%" }}
@@ -940,15 +946,7 @@ export default function Documents() {
               </button>
               {/* Preview Content */}
               <div className="flex-1 overflow-y-auto p-4">
-                {selectedDoc ? (
-                  <DocumentPreviewContent selectedDoc={selectedDoc} />
-                ) : (
-                  <div className="flex items-center justify-center h-full">
-                    <p className="text-gray-400 text-center text-sm">
-                      No Document Selected
-                    </p>
-                  </div>
-                )}
+                <DocumentPreviewContent selectedDoc={selectedDoc} />
               </div>
             </div>
           )}
