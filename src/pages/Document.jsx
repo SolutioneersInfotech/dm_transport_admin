@@ -677,8 +677,8 @@ export default function Documents() {
           <div className="flex-1 flex flex-col lg:flex-row gap-0 overflow-hidden">
             {/* 📜 TABLE SECTION */}
             <div
-              className={`flex-1 overflow-hidden flex flex-col ${
-                isPreviewOpen ? "lg:flex-[0_0_60%] lg:border-r border-gray-700" : "lg:flex-1"
+              className={`flex-1 min-w-0 overflow-hidden flex flex-col ${
+                isPreviewOpen ? "lg:border-r border-gray-700" : ""
               }`}
             >
             <div className="flex-1 overflow-y-auto chat-list-scroll">
@@ -871,7 +871,10 @@ export default function Documents() {
 
           {/* 📄 PREVIEW CONTAINER - Hidden on mobile, shown in drawer */}
           {isPreviewOpen && (
-            <div className="hidden lg:flex lg:flex-none lg:w-[40%] min-w-[320px] max-w-[60%] flex-col bg-[#161b22] relative resize-x overflow-auto">
+            <div
+              className="hidden lg:flex lg:shrink-0 lg:w-[40%] min-w-[320px] max-w-[60%] flex-col bg-[#161b22] relative resize-x overflow-auto"
+              style={{ resize: "horizontal" }}
+            >
               <button
                 type="button"
                 onClick={() => {
