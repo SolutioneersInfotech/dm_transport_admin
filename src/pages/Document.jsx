@@ -862,7 +862,15 @@ export default function Documents() {
           </div>
 
           {/* 📄 PREVIEW CONTAINER - Hidden on mobile, shown in drawer */}
-          <div className="hidden lg:flex lg:flex-[0_0_40%] flex-col bg-[#161b22]">
+          <div className="hidden lg:flex lg:flex-none lg:w-[40%] min-w-[320px] max-w-[60%] flex-col bg-[#161b22] relative resize-x overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setSelectedDoc(null)}
+              className="absolute top-3 right-3 text-gray-400 hover:text-white rounded p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              aria-label="Close document preview"
+            >
+              <X className="h-4 w-4" />
+            </button>
             {/* Preview Content */}
             <div className="flex-1 overflow-y-auto p-4">
               {selectedDoc ? (
