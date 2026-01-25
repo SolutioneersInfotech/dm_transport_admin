@@ -68,6 +68,7 @@ export default function Documents() {
 
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [selectedDocIds, setSelectedDocIds] = useState(new Set());
+  const [isPreviewOpen, setIsPreviewOpen] = useState(true);
   const observerTarget = useRef(null);
 
   const [searchParams] = useSearchParams();
@@ -673,9 +674,13 @@ export default function Documents() {
       {/* MAIN LAYOUT */}
       <div className="flex-1 bg-[#161b22] rounded-lg border border-gray-700 overflow-hidden flex flex-col">
         {/* FLEX CONTAINER: TABLE + PREVIEW */}
-        <div className="flex-1 flex flex-col lg:flex-row gap-0 overflow-hidden">
-          {/* 📜 TABLE SECTION */}
-          <div className="flex-1 lg:flex-[0_0_60%] overflow-hidden flex flex-col lg:border-r border-gray-700">
+          <div className="flex-1 flex flex-col lg:flex-row gap-0 overflow-hidden">
+            {/* 📜 TABLE SECTION */}
+            <div
+              className={`flex-1 min-w-0 overflow-hidden flex flex-col ${
+                isPreviewOpen ? "lg:border-r border-gray-700" : ""
+              }`}
+            >
             <div className="flex-1 overflow-y-auto chat-list-scroll">
               <div className="overflow-x-auto">
               <Table>
@@ -745,7 +750,10 @@ export default function Documents() {
                       <TableRow
                         key={doc.id}
                         className="border-gray-800 hover:bg-[#1d232a]/50 cursor-pointer transition-colors"
-                        onClick={() => setSelectedDoc(doc)}
+                        onClick={() => {
+                          setSelectedDoc(doc);
+                          setIsPreviewOpen(true);
+                        }}
                       >
                         <TableCell className="px-1 sm:px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
                           <Checkbox
@@ -862,28 +870,36 @@ export default function Documents() {
           </div>
 
           {/* 📄 PREVIEW CONTAINER - Hidden on mobile, shown in drawer */}
-          <div className="hidden lg:flex lg:flex-none lg:w-[40%] min-w-[320px] max-w-[60%] flex-col bg-[#161b22] relative resize-x overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setSelectedDoc(null)}
-              className="absolute top-3 right-3 text-gray-400 hover:text-white rounded p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-              aria-label="Close document preview"
+          {isPreviewOpen && (
+            <div
+              className="hidden lg:flex lg:shrink-0 lg:w-[40%] min-w-[320px] max-w-[60%] flex-col bg-[#161b22] relative resize-x overflow-auto"
+              style={{ resize: "horizontal" }}
             >
-              <X className="h-4 w-4" />
-            </button>
-            {/* Preview Content */}
-            <div className="flex-1 overflow-y-auto p-4">
-              {selectedDoc ? (
-                <DocumentPreviewContent selectedDoc={selectedDoc} />
-              ) : (
-                <div className="flex items-center justify-center h-full">
-                  <p className="text-gray-400 text-center text-sm">
-                    No Document Selected
-                  </p>
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedDoc(null);
+                  setIsPreviewOpen(false);
+                }}
+                className="absolute top-3 right-3 text-gray-400 hover:text-white rounded p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                aria-label="Close document preview"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              {/* Preview Content */}
+              <div className="flex-1 overflow-y-auto p-4">
+                {selectedDoc ? (
+                  <DocumentPreviewContent selectedDoc={selectedDoc} />
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-gray-400 text-center text-sm">
+                      No Document Selected
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
