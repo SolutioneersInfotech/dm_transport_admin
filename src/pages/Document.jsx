@@ -69,7 +69,10 @@ export default function Documents() {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [selectedDocIds, setSelectedDocIds] = useState(new Set());
   const [isPreviewOpen, setIsPreviewOpen] = useState(true);
+  const [previewWidth, setPreviewWidth] = useState(480);
   const observerTarget = useRef(null);
+  const isResizingRef = useRef(false);
+  const layoutRef = useRef(null);
 
   const [searchParams] = useSearchParams();
 
@@ -77,6 +80,46 @@ export default function Documents() {
   const [endDate, setEndDate] = useState(end);
 
   const [selectedFilters, setSelectedFilters] = useState([]); // Array of filter values
+
+  useEffect(() => {
+    const handleMouseMove = (event) => {
+      if (!isResizingRef.current || !layoutRef.current) return;
+      const rect = layoutRef.current.getBoundingClientRect();
+      const minWidth = 320;
+      const minTableWidth = 420;
+      const maxWidth = Math.max(minWidth, rect.width - minTableWidth);
+      const nextWidth = Math.min(
+        maxWidth,
+        Math.max(minWidth, rect.right - event.clientX)
+      );
+      setPreviewWidth(nextWidth);
+    };
+
+    const stopResize = () => {
+      if (!isResizingRef.current) return;
+      isResizingRef.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", stopResize);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", stopResize);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, []);
+
+  const handleResizeStart = useCallback((event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    isResizingRef.current = true;
+    document.body.style.cursor = "ew-resize";
+    document.body.style.userSelect = "none";
+  }, []);
 
   const [search, setSearch] = useState("");
   const [searchDebounced, setSearchDebounced] = useState("");
@@ -674,7 +717,10 @@ export default function Documents() {
       {/* MAIN LAYOUT */}
       <div className="flex-1 bg-[#161b22] rounded-lg border border-gray-700 overflow-hidden flex flex-col">
         {/* FLEX CONTAINER: TABLE + PREVIEW */}
-          <div className="flex-1 flex flex-col lg:flex-row gap-0 overflow-hidden">
+          <div
+            ref={layoutRef}
+            className="flex-1 flex flex-col lg:flex-row gap-0 overflow-hidden"
+          >
             {/* 📜 TABLE SECTION */}
             <div
               className={`flex-1 min-w-0 overflow-hidden flex flex-col ${
@@ -872,8 +918,15 @@ export default function Documents() {
           {/* 📄 PREVIEW CONTAINER - Hidden on mobile, shown in drawer */}
           {isPreviewOpen && (
             <div
-              className="hidden lg:flex lg:flex-none lg:basis-[40%] min-w-[320px] max-w-[70%] flex-col bg-[#161b22] relative resize-x overflow-auto"
+              className="hidden lg:flex lg:flex-none min-w-[320px] max-w-[70%] flex-col bg-[#161b22] relative overflow-auto"
+              style={{ width: previewWidth, maxWidth: "70%" }}
             >
+              <div
+                className="absolute left-0 top-0 h-full w-2 cursor-ew-resize"
+                role="separator"
+                aria-orientation="vertical"
+                onMouseDown={handleResizeStart}
+              />
               <button
                 type="button"
                 onClick={() => {
