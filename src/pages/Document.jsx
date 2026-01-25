@@ -872,8 +872,7 @@ export default function Documents() {
           {/* 📄 PREVIEW CONTAINER - Hidden on mobile, shown in drawer */}
           {isPreviewOpen && (
             <div
-              className="hidden lg:flex lg:shrink-0 lg:w-[40%] min-w-[320px] max-w-[60%] flex-col bg-[#161b22] relative resize-x overflow-auto"
-              style={{ resize: "horizontal" }}
+              className="hidden lg:flex lg:flex-none lg:basis-[40%] min-w-[320px] max-w-[70%] flex-col bg-[#161b22] relative resize-x overflow-auto"
             >
               <button
                 type="button"
