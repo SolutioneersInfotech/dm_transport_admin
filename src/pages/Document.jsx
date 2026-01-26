@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
+import { format as formatDate } from "date-fns";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { fetchDocuments, fetchMoreDocuments, resetPagination } from "../store/slices/documentsSlice";
 import DocumentPreviewContent from "../components/DocumentPreviewContent";
@@ -25,15 +26,15 @@ import {
   DrawerClose,
 } from "../components/ui/drawer";
 
+const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
+
 // Last 60 Days
 function getDefaultDates() {
   const today = new Date();
   const past = new Date();
   past.setDate(today.getDate() - 60);
 
-  const format = (d) => d.toISOString().split("T")[0];
-
-  return { start: format(past), end: format(today) };
+  return { start: formatLocalDate(past), end: formatLocalDate(today) };
 }
 
 const FILTER_MAP = {
@@ -177,11 +178,11 @@ export default function Documents() {
   }, [selectedFilters]);
 
   const startDate = useMemo(() => {
-    return dateRange?.from ? dateRange.from.toISOString().split("T")[0] : undefined;
+    return dateRange?.from ? formatLocalDate(dateRange.from) : undefined;
   }, [dateRange]);
 
   const endDate = useMemo(() => {
-    return dateRange?.to ? dateRange.to.toISOString().split("T")[0] : undefined;
+    return dateRange?.to ? formatLocalDate(dateRange.to) : undefined;
   }, [dateRange]);
 
   // Fetch documents when params change (initial load)
@@ -681,8 +682,8 @@ export default function Documents() {
           <DateRangePicker value={dateRange} onChange={setDateRange} />
           {dateRange?.from &&
             dateRange?.to &&
-            (dateRange.from.toISOString().split("T")[0] !== defaultDates.start ||
-              dateRange.to.toISOString().split("T")[0] !== defaultDates.end) && (
+            (formatLocalDate(dateRange.from) !== defaultDates.start ||
+              formatLocalDate(dateRange.to) !== defaultDates.end) && (
             <Button
               variant="ghost"
               size="sm"
