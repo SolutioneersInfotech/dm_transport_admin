@@ -1,16 +1,10 @@
-import * as React from "react"
-import { ChevronLeft, ChevronRight } from "lucide-react"
-import { DayPicker } from "react-day-picker"
+import * as React from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { DayPicker } from "react-day-picker";
+import { cn } from "@/lib/utils";
+import { buttonVariants } from "./button";
 
-import { cn } from "@/lib/utils"
-import { buttonVariants } from "./button"
-
-function Calendar({
-  className,
-  classNames,
-  showOutsideDays = true,
-  ...props
-}) {
+export function Calendar({ className, classNames, showOutsideDays = true, ...props }) {
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
@@ -29,35 +23,41 @@ function Calendar({
         nav_button_next: "absolute right-1",
         table: "w-full border-collapse space-y-1",
         head_row: "flex",
-        head_cell:
-          "text-gray-400 rounded-md w-9 font-normal text-[0.8rem]",
+        head_cell: "text-gray-400 rounded-md w-9 font-normal text-[0.8rem]",
         row: "flex w-full mt-2",
-        cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-[#1d232a]/50 [&:has([aria-selected])]:bg-[#1d232a] first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
+
+        // KEY FIX: STOP USING aria-selected AND USE MODIFIER CLASSES ONLY
+        cell: `
+          h-9 w-9 text-center text-sm p-0 relative 
+          [&:has(.day-range-start)]:rounded-l-md
+          [&:has(.day-range-end)]:rounded-r-md
+          [&:has(.day-range-middle)]:bg-[#1f6feb]/20
+          [&:has(.day-range-middle)]:text-white
+          [&:has(.day-outside.day-range-middle)]:bg-[#1f6feb]/10
+          focus-within:relative focus-within:z-20
+        `,
+
         day: cn(
           buttonVariants({ variant: "ghost" }),
-          "h-9 w-9 p-0 font-normal aria-selected:opacity-100 text-gray-300 hover:bg-[#1d232a] hover:text-white"
+          "h-9 w-9 p-0 font-normal text-gray-300 hover:bg-[#1d232a] hover:text-white"
         ),
-        day_range_end: "day-range-end",
-        day_selected:
-          "bg-[#1f6feb] text-white hover:bg-[#1a5fd4] hover:text-white focus:bg-[#1f6feb] focus:text-white",
+
+        day_range_start: "day-range-start bg-[#1f6feb] text-white",
+        day_range_end: "day-range-end bg-[#1f6feb] text-white",
+
+        day_range_middle: "day-range-middle bg-[#1f6feb]/20 text-white",
+
         day_today: "bg-[#1d232a] text-[#1f6feb] font-semibold",
-        day_outside:
-          "day-outside text-gray-500 opacity-50 aria-selected:bg-[#1d232a]/50 aria-selected:text-gray-400 aria-selected:opacity-30",
+        day_outside: "day-outside text-gray-500 opacity-50",
         day_disabled: "text-gray-600 opacity-50",
-        day_range_middle:
-          "aria-selected:bg-[#1d232a] aria-selected:text-white",
         day_hidden: "invisible",
         ...classNames,
       }}
       components={{
-        IconLeft: ({ ...props }) => <ChevronLeft className="h-4 w-4" />,
-        IconRight: ({ ...props }) => <ChevronRight className="h-4 w-4" />,
+        IconLeft: () => <ChevronLeft className="h-4 w-4" />,
+        IconRight: () => <ChevronRight className="h-4 w-4" />,
       }}
       {...props}
     />
-  )
+  );
 }
-Calendar.displayName = "Calendar"
-
-export { Calendar }
-
