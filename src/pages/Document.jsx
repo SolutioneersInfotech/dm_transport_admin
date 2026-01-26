@@ -5,6 +5,8 @@ import { fetchDocuments, fetchMoreDocuments, resetPagination } from "../store/sl
 import DocumentPreviewContent from "../components/DocumentPreviewContent";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { Calendar } from "../components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 import {
   Table,
   TableBody,
@@ -14,7 +16,8 @@ import {
   TableRow,
 } from "../components/ui/table";
 import { Checkbox } from "../components/ui/checkbox";
-import { X, Search, Calendar, Flag, ChevronDown, Check } from "lucide-react";
+import { format } from "date-fns";
+import { X, Search, Calendar as CalendarIcon, Flag, ChevronDown, Check } from "lucide-react";
 import DocumentTableSkeleton from "../components/skeletons/DocumentTableSkeleton";
 import {
   Drawer,
@@ -58,9 +61,7 @@ export default function Documents() {
     loadingMore,
     hasMore,
     page,
-    limit,
     total,
-    totalDocuments,
     lastFetchParams,
     lastFetched,
   } = useAppSelector((state) => state.documents);
@@ -78,6 +79,10 @@ export default function Documents() {
 
   const [startDate, setStartDate] = useState(start);
   const [endDate, setEndDate] = useState(end);
+  const [dateRange, setDateRange] = useState({
+    from: new Date(start),
+    to: new Date(end),
+  });
 
   const [selectedFilters, setSelectedFilters] = useState([]); // Array of filter values
 
@@ -134,7 +139,6 @@ export default function Documents() {
   const [categoryFilter, setCategoryFilter] = useState(null); // C D F
   const [flagFilter, setFlagFilter] = useState(null); // null | true | false (null = all)
   const [showDocumentTypeDropdown, setShowDocumentTypeDropdown] = useState(false);
-  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showFilterTypeDropdown, setShowFilterTypeDropdown] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const filterTypeDropdownRef = useRef(null);
@@ -256,26 +260,20 @@ export default function Documents() {
     const { start, end } = getDefaultDates();
     setStartDate(start);
     setEndDate(end);
-    setDateRange({
-      from: new Date(start),
-      to: new Date(end),
-    });
+    setDateRange({ from: new Date(start), to: new Date(end) });
   }
 
-  // Handle native date input changes
-  const handleStartDateChange = (e) => {
-    const value = e.target.value;
-    setStartDate(value);
-    if (value && endDate && value > endDate) {
-      setEndDate(value); // If start date is after end date, update end date
+  const handleDateRangeSelect = (range) => {
+    setDateRange(range);
+    if (range?.from) {
+      const formattedStart = format(range.from, "yyyy-MM-dd");
+      setStartDate(formattedStart);
+      if (!range.to) {
+        setEndDate(formattedStart);
+      }
     }
-  };
-
-  const handleEndDateChange = (e) => {
-    const value = e.target.value;
-    setEndDate(value);
-    if (value && startDate && value < startDate) {
-      setStartDate(value); // If end date is before start date, update start date
+    if (range?.to) {
+      setEndDate(format(range.to, "yyyy-MM-dd"));
     }
   };
 
@@ -335,7 +333,6 @@ export default function Documents() {
         !documentDropDownRef.current.contains(event.target)
       ) {
         setShowDocumentTypeDropdown(false);
-        setShowStatusDropdown(false);
       }
       if (
         filterTypeDropdownRef.current &&
@@ -578,7 +575,6 @@ export default function Documents() {
             <button
               onClick={() => {
                 setShowDocumentTypeDropdown(!showDocumentTypeDropdown);
-                setShowStatusDropdown(false);
               }}
               className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-300 hover:text-white transition-colors border-b border-gray-700 hover:border-gray-600 whitespace-nowrap"
             >
@@ -592,7 +588,6 @@ export default function Documents() {
                   setSelectedFilters([]);
                   setStatusFilter("all");
                   setShowDocumentTypeDropdown(false);
-                  setShowStatusDropdown(false);
                 }}
                 className="text-gray-400 hover:text-white transition-colors p-1 rounded-full hover:bg-[#1d232a]"
                 aria-label="Clear filters"
@@ -620,7 +615,6 @@ export default function Documents() {
                       key={status}
                       onClick={() => {
                         setStatusFilter(status);
-                        setShowStatusDropdown(false);
                       }}
                       className={`w-full text-left px-4 py-2 text-sm hover:bg-[#1d232a] transition-colors flex items-center gap-2 ${
                         statusFilter === status ? "text-[#1f6feb] bg-[#1d232a]" : "text-gray-300"
@@ -684,28 +678,38 @@ export default function Documents() {
           <Flag className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${flagFilter === true ? "text-white" : "text-gray-400"}`} />
         </Button>
 
-        {/* Date Range Picker - Native Inputs */}
+        {/* Date Range Picker */}
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-          <div className="relative flex items-center flex-1 sm:flex-none min-w-0">
-            <Calendar className="absolute left-2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-400 pointer-events-none z-10" />
-            <Input
-              type="date"
-              value={startDate}
-              onChange={handleStartDateChange}
-              max={endDate || undefined}
-              className="h-8 sm:h-9 pl-8 sm:pl-9 pr-2 sm:pr-3 text-xs sm:text-sm bg-[#1d232a] border-gray-700 text-gray-300 hover:bg-[#161b22] hover:border-gray-600 focus:border-[#1f6feb] focus:ring-1 focus:ring-[#1f6feb] [color-scheme:dark]"
-            />
-          </div>
-          <span className="text-gray-400 text-xs sm:text-sm whitespace-nowrap">to</span>
-          <div className="relative flex items-center flex-1 sm:flex-none min-w-0">
-            <Input
-              type="date"
-              value={endDate}
-              onChange={handleEndDateChange}
-              min={startDate || undefined}
-              className="h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm bg-[#1d232a] border-gray-700 text-gray-300 hover:bg-[#161b22] hover:border-gray-600 focus:border-[#1f6feb] focus:ring-1 focus:ring-[#1f6feb] [color-scheme:dark]"
-            />
-          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 sm:h-9 px-2 sm:px-3 bg-[#161b22] border-gray-700 text-gray-300 hover:bg-[#1d232a] hover:border-gray-600"
+              >
+                <CalendarIcon className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-400" />
+                {dateRange?.from ? (
+                  dateRange.to ? (
+                    `${format(dateRange.from, "MMM dd, yyyy")} - ${format(dateRange.to, "MMM dd, yyyy")}`
+                  ) : (
+                    format(dateRange.from, "MMM dd, yyyy")
+                  )
+                ) : (
+                  <span className="text-gray-400">Pick a date range</span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="p-0">
+              <Calendar
+                mode="range"
+                numberOfMonths={isMobile ? 1 : 2}
+                selected={dateRange}
+                defaultMonth={dateRange?.from}
+                onSelect={handleDateRangeSelect}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
           {(startDate !== start || endDate !== end) && (
             <Button
               variant="ghost"
