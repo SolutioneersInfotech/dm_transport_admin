@@ -9,24 +9,45 @@ export default function DateRangePicker({ value, onChange, showPresets = true })
   const presets = useMemo(() => buildPresets(new Date()), []);
   const today = useMemo(() => new Date(), []);
   const [tempRange, setTempRange] = useState(value);
+  const [hoverDate, setHoverDate] = useState(null);
 
   useEffect(() => {
     setTempRange(value);
+    setHoverDate(null);
   }, [value]);
 
   const handleSelect = (range) => {
-    setTempRange(range);
+    if (!range?.from) {
+      setTempRange(undefined);
+      setHoverDate(null);
+      return;
+    }
+
     if (range?.from && range?.to) {
+      setTempRange(range);
+      setHoverDate(null);
       onChange(range);
       setOpen(false);
+      return;
     }
+
+    setTempRange({ from: range.from, to: undefined });
+    setHoverDate(null);
   };
 
   const applyPreset = (presetRange) => {
     setTempRange(presetRange);
+    setHoverDate(null);
     onChange(presetRange);
     setOpen(false);
   };
+
+  const previewRange = useMemo(() => {
+    if (tempRange?.from && !tempRange?.to && hoverDate) {
+      return { from: tempRange.from, to: hoverDate };
+    }
+    return tempRange;
+  }, [tempRange, hoverDate]);
 
   const label =
     value?.from && value?.to
@@ -62,8 +83,18 @@ export default function DateRangePicker({ value, onChange, showPresets = true })
 
         <Calendar
           mode="range"
-          selected={tempRange}
+          selected={previewRange}
           onSelect={handleSelect}
+          onDayMouseEnter={(day) => {
+            if (tempRange?.from && !tempRange?.to) {
+              setHoverDate(day);
+            }
+          }}
+          onDayMouseLeave={() => {
+            if (tempRange?.from && !tempRange?.to) {
+              setHoverDate(null);
+            }
+          }}
           showOutsideDays={false}
           disabled={{ after: today }}
           numberOfMonths={2}
