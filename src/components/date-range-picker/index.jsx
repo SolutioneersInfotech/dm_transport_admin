@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
@@ -8,15 +8,22 @@ export default function DateRangePicker({ value, onChange, showPresets = true })
   const [open, setOpen] = useState(false);
   const presets = useMemo(() => buildPresets(new Date()), []);
   const today = useMemo(() => new Date(), []);
+  const [tempRange, setTempRange] = useState(value);
+
+  useEffect(() => {
+    setTempRange(value);
+  }, [value]);
 
   const handleSelect = (range) => {
-    onChange(range);
+    setTempRange(range);
     if (range?.from && range?.to) {
+      onChange(range);
       setOpen(false);
     }
   };
 
   const applyPreset = (presetRange) => {
+    setTempRange(presetRange);
     onChange(presetRange);
     setOpen(false);
   };
@@ -55,7 +62,7 @@ export default function DateRangePicker({ value, onChange, showPresets = true })
 
         <Calendar
           mode="range"
-          selected={value}
+          selected={tempRange}
           onSelect={handleSelect}
           showOutsideDays={false}
           disabled={{ after: today }}
