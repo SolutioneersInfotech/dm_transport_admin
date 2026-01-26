@@ -14,7 +14,7 @@ import {
   TableRow,
 } from "../components/ui/table";
 import { Checkbox } from "../components/ui/checkbox";
-import { X, Search, Calendar, Flag, ChevronDown, Check } from "lucide-react";
+import { X, Search, Flag, ChevronDown, Check } from "lucide-react";
 import DocumentTableSkeleton from "../components/skeletons/DocumentTableSkeleton";
 import {
   Drawer,
@@ -23,6 +23,8 @@ import {
   DrawerTitle,
   DrawerClose,
 } from "../components/ui/drawer";
+import { format } from "date-fns";
+import DateRangePicker from "../components/date-range-picker";
 
 // Last 60 Days
 function getDefaultDates() {
@@ -76,8 +78,19 @@ export default function Documents() {
 
   const [searchParams] = useSearchParams();
 
-  const [startDate, setStartDate] = useState(start);
-  const [endDate, setEndDate] = useState(end);
+  const [dateRange, setDateRange] = useState({
+    from: new Date(start),
+    to: new Date(end),
+  });
+
+  const startDate = useMemo(
+    () => (dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : undefined),
+    [dateRange?.from]
+  );
+  const endDate = useMemo(
+    () => (dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : undefined),
+    [dateRange?.to]
+  );
 
   const [selectedFilters, setSelectedFilters] = useState([]); // Array of filter values
 
@@ -254,30 +267,11 @@ export default function Documents() {
 
   function resetDates() {
     const { start, end } = getDefaultDates();
-    setStartDate(start);
-    setEndDate(end);
     setDateRange({
       from: new Date(start),
       to: new Date(end),
     });
   }
-
-  // Handle native date input changes
-  const handleStartDateChange = (e) => {
-    const value = e.target.value;
-    setStartDate(value);
-    if (value && endDate && value > endDate) {
-      setEndDate(value); // If start date is after end date, update end date
-    }
-  };
-
-  const handleEndDateChange = (e) => {
-    const value = e.target.value;
-    setEndDate(value);
-    if (value && startDate && value < startDate) {
-      setStartDate(value); // If end date is before start date, update start date
-    }
-  };
 
   // Group documents by date
   const groupedDocuments = useMemo(() => {
@@ -684,28 +678,9 @@ export default function Documents() {
           <Flag className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${flagFilter === true ? "text-white" : "text-gray-400"}`} />
         </Button>
 
-        {/* Date Range Picker - Native Inputs */}
+        {/* Date Range Picker */}
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-          <div className="relative flex items-center flex-1 sm:flex-none min-w-0">
-            <Calendar className="absolute left-2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-400 pointer-events-none z-10" />
-            <Input
-              type="date"
-              value={startDate}
-              onChange={handleStartDateChange}
-              max={endDate || undefined}
-              className="h-8 sm:h-9 pl-8 sm:pl-9 pr-2 sm:pr-3 text-xs sm:text-sm bg-[#1d232a] border-gray-700 text-gray-300 hover:bg-[#161b22] hover:border-gray-600 focus:border-[#1f6feb] focus:ring-1 focus:ring-[#1f6feb] [color-scheme:dark]"
-            />
-          </div>
-          <span className="text-gray-400 text-xs sm:text-sm whitespace-nowrap">to</span>
-          <div className="relative flex items-center flex-1 sm:flex-none min-w-0">
-            <Input
-              type="date"
-              value={endDate}
-              onChange={handleEndDateChange}
-              min={startDate || undefined}
-              className="h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm bg-[#1d232a] border-gray-700 text-gray-300 hover:bg-[#161b22] hover:border-gray-600 focus:border-[#1f6feb] focus:ring-1 focus:ring-[#1f6feb] [color-scheme:dark]"
-            />
-          </div>
+          <DateRangePicker value={dateRange} onChange={setDateRange} />
           {(startDate !== start || endDate !== end) && (
             <Button
               variant="ghost"
