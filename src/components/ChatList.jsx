@@ -4,6 +4,7 @@ import { fetchUsers, fetchMoreUsers, updateUserLastMessage } from "../store/slic
 import ChatListItem from "./ChatListItem";
 import SkeletonLoader from "./skeletons/Skeleton";
 import { Input } from "./ui/input";
+import { Button } from "./ui/button";
 import { fetchMessages as defaultFetchMessages } from "../services/chatAPI";
 
 const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
@@ -13,6 +14,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   );
   // console.log(users);
   const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState([]); // Array of selected categories: ["F", "D", "C"]
   const observerTarget = useRef(null);
   const hasInitiallyFetched = useRef(false);
   const [isFetchingMessages, setIsFetchingMessages] = useState(false);
@@ -257,6 +259,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   }, [users, subscribeUnreadCount]);
 
   // Transform users from Redux to drivers format
+  // Redux already preserves all users, so we use it directly
   const drivers = useMemo(() => {
     if (!users?.length) return [];
    
@@ -278,6 +281,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
           last_message: u.last_message || "",
           last_chat_time: u.last_chat_time || null,
           unreadCount: unreadCounts[userId] || 0,
+          category: u.category || null, // Include category field
         };
       })
       .filter(Boolean);
@@ -298,23 +302,29 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     return driversWithIds;
   }, [users, unreadCounts]);
 
-  // Client-side filtering - filter from a copy of drivers array
+  // Client-side filtering - filter by search and category
   const filtered = useMemo(() => {
     // Create a copy of the drivers array to avoid mutating the original
-    const driversCopy = [...drivers];
+    let driversCopy = [...drivers];
     
-    // If no search term, return all drivers
-    if (!search || !search.trim()) {
-      return driversCopy;
+    // Filter by category first (multiple categories allowed)
+    if (categoryFilter.length > 0) {
+      driversCopy = driversCopy.filter((driver) => {
+        return categoryFilter.includes(driver.category);
+      });
     }
     
-    // Filter drivers by name (case-insensitive)
-    const searchTerm = search.toLowerCase().trim();
-    return driversCopy.filter((driver) => {
-      const driverName = (driver.driver_name || "").toLowerCase();
-      return driverName.includes(searchTerm);
-    });
-  }, [drivers, search]);
+    // Then filter by search term (case-insensitive)
+    if (search && search.trim()) {
+      const searchTerm = search.toLowerCase().trim();
+      driversCopy = driversCopy.filter((driver) => {
+        const driverName = (driver.driver_name || "").toLowerCase();
+        return driverName.includes(searchTerm);
+      });
+    }
+    
+    return driversCopy;
+  }, [drivers, search, categoryFilter]);
   
   const selectedDriverId = getDriverId(selectedDriver);
 
@@ -322,13 +332,45 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     <div className="h-full flex flex-col">
       {/* 🔍 SEARCH BAR (STICKY) */}
       <div className="p-5 border-b border-gray-700 sticky top-0 bg-[#0d1117] z-20">
-        <Input
-          type="text"
-          placeholder="Search drivers..."
-          className="w-full bg-[#1f2937]"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+        <div className="flex items-center justify-center gap-3">
+          <Input
+            type="text"
+            placeholder="Search drivers..."
+            className="flex-1 max-w-md bg-[#1f2937]"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          
+          {/* Category Filters */}
+          <div className="flex items-center gap-2">
+            {["C", "D", "F"].map((cat) => {
+              const isSelected = categoryFilter.includes(cat);
+              return (
+                <Button
+                  key={cat}
+                  onClick={() => {
+                    if (isSelected) {
+                      // Remove category from filter
+                      setCategoryFilter(categoryFilter.filter((c) => c !== cat));
+                    } else {
+                      // Add category to filter
+                      setCategoryFilter([...categoryFilter, cat]);
+                    }
+                  }}
+                  variant={isSelected ? "default" : "outline"}
+                  size="sm"
+                  className={`min-w-[36px] h-8 text-xs border-0 ${
+                    isSelected
+                      ? "bg-[#0066ff50] text-white hover:bg-[#1a5ed45c]"
+                      : "bg-[#161b22] text-gray-300 hover:bg-[#1d232a]"
+                  }`}
+                >
+                  {cat}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* 📜 DRIVER LIST (ONLY THIS SCROLLS) */}
