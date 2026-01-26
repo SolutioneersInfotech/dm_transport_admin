@@ -702,7 +702,7 @@ export default function Documents() {
             <PopoverContent align="end" className="p-0">
               <Calendar
                 mode="range"
-                numberOfMonths={isMobile ? 1 : 2}
+                numberOfMonths={1}
                 selected={dateRange}
                 defaultMonth={dateRange?.from}
                 onSelect={handleDateRangeSelect}
