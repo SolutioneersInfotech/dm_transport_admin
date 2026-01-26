@@ -16,28 +16,20 @@ export default function DateRangePicker({ value, onChange, showPresets = true })
     setHoverDate(null);
   }, [value]);
 
-  const handleSelect = (range) => {
-    if (!range?.from) {
-      setTempRange(undefined);
-      setHoverDate(null);
-      return;
-    }
-
-    if (range?.from && range?.to) {
-      if (!tempRange?.from || tempRange?.to) {
-        setTempRange({ from: range.from, to: undefined });
-        setHoverDate(null);
-        return;
-      }
-      setTempRange(range);
-      setHoverDate(null);
-      onChange(range);
-      setOpen(false);
-      return;
-    }
-
-    setTempRange({ from: range.from, to: undefined });
+  const handleDayClick = (day) => {
     setHoverDate(null);
+
+    if (!tempRange?.from || tempRange?.to) {
+      setTempRange({ from: day, to: undefined });
+      return;
+    }
+
+    const fromDate = tempRange.from;
+    const nextRange = day < fromDate ? { from: day, to: fromDate } : { from: fromDate, to: day };
+
+    setTempRange(nextRange);
+    onChange(nextRange);
+    setOpen(false);
   };
 
   const applyPreset = (presetRange) => {
@@ -89,7 +81,7 @@ export default function DateRangePicker({ value, onChange, showPresets = true })
         <Calendar
           mode="range"
           selected={previewRange}
-          onSelect={handleSelect}
+          onDayClick={handleDayClick}
           onDayMouseEnter={(day) => {
             if (tempRange?.from && !tempRange?.to) {
               setHoverDate(day);
