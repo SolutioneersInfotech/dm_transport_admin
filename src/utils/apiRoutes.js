@@ -32,11 +32,15 @@ export const deleteSpecificChatRoute = `${baseBackendUrl}/deletespecificchats`;
 export const fetchDocumentsRoute = (startDate, endDate, options = {}) => {
   const baseUrl = `${baseBackendUrl}/fetchdocuments`;
   const params = new URLSearchParams();
+  const normalizedStartDate =
+    startDate instanceof Date ? startDate.toISOString().split("T")[0] : startDate;
+  const normalizedEndDate =
+    endDate instanceof Date ? endDate.toISOString().split("T")[0] : endDate;
 
   // Required parameters
-  if (startDate && endDate) {
-    params.append("start_date", startDate);
-    params.append("end_date", endDate);
+  if (normalizedStartDate && normalizedEndDate) {
+    params.append("start_date", normalizedStartDate);
+    params.append("end_date", normalizedEndDate);
   }
 
   // Pagination
@@ -83,11 +87,15 @@ export const fetchDocumentsRoute = (startDate, endDate, options = {}) => {
 export const fetchDocumentCountRoute = (startDate, endDate, options = {}) => {
   const baseUrl = `${baseBackendUrl}/fetchdocumentcount`;
   const params = new URLSearchParams();
+  const normalizedStartDate =
+    startDate instanceof Date ? startDate.toISOString().split("T")[0] : startDate;
+  const normalizedEndDate =
+    endDate instanceof Date ? endDate.toISOString().split("T")[0] : endDate;
 
   // Required parameters
-  if (startDate && endDate) {
-    params.append("start_date", startDate);
-    params.append("end_date", endDate);
+  if (normalizedStartDate && normalizedEndDate) {
+    params.append("start_date", normalizedStartDate);
+    params.append("end_date", normalizedEndDate);
   }
 
   // Status filters
