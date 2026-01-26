@@ -24,6 +24,11 @@ export default function DateRangePicker({ value, onChange, showPresets = true })
     }
 
     if (range?.from && range?.to) {
+      if (!tempRange?.from || tempRange?.to) {
+        setTempRange({ from: range.from, to: undefined });
+        setHoverDate(null);
+        return;
+      }
       setTempRange(range);
       setHoverDate(null);
       onChange(range);
