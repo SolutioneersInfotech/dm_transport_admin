@@ -14,7 +14,8 @@ import {
   TableRow,
 } from "../components/ui/table";
 import { Checkbox } from "../components/ui/checkbox";
-import { X, Search, Calendar, Flag, ChevronDown, Check } from "lucide-react";
+import { X, Search, Calendar as CalendarIcon, Flag, ChevronDown, Check } from "lucide-react";
+import { format } from "date-fns";
 import DocumentTableSkeleton from "../components/skeletons/DocumentTableSkeleton";
 import {
   Drawer,
@@ -23,6 +24,8 @@ import {
   DrawerTitle,
   DrawerClose,
 } from "../components/ui/drawer";
+import { Calendar } from "../components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 
 // Last 60 Days
 function getDefaultDates() {
@@ -78,6 +81,10 @@ export default function Documents() {
 
   const [startDate, setStartDate] = useState(start);
   const [endDate, setEndDate] = useState(end);
+  const [dateRange, setDateRange] = useState({
+    from: new Date(start),
+    to: new Date(end),
+  });
 
   const [selectedFilters, setSelectedFilters] = useState([]); // Array of filter values
 
@@ -262,22 +269,13 @@ export default function Documents() {
     });
   }
 
-  // Handle native date input changes
-  const handleStartDateChange = (e) => {
-    const value = e.target.value;
-    setStartDate(value);
-    if (value && endDate && value > endDate) {
-      setEndDate(value); // If start date is after end date, update end date
-    }
-  };
-
-  const handleEndDateChange = (e) => {
-    const value = e.target.value;
-    setEndDate(value);
-    if (value && startDate && value < startDate) {
-      setStartDate(value); // If end date is before start date, update start date
-    }
-  };
+  useEffect(() => {
+    if (!dateRange?.from) return;
+    const fromValue = format(dateRange.from, "yyyy-MM-dd");
+    const toValue = dateRange.to ? format(dateRange.to, "yyyy-MM-dd") : fromValue;
+    setStartDate(fromValue);
+    setEndDate(toValue);
+  }, [dateRange]);
 
   // Group documents by date
   const groupedDocuments = useMemo(() => {
@@ -684,28 +682,44 @@ export default function Documents() {
           <Flag className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${flagFilter === true ? "text-white" : "text-gray-400"}`} />
         </Button>
 
-        {/* Date Range Picker - Native Inputs */}
+        {/* Date Range Picker */}
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-          <div className="relative flex items-center flex-1 sm:flex-none min-w-0">
-            <Calendar className="absolute left-2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-400 pointer-events-none z-10" />
-            <Input
-              type="date"
-              value={startDate}
-              onChange={handleStartDateChange}
-              max={endDate || undefined}
-              className="h-8 sm:h-9 pl-8 sm:pl-9 pr-2 sm:pr-3 text-xs sm:text-sm bg-[#1d232a] border-gray-700 text-gray-300 hover:bg-[#161b22] hover:border-gray-600 focus:border-[#1f6feb] focus:ring-1 focus:ring-[#1f6feb] [color-scheme:dark]"
-            />
-          </div>
-          <span className="text-gray-400 text-xs sm:text-sm whitespace-nowrap">to</span>
-          <div className="relative flex items-center flex-1 sm:flex-none min-w-0">
-            <Input
-              type="date"
-              value={endDate}
-              onChange={handleEndDateChange}
-              min={startDate || undefined}
-              className="h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm bg-[#1d232a] border-gray-700 text-gray-300 hover:bg-[#161b22] hover:border-gray-600 focus:border-[#1f6feb] focus:ring-1 focus:ring-[#1f6feb] [color-scheme:dark]"
-            />
-          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 sm:h-9 px-2 sm:px-3 bg-[#1d232a] border-gray-700 text-gray-300 hover:bg-[#161b22] hover:border-gray-600 flex items-center gap-2 text-xs sm:text-sm"
+              >
+                <CalendarIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-400" />
+                {dateRange?.from ? (
+                  dateRange.to ? (
+                    <span>
+                      {format(dateRange.from, "MMM dd, yyyy")} -{" "}
+                      {format(dateRange.to, "MMM dd, yyyy")}
+                    </span>
+                  ) : (
+                    <span>{format(dateRange.from, "MMM dd, yyyy")}</span>
+                  )
+                ) : (
+                  <span>Select date range</span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="p-0">
+              <Calendar
+                initialFocus
+                mode="range"
+                numberOfMonths={isMobile ? 1 : 2}
+                defaultMonth={dateRange?.from}
+                selected={dateRange}
+                onSelect={(range) => {
+                  if (!range) return;
+                  setDateRange(range);
+                }}
+              />
+            </PopoverContent>
+          </Popover>
           {(startDate !== start || endDate !== end) && (
             <Button
               variant="ghost"
