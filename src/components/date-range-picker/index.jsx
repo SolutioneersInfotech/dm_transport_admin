@@ -1,0 +1,74 @@
+import { useMemo, useState, useEffect } from "react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { format } from "date-fns";
+import { buildPresets } from "@/lib/dateRangePresets";
+
+export default function DateRangePicker({ value, onChange, showPresets = true }) {
+  const [open, setOpen] = useState(false);
+  const presets = useMemo(() => buildPresets(new Date()), []);
+  const today = useMemo(() => new Date(), []);
+  const [tempRange, setTempRange] = useState(value);
+
+  useEffect(() => {
+    setTempRange(value);
+  }, [value]);
+
+  const handleSelect = (range) => {
+    setTempRange(range);
+    if (range?.from && range?.to) {
+      onChange(range);
+      setOpen(false);
+    }
+  };
+
+  const applyPreset = (presetRange) => {
+    setTempRange(presetRange);
+    onChange(presetRange);
+    setOpen(false);
+  };
+
+  const label =
+    value?.from && value?.to
+      ? `${format(value.from, "MMM dd, yyyy")} - ${format(value.to, "MMM dd, yyyy")}`
+      : "Select date range";
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger className="w-[260px] bg-[#1d232a] border border-gray-700 rounded-md px-3 py-2 text-left text-gray-300">
+        {label}
+      </PopoverTrigger>
+
+      <PopoverContent className="p-3 bg-[#0f141a] border border-gray-800 rounded-xl w-auto">
+        {showPresets && (
+          <div className="flex flex-wrap gap-2 mb-3 max-w-[620px]">
+            {presets.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => applyPreset(p.range)}
+                className={[
+                  "px-3 py-1.5 text-xs rounded-full border transition",
+                  p.key === "clear"
+                    ? "border-gray-700 text-gray-300 hover:bg-[#1d232a]"
+                    : "border-gray-700 text-gray-200 hover:bg-[#1d232a]",
+                ].join(" ")}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <Calendar
+          mode="range"
+          selected={tempRange}
+          onSelect={handleSelect}
+          showOutsideDays={false}
+          disabled={{ after: today }}
+          numberOfMonths={2}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
