@@ -7,6 +7,7 @@ import { buildPresets } from "@/lib/dateRangePresets";
 export default function DateRangePicker({ value, onChange, showPresets = true }) {
   const [open, setOpen] = useState(false);
   const presets = useMemo(() => buildPresets(new Date()), []);
+  const today = useMemo(() => new Date(), []);
 
   const handleSelect = (range) => {
     onChange(range);
@@ -56,6 +57,8 @@ export default function DateRangePicker({ value, onChange, showPresets = true })
           mode="range"
           selected={value}
           onSelect={handleSelect}
+          showOutsideDays={false}
+          disabled={{ after: today }}
           numberOfMonths={2}
         />
       </PopoverContent>
