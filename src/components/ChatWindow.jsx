@@ -293,10 +293,10 @@ export default function ChatWindow({ driver, chatApi }) {
     };
   }, [driverId, subscribeMessages, markMessagesAsSeen]);
 
-  function scrollToBottom() {
-    setTimeout(() => {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 100);
+  function scrollToBottom(behavior = "auto") {
+    requestAnimationFrame(() => {
+      bottomRef.current?.scrollIntoView({ behavior, block: "end" });
+    });
   }
 
   function toggleSelect(msgId) {
