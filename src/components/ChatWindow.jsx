@@ -218,6 +218,7 @@ export default function ChatWindow({ driver, chatApi }) {
 
   const [selected, setSelected] = useState([]);
   const [text, setText] = useState("");
+  const inputRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const driverId = (() => {
     const candidate =
@@ -293,6 +294,13 @@ export default function ChatWindow({ driver, chatApi }) {
     };
   }, [driverId, subscribeMessages, markMessagesAsSeen]);
 
+  useEffect(() => {
+    if (!driverId) return;
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+  }, [driverId]);
+
   function scrollToBottom(behavior = "auto") {
     requestAnimationFrame(() => {
       bottomRef.current?.scrollIntoView({ behavior, block: "end" });
@@ -322,6 +330,7 @@ export default function ChatWindow({ driver, chatApi }) {
     setMessages((prev) => [...prev, tempMsg]);
     scrollToBottom();
     setText("");
+    inputRef.current?.focus();
 
     await sendMessage(driverId, text);
   }
@@ -438,6 +447,7 @@ export default function ChatWindow({ driver, chatApi }) {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
+          ref={inputRef}
         />
 
         <Button
