@@ -1,13 +1,59 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { Button } from "./ui/button";
-import { Copy, Flag } from "lucide-react";
+import { Input } from "./ui/input";
+import { Copy, Flag, X, Check, MessageCircle, Send, RotateCcw, CheckCircle2, Circle, Trash2, FileText, Pencil, Plus } from "lucide-react";
 import { fetchDocumentByIdRoute } from "../utils/apiRoutes";
+import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { updateDocument, deleteDocumentThunk, changeDocumentType } from "../store/slices/documentsSlice";
+import { Select, SelectTrigger, SelectContent, SelectItem } from "./ui/select";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "./ui/tooltip";
+import { Popover, PopoverTrigger, PopoverContent } from "./ui/popover";
+import {
+  fetchAcknowledgements,
+  createAcknowledgement,
+  updateAcknowledgement,
+  deleteAcknowledgement,
+  sendAcknowledgement,
+} from "../services/acknowledgementAPI";
 
-export default function DocumentPreviewContent({ selectedDoc }) {
+// Document type mapping (same as in Document.jsx)
+const FILTER_MAP = {
+  "Pickup Doc": "pick_up",
+  "Delivery Proof": "delivery",
+  "Load Image": "load_image",
+  "Fuel Receipt": "fuel_recipt",
+  "Stamp Paper": "paper_logs",
+  "Driver Expense": "driver_expense_sheet",
+  "DM Transport Trip Envelope": "dm_transport_trip_envelope",
+  "DM Trans Inc Trip Envelope": "dm_trans_inc_trip_envelope",
+  "DM Transport City Worksheet": "dm_transport_city_worksheet_trip_envelope",
+  "Repair and Maintenance": "trip_envelope",
+  "CTPAT": "CTPAT",
+};
+
+export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
+  const dispatch = useAppDispatch();
+  const navigate = useNavigate();
+  const { users } = useAppSelector((state) => state.users);
   const [fullDoc, setFullDoc] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [copiedValue, setCopiedValue] = useState("");
+  const [showFlagModal, setShowFlagModal] = useState(false);
+  const [flagReason, setFlagReason] = useState("");
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isChangingType, setIsChangingType] = useState(false);
+  const [acknowledgements, setAcknowledgements] = useState([]);
+  const [showAcknowledgementDropdown, setShowAcknowledgementDropdown] = useState(false);
+  const [showAddAcknowledgementModal, setShowAddAcknowledgementModal] = useState(false);
+  const [editingAcknowledgement, setEditingAcknowledgement] = useState(null);
+  const [acknowledgementText, setAcknowledgementText] = useState("");
+  const [isLoadingAcknowledgements, setIsLoadingAcknowledgements] = useState(false);
+  const [isSendingAcknowledgement, setIsSendingAcknowledgement] = useState(false);
+  const [isPdfLoading, setIsPdfLoading] = useState(true);
 
   useEffect(() => {
     if (!selectedDoc?.id) return;
@@ -15,6 +61,7 @@ export default function DocumentPreviewContent({ selectedDoc }) {
     const fetchFullDocument = async () => {
       setLoading(true);
       setError(null);
+      setIsPdfLoading(true); // Reset PDF loading state
       try {
         const token = localStorage.getItem("adminToken");
         const url = fetchDocumentByIdRoute(selectedDoc.id, selectedDoc.type);
@@ -46,6 +93,34 @@ export default function DocumentPreviewContent({ selectedDoc }) {
     fetchFullDocument();
   }, [selectedDoc]);
 
+  // Fetch acknowledgements when dropdown opens
+  useEffect(() => {
+    if (showAcknowledgementDropdown && acknowledgements.length === 0) {
+      loadAcknowledgements();
+    }
+  }, [showAcknowledgementDropdown]);
+
+  // Reset PDF loading state when document URL changes
+  useEffect(() => {
+    const doc = fullDoc || selectedDoc;
+    if (doc?.document_url) {
+      setIsPdfLoading(true);
+    }
+  }, [fullDoc?.document_url, selectedDoc?.document_url]);
+
+  const loadAcknowledgements = async () => {
+    setIsLoadingAcknowledgements(true);
+    try {
+      const data = await fetchAcknowledgements();
+      setAcknowledgements(data);
+    } catch (error) {
+      console.error("Failed to load acknowledgements:", error);
+      toast.error("Failed to load acknowledgement templates");
+    } finally {
+      setIsLoadingAcknowledgements(false);
+    }
+  };
+
   if (!selectedDoc) return null;
 
   const doc = fullDoc || selectedDoc;
@@ -73,9 +148,411 @@ export default function DocumentPreviewContent({ selectedDoc }) {
       await navigator.clipboard.writeText(value);
       setCopiedValue(value);
       setTimeout(() => setCopiedValue(""), 1500);
+      toast.success("Copied to clipboard");
     } catch (copyError) {
       console.error("Failed to copy value", copyError);
+      toast.error("Failed to copy to clipboard");
     }
+  };
+
+  const handleFlagDocument = async () => {
+    if (!flagReason.trim()) {
+      toast.error("Please enter a reason for flagging this document");
+      return;
+    }
+
+    const doc = fullDoc || selectedDoc;
+    const flagData = {
+      flagged: true,
+      reason: flagReason.trim(),
+    };
+
+    try {
+      const result = await dispatch(updateDocument({ 
+        document: doc, 
+        flag: flagData 
+      }));
+      
+      if (updateDocument.fulfilled.match(result)) {
+        // Update local state
+        const updatedDoc = { ...doc, flag: flagData };
+        setFullDoc(updatedDoc);
+        if (onDocUpdate) {
+          onDocUpdate(updatedDoc);
+        }
+        setShowFlagModal(false);
+        setFlagReason("");
+        toast.success("Document flagged successfully");
+      } else {
+        toast.error(result.payload || "Failed to flag document");
+      }
+    } catch (error) {
+      console.error("Failed to flag document:", error);
+      toast.error("Failed to flag document. Please try again.");
+    }
+  };
+
+  const handleUnflagDocument = async () => {
+    const doc = fullDoc || selectedDoc;
+    const flagData = {
+      flagged: false,
+      reason: "",
+    };
+
+    try {
+      const result = await dispatch(updateDocument({ 
+        document: doc, 
+        flag: flagData 
+      }));
+      
+      if (updateDocument.fulfilled.match(result)) {
+        // Update local state
+        const updatedDoc = { ...doc, flag: flagData };
+        setFullDoc(updatedDoc);
+        if (onDocUpdate) {
+          onDocUpdate(updatedDoc);
+        }
+        toast.success("Document unflagged successfully");
+      } else {
+        toast.error(result.payload || "Failed to unflag document");
+      }
+    } catch (error) {
+      console.error("Failed to unflag document:", error);
+      toast.error("Failed to unflag document. Please try again.");
+    }
+  };
+
+  const handleToggleSeenStatus = async () => {
+    const doc = fullDoc || selectedDoc;
+    // Toggle seen status
+    const newSeenStatus = doc.seen === true ? false : true;
+    
+    try {
+      const result = await dispatch(updateDocument({ 
+        document: doc, 
+        seen: newSeenStatus 
+      }));
+      
+      if (updateDocument.fulfilled.match(result)) {
+        // Update local state
+        const updatedDoc = { ...doc, seen: newSeenStatus };
+        setFullDoc(updatedDoc);
+        if (onDocUpdate) {
+          onDocUpdate(updatedDoc);
+        }
+        toast.success(newSeenStatus ? "Document marked as seen" : "Document marked as unseen");
+      } else {
+        toast.error(result.payload || "Failed to update seen status");
+      }
+    } catch (error) {
+      console.error("Failed to update seen status:", error);
+      toast.error("Failed to update seen status. Please try again.");
+    }
+  };
+
+  // Helper function to get user ID from various possible fields
+  function getUserId(user) {
+    return (
+      user?.userid ??
+      user?.userId ??
+      user?.contactId ??
+      user?.contactid ??
+      user?.uid ??
+      user?.id ??
+      null
+    );
+  }
+
+  // Find driver by email or name from users list
+  function findDriverByEmailOrName(email, name) {
+    if (!users?.length) return null;
+    
+    // First try to find by email
+    if (email) {
+      const userByEmail = users.find((u) => 
+        u.email?.toLowerCase() === email.toLowerCase() ||
+        u.driver_email?.toLowerCase() === email.toLowerCase()
+      );
+      if (userByEmail) {
+        return getUserId(userByEmail);
+      }
+    }
+    
+    // Then try to find by name
+    if (name) {
+      const userByName = users.find((u) => 
+        u.name?.toLowerCase() === name.toLowerCase() ||
+        u.driver_name?.toLowerCase() === name.toLowerCase()
+      );
+      if (userByName) {
+        return getUserId(userByName);
+      }
+    }
+    
+    return null;
+  }
+
+  // Navigate to chat page with driver's user ID
+  const handleChatWithDriver = () => {
+    const doc = fullDoc || selectedDoc;
+    if (!doc) return;
+    
+    // First check if document has a direct userid or driver_id field
+    let userId = doc.userid || doc.userId || doc.driver_id || doc.driverId || null;
+    
+    // If not found, try to find by email or name from users list
+    if (!userId) {
+      userId = findDriverByEmailOrName(doc.driver_email, doc.driver_name);
+    }
+    
+    if (!userId) {
+      console.error("Cannot navigate to chat: Driver user ID not found");
+      toast.error("Driver information not found. Cannot open chat.");
+      return;
+    }
+    
+    navigate(`/chat?userid=${userId}`);
+    toast.success("Opening chat with driver");
+  };
+
+  // Toggle mark for resend status
+  const handleToggleMarkForResend = async () => {
+    const doc = fullDoc || selectedDoc;
+    if (!doc) return;
+    
+    // Toggle between "markedForResend" and "sent"
+    const newState = doc.state === "markedForResend" ? "sent" : "markedForResend";
+    
+    try {
+      const result = await dispatch(updateDocument({ 
+        document: doc, 
+        state: newState 
+      }));
+      
+      if (updateDocument.fulfilled.match(result)) {
+        // Update local state
+        const updatedDoc = { ...doc, state: newState };
+        setFullDoc(updatedDoc);
+        if (onDocUpdate) {
+          onDocUpdate(updatedDoc);
+        }
+        toast.success(newState === "markedForResend" ? "Document marked for resend" : "Mark for resend undone");
+      } else {
+        toast.error(result.payload || "Failed to update mark for resend status");
+      }
+    } catch (error) {
+      console.error("Failed to update mark for resend status:", error);
+      toast.error("Failed to update mark for resend status. Please try again.");
+    }
+  };
+
+  // Toggle completed status
+  const handleToggleCompleted = async () => {
+    const doc = fullDoc || selectedDoc;
+    if (!doc) return;
+    
+    // Toggle between true and false
+    const newCompletedStatus = doc.completed === true ? false : true;
+    
+    try {
+      const result = await dispatch(updateDocument({ 
+        document: doc, 
+        completed: newCompletedStatus 
+      }));
+      
+      if (updateDocument.fulfilled.match(result)) {
+        // Update local state
+        const updatedDoc = { ...doc, completed: newCompletedStatus };
+        setFullDoc(updatedDoc);
+        if (onDocUpdate) {
+          onDocUpdate(updatedDoc);
+        }
+        toast.success(newCompletedStatus ? "Document marked as done" : "Mark as done undone");
+      } else {
+        toast.error(result.payload || "Failed to update completed status");
+      }
+    } catch (error) {
+      console.error("Failed to update completed status:", error);
+      toast.error("Failed to update completed status. Please try again.");
+    }
+  };
+
+  // Handle document deletion
+  const handleDeleteDocument = async () => {
+    const doc = fullDoc || selectedDoc;
+    if (!doc) return;
+
+    setIsDeleting(true);
+    try {
+      const result = await dispatch(deleteDocumentThunk({ document: doc }));
+      
+      if (deleteDocumentThunk.fulfilled.match(result)) {
+        // Close the modal and clear selection
+        setShowDeleteModal(false);
+        if (onDocUpdate) {
+          // Pass null to indicate document was deleted
+          onDocUpdate(null);
+        }
+        toast.success("Document deleted successfully");
+      } else {
+        toast.error(result.payload || "Failed to delete document");
+      }
+    } catch (error) {
+      console.error("Failed to delete document:", error);
+      toast.error("Failed to delete document. Please try again.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Handle document type change
+  const handleChangeDocumentType = async (newType) => {
+    const doc = fullDoc || selectedDoc;
+    if (!doc || !doc.id || !doc.type) return;
+
+    if (doc.type === newType) {
+      return; // No change needed
+    }
+
+    setIsChangingType(true);
+    try {
+      const result = await dispatch(
+        changeDocumentType({
+          documentId: doc.id,
+          oldType: doc.type,
+          newType: newType,
+        })
+      );
+
+      if (changeDocumentType.fulfilled.match(result)) {
+        // Update local state with new type and URL
+        const updatedDoc = {
+          ...doc,
+          type: newType,
+          document_url: result.payload.documentUrl || doc.document_url,
+        };
+        setFullDoc(updatedDoc);
+        if (onDocUpdate) {
+          onDocUpdate(updatedDoc);
+        }
+        const newTypeLabel = Object.keys(FILTER_MAP).find(
+          (key) => FILTER_MAP[key] === newType
+        ) || newType;
+        toast.success(`Document type changed to ${newTypeLabel}`);
+      } else {
+        toast.error(result.payload || "Failed to change document type");
+      }
+    } catch (error) {
+      console.error("Failed to change document type:", error);
+      toast.error("Failed to change document type. Please try again.");
+    } finally {
+      setIsChangingType(false);
+    }
+  };
+
+  // Get current document type label
+  const getCurrentTypeLabel = () => {
+    const doc = fullDoc || selectedDoc;
+    if (!doc || !doc.type) return "Select Type";
+    const label = Object.keys(FILTER_MAP).find(
+      (key) => FILTER_MAP[key] === doc.type
+    );
+    return label || doc.type;
+  };
+
+  // Handle send acknowledgement
+  const handleSendAcknowledgement = async (acknowledgementText) => {
+    const doc = fullDoc || selectedDoc;
+    if (!doc) return;
+
+    setIsSendingAcknowledgement(true);
+    try {
+      await sendAcknowledgement(doc, acknowledgementText);
+      
+      // Update local state
+      const updatedDoc = { ...doc, acknowledgement: acknowledgementText };
+      setFullDoc(updatedDoc);
+      if (onDocUpdate) {
+        onDocUpdate(updatedDoc);
+      }
+      
+      setShowAcknowledgementDropdown(false);
+      toast.success("Acknowledgement sent successfully");
+    } catch (error) {
+      console.error("Failed to send acknowledgement:", error);
+      toast.error(error.message || "Failed to send acknowledgement");
+    } finally {
+      setIsSendingAcknowledgement(false);
+    }
+  };
+
+  // Handle create acknowledgement template
+  const handleCreateAcknowledgement = async () => {
+    if (!acknowledgementText.trim()) {
+      toast.error("Please enter acknowledgement text");
+      return;
+    }
+
+    try {
+      await createAcknowledgement(acknowledgementText.trim());
+      await loadAcknowledgements(); // Reload list
+      setShowAddAcknowledgementModal(false);
+      setAcknowledgementText("");
+      toast.success("Acknowledgement template created");
+    } catch (error) {
+      console.error("Failed to create acknowledgement:", error);
+      toast.error(error.message || "Failed to create acknowledgement template");
+    }
+  };
+
+  // Handle update acknowledgement template
+  const handleUpdateAcknowledgement = async () => {
+    if (!acknowledgementText.trim() || !editingAcknowledgement) {
+      toast.error("Please enter acknowledgement text");
+      return;
+    }
+
+    try {
+      await updateAcknowledgement(editingAcknowledgement.id, acknowledgementText.trim());
+      await loadAcknowledgements(); // Reload list
+      setShowAddAcknowledgementModal(false);
+      setEditingAcknowledgement(null);
+      setAcknowledgementText("");
+      toast.success("Acknowledgement template updated");
+    } catch (error) {
+      console.error("Failed to update acknowledgement:", error);
+      toast.error(error.message || "Failed to update acknowledgement template");
+    }
+  };
+
+  // Handle delete acknowledgement template
+  const handleDeleteAcknowledgement = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this acknowledgement template?")) {
+      return;
+    }
+
+    try {
+      await deleteAcknowledgement(id);
+      await loadAcknowledgements(); // Reload list
+      toast.success("Acknowledgement template deleted");
+    } catch (error) {
+      console.error("Failed to delete acknowledgement:", error);
+      toast.error(error.message || "Failed to delete acknowledgement template");
+    }
+  };
+
+  // Open edit modal
+  const handleEditAcknowledgement = (ack) => {
+    setEditingAcknowledgement(ack);
+    setAcknowledgementText(ack.data);
+    setShowAddAcknowledgementModal(true);
+  };
+
+  // Open add modal
+  const handleAddAcknowledgement = () => {
+    setEditingAcknowledgement(null);
+    setAcknowledgementText("");
+    setShowAddAcknowledgementModal(true);
   };
 
   const renderCopyButton = (value, label) => (
@@ -99,23 +576,37 @@ export default function DocumentPreviewContent({ selectedDoc }) {
       )}
 
       {/* Preview Area */}
-      <div className="w-full rounded-lg overflow-hidden bg-black/20 border border-gray-700 min-h-[500px] flex items-center justify-center">
+      <div className="w-full rounded-lg overflow-hidden bg-black/20 border border-gray-700 min-h-[500px] flex items-center justify-center relative">
         {isImage && (
           <img
             src={url}
             alt="Document Preview"
             className="max-h-full max-w-full object-contain"
+            onLoad={() => setIsPdfLoading(false)}
+            onError={() => setIsPdfLoading(false)}
           />
         )}
 
         {isPDF && (
-          <iframe
-            src={`https://docs.google.com/viewer?url=${encodeURIComponent(
-              url
-            )}&embedded=true`}
-            className="w-full h-[600px] rounded"
-            title="PDF Preview"
-          />
+          <>
+            {isPdfLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+                <div className="text-center space-y-4">
+                  <div className="w-8 h-8 border-2 border-gray-600 border-t-blue-500 rounded-full animate-spin mx-auto" />
+                  <p className="text-sm text-gray-400">Loading PDF...</p>
+                </div>
+              </div>
+            )}
+            <iframe
+              src={`https://docs.google.com/viewer?url=${encodeURIComponent(
+                url
+              )}&embedded=true`}
+              className="w-full h-[600px] rounded"
+              title="PDF Preview"
+              onLoad={() => setIsPdfLoading(false)}
+              onError={() => setIsPdfLoading(false)}
+            />
+          </>
         )}
 
         {!isImage && !isPDF && (
@@ -154,9 +645,20 @@ export default function DocumentPreviewContent({ selectedDoc }) {
                   </p>
                 )}
               </div>
-              <div className="flex flex-col items-end gap-1">
-                {renderCopyButton(doc.driver_name || "Unknown", "driver name")}
-                {doc.driver_email && renderCopyButton(doc.driver_email, "driver email")}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleChatWithDriver}
+                  className="text-[#1f6feb] hover:text-[#1a5fd4] transition-colors p-1.5 rounded hover:bg-[#1f6feb]/10"
+                  aria-label="Chat with driver"
+                  title="Chat with driver"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                </button>
+                <div className="flex flex-col items-end gap-1">
+                  {renderCopyButton(doc.driver_name || "Unknown", "driver name")}
+                  {doc.driver_email && renderCopyButton(doc.driver_email, "driver email")}
+                </div>
               </div>
             </div>
           </div>
@@ -179,10 +681,43 @@ export default function DocumentPreviewContent({ selectedDoc }) {
               Type
             </span>
             <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-white truncate">
-                {doc.type || "—"}
-              </p>
-              {renderCopyButton(doc.type || "—", "type")}
+              <div className="flex-1 min-w-0">
+                <Select
+                  value={doc.type || ""}
+                  onValueChange={handleChangeDocumentType}
+                  disabled={isChangingType}
+                >
+                  {({ value, onValueChange, open, setOpen, disabled }) => (
+                    <>
+                      <SelectTrigger className="w-full" disabled={disabled}>
+                        <span className="truncate">
+                          {isChangingType ? "Changing..." : getCurrentTypeLabel()}
+                        </span>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.keys(FILTER_MAP).map((label) => {
+                          const typeValue = FILTER_MAP[label];
+                          const isSelected = value === typeValue;
+                          return (
+                            <SelectItem
+                              key={typeValue}
+                              value={typeValue}
+                              selected={isSelected}
+                              onSelect={(val) => {
+                                handleChangeDocumentType(val);
+                                setOpen(false);
+                              }}
+                            >
+                              {label}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </>
+                  )}
+                </Select>
+              </div>
+              {doc.type && renderCopyButton(doc.type, "type")}
             </div>
           </div>
           <div className="space-y-1 flex-1 min-w-0">
@@ -198,31 +733,105 @@ export default function DocumentPreviewContent({ selectedDoc }) {
           </div>
         </div>
 
-        {/* Flag Information */}
-        {doc.flag && (
-          <div className="pt-4 border-t border-gray-700">
-            <div className="flex items-center gap-2 mb-2">
-              <Flag className={`h-4 w-4 ${doc.flag.flagged ? "text-[#1f6feb]" : "text-gray-600"}`} fill={doc.flag.flagged ? "#1f6feb" : "none"} />
+        {/* Flag Information and Actions */}
+        <div className="pt-4 border-t border-gray-700">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Flag className={`h-4 w-4 ${doc.flag?.flagged ? "text-[#1f6feb]" : "text-gray-600"}`} fill={doc.flag?.flagged ? "#1f6feb" : "none"} />
               <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
                 Flag Status
               </span>
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-white">
-                  {doc.flag.flagged ? "Flagged" : "Not Flagged"}
-                </p>
-                {renderCopyButton(doc.flag.flagged ? "Flagged" : "Not Flagged", "flag status")}
-              </div>
-              {doc.flag.flagged && doc.flag.reason && (
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm text-gray-300">
-                    <span className="text-gray-400">Reason: </span>
-                    {doc.flag.reason}
-                  </p>
-                  {renderCopyButton(doc.flag.reason, "flag reason")}
-                </div>
+            <div className="flex items-center gap-2">
+              {doc.flag?.flagged ? (
+                <Button
+                  onClick={handleUnflagDocument}
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-3 text-xs border-gray-600 text-gray-300 hover:bg-[#1d232a]"
+                >
+                  Unflag
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => setShowFlagModal(true)}
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-3 text-xs border-[#1f6feb] text-[#1f6feb] hover:bg-[#1f6feb]/10"
+                >
+                  Flag Document
+                </Button>
               )}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-white">
+                {doc.flag?.flagged ? "Flagged" : "Not Flagged"}
+              </p>
+              {renderCopyButton(doc.flag?.flagged ? "Flagged" : "Not Flagged", "flag status")}
+            </div>
+            {doc.flag?.flagged && doc.flag.reason && (
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm text-gray-300">
+                  <span className="text-gray-400">Reason: </span>
+                  {doc.flag.reason}
+                </p>
+                {renderCopyButton(doc.flag.reason, "flag reason")}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Flag Modal */}
+        {showFlagModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+            <div className="w-full max-w-md rounded-lg border border-gray-700 bg-[#161b22] p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-white">Flag Document</h3>
+                <button
+                  onClick={() => {
+                    setShowFlagModal(false);
+                    setFlagReason("");
+                  }}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-300">
+                  Reason for Flagging <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  value={flagReason}
+                  onChange={(e) => setFlagReason(e.target.value)}
+                  placeholder="Enter reason for flagging this document..."
+                  className="w-full min-h-[100px] px-3 py-2 bg-[#1d232a] border border-gray-700 rounded-md text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1f6feb] focus:border-[#1f6feb] resize-none"
+                  autoFocus
+                />
+              </div>
+              <div className="flex items-center gap-2 justify-end">
+                <Button
+                  onClick={() => {
+                    setShowFlagModal(false);
+                    setFlagReason("");
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="border-gray-600 text-gray-300 hover:bg-[#1d232a]"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleFlagDocument}
+                  size="sm"
+                  disabled={!flagReason.trim()}
+                  className="bg-[#1f6feb] hover:bg-[#1a5fd4] text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Flag Document
+                </Button>
+              </div>
             </div>
           </div>
         )}
@@ -255,6 +864,292 @@ export default function DocumentPreviewContent({ selectedDoc }) {
           <p className="text-xs text-green-400">Copied to clipboard.</p>
         )}
       </div>
+
+      {/* Action Buttons - Single Row with Tooltips */}
+      <div className="mt-6 pt-4 border-t border-gray-700">
+        <TooltipProvider>
+          <div className="flex flex-row gap-2">
+            {/* Mark as Seen/Unseen */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  onClick={handleToggleSeenStatus}
+                  size="icon"
+                  className={`h-10 w-10 cursor-pointer flex-1 ${
+                    doc.seen === true 
+                      ? "bg-blue-500 hover:bg-blue-600 text-white" 
+                      : "bg-[#1f6feb] hover:bg-[#1a5fd4] text-white"
+                  }`}
+                >
+                  <Check className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{doc.seen === true ? "Mark as Unseen" : "Mark as Seen"}</p>
+              </TooltipContent>
+            </Tooltip>
+
+            {/* Mark for Resend */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  onClick={handleToggleMarkForResend}
+                  size="icon"
+                  variant="outline"
+                  className={`h-10 w-10 cursor-pointer flex-1 ${
+                    doc.state === "markedForResend"
+                      ? "border-orange-500 text-orange-500 hover:bg-orange-500/10 hover:border-orange-400"
+                      : "border-gray-600 text-gray-300 hover:bg-gray-800 hover:border-gray-500"
+                  }`}
+                >
+                  {doc.state === "markedForResend" ? (
+                    <RotateCcw className="h-4 w-4" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{doc.state === "markedForResend" ? "Undo Mark for Resend" : "Mark for Resend"}</p>
+              </TooltipContent>
+            </Tooltip>
+
+            {/* Mark as Done */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  onClick={handleToggleCompleted}
+                  size="icon"
+                  variant="outline"
+                  className={`h-10 w-10 cursor-pointer flex-1 ${
+                    doc.completed === true
+                      ? "border-emerald-500 text-emerald-500 hover:bg-emerald-500/10 hover:border-emerald-400"
+                      : "border-gray-600 text-gray-300 hover:bg-gray-800 hover:border-gray-500"
+                  }`}
+                >
+                  {doc.completed === true ? (
+                    <Circle className="h-4 w-4" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{doc.completed === true ? "Undo Mark as Done" : "Mark as Done"}</p>
+              </TooltipContent>
+            </Tooltip>
+
+            {/* Delete Document */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  onClick={() => setShowDeleteModal(true)}
+                  size="icon"
+                  variant="outline"
+                  className="h-10 w-10 cursor-pointer flex-1 border-red-500/50 text-red-500 hover:bg-red-500/10 hover:border-red-500"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Delete Document</p>
+              </TooltipContent>
+            </Tooltip>
+
+            {/* Send Acknowledgement */}
+            <Popover open={showAcknowledgementDropdown} onOpenChange={setShowAcknowledgementDropdown}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <PopoverTrigger asChild>
+                    <Button 
+                      size="icon"
+                      variant="outline"
+                      className="h-10 w-10 cursor-pointer flex-1 border-gray-600 text-gray-300 hover:bg-gray-800 hover:border-gray-500"
+                    >
+                      <FileText className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Send Acknowledgement</p>
+                </TooltipContent>
+              </Tooltip>
+              <PopoverContent className="w-80 p-0" align="end">
+                <div className="max-h-[400px] overflow-y-auto">
+                  {/* Header */}
+                  <div className="p-3 border-b border-gray-700 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-white">Acknowledgements</h3>
+                    <Button
+                      onClick={handleAddAcknowledgement}
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs"
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      Add
+                    </Button>
+                  </div>
+
+                  {/* Loading State */}
+                  {isLoadingAcknowledgements && (
+                    <div className="p-4 text-center text-gray-400 text-sm">
+                      Loading templates...
+                    </div>
+                  )}
+
+                  {/* Templates List */}
+                  {!isLoadingAcknowledgements && acknowledgements.length === 0 && (
+                    <div className="p-4 text-center text-gray-400 text-sm">
+                      No acknowledgement templates found
+                    </div>
+                  )}
+
+                  {!isLoadingAcknowledgements && acknowledgements.length > 0 && (
+                    <div className="p-2">
+                      {acknowledgements.map((ack) => (
+                        <div
+                          key={ack.id}
+                          className="group p-2 rounded hover:bg-[#1d232a] transition-colors"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <button
+                              onClick={() => handleSendAcknowledgement(ack.data)}
+                              disabled={isSendingAcknowledgement}
+                              className="flex-1 text-left text-sm text-gray-300 hover:text-white transition-colors disabled:opacity-50"
+                            >
+                              <p className="line-clamp-2">{ack.data}</p>
+                            </button>
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button
+                                onClick={() => handleEditAcknowledgement(ack)}
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6 text-gray-400 hover:text-white"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                onClick={() => handleDeleteAcknowledgement(ack.id)}
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6 text-gray-400 hover:text-red-500"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+        </TooltipProvider>
+      </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-md rounded-lg border border-gray-700 bg-[#161b22] p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white">Delete Document</h3>
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="text-gray-400 hover:text-white"
+                disabled={isDeleting}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm text-gray-300">
+                Are you sure you want to delete this document? This action cannot be undone.
+              </p>
+              <p className="text-xs text-gray-400">
+                The document will be marked as deleted and removed from the list.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 justify-end">
+              <Button
+                onClick={() => setShowDeleteModal(false)}
+                variant="outline"
+                size="sm"
+                className="border-gray-600 text-gray-300 hover:bg-[#1d232a]"
+                disabled={isDeleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleDeleteDocument}
+                size="sm"
+                disabled={isDeleting}
+                className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? "Deleting..." : "Delete"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit Acknowledgement Modal */}
+      {showAddAcknowledgementModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-md rounded-lg border border-gray-700 bg-[#161b22] p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white">
+                {editingAcknowledgement ? "Edit Acknowledgement" : "Add Acknowledgement Template"}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowAddAcknowledgementModal(false);
+                  setEditingAcknowledgement(null);
+                  setAcknowledgementText("");
+                }}
+                className="text-gray-400 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-300">
+                Acknowledgement Text <span className="text-red-400">*</span>
+              </label>
+              <textarea
+                value={acknowledgementText}
+                onChange={(e) => setAcknowledgementText(e.target.value)}
+                placeholder="Enter acknowledgement text..."
+                className="w-full min-h-[100px] px-3 py-2 bg-[#1d232a] border border-gray-700 rounded-md text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1f6feb] focus:border-[#1f6feb] resize-none"
+                autoFocus
+              />
+            </div>
+            <div className="flex items-center gap-2 justify-end">
+              <Button
+                onClick={() => {
+                  setShowAddAcknowledgementModal(false);
+                  setEditingAcknowledgement(null);
+                  setAcknowledgementText("");
+                }}
+                variant="outline"
+                size="sm"
+                className="border-gray-600 text-gray-300 hover:bg-[#1d232a]"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={editingAcknowledgement ? handleUpdateAcknowledgement : handleCreateAcknowledgement}
+                size="sm"
+                disabled={!acknowledgementText.trim()}
+                className="bg-[#1f6feb] hover:bg-[#1a5fd4] text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {editingAcknowledgement ? "Update" : "Create"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Search,
   Phone,
@@ -75,6 +76,7 @@ const initialFormState = {
 };
 
 export default function Drivers() {
+  const navigate = useNavigate();
   const [drivers, setDrivers] = useState([]);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -291,6 +293,33 @@ export default function Drivers() {
           : driver
       )
     );
+  }
+
+  // Helper function to get user ID from driver object
+  function getUserId(driver) {
+    if (!driver) return null;
+    return (
+      driver.userid ??
+      driver.userId ??
+      driver.contactId ??
+      driver.contactid ??
+      driver.uid ??
+      driver.id ??
+      null
+    );
+  }
+
+  // Navigate to chat page with driver's user ID
+  function handleChatWithDriver() {
+    if (!selectedDriver) return;
+    
+    const userId = getUserId(selectedDriver);
+    if (!userId) {
+      console.error("Cannot navigate to chat: Driver user ID not found");
+      return;
+    }
+    
+    navigate(`/chat?userid=${userId}`);
   }
 
   function openModal(type) {
@@ -791,6 +820,7 @@ export default function Drivers() {
                 <div className="flex flex-wrap gap-3">
                   <button
                     type="button"
+                    onClick={handleChatWithDriver}
                     className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-500"
                   >
                     <MessageCircle className="h-4 w-4" />

@@ -117,6 +117,19 @@ export const fetchDocumentByIdRoute = (documentId, type) => {
   return `${baseUrl}?${params.toString()}`;
 };
 
+// Update document route
+export const updateDocumentRoute = `${baseBackendUrl}/updateDocument`;
+
+// Change document type route
+export const changeDocumentTypeRoute = `${baseBackendUrl}/changedocumenttype`;
+
+// Acknowledgement routes
+export const fetchAcknowledgementsRoute = `${baseBackendUrl}/fetchchatacknowledgement`;
+export const createAcknowledgementRoute = `${baseBackendUrl}/createchatacknowledgement`;
+export const updateAcknowledgementRoute = `${baseBackendUrl}/updatechatacknowledgement`;
+export const deleteAcknowledgementRoute = `${baseBackendUrl}/deletechatacknowledgement`;
+export const sendPushNotificationRoute = `${baseBackendUrl}/sendpushnotification`;
+
 // Maintenance chat routes
 export const maintenanceFetchUsersRoute = `${baseBackendUrl}/fetchusers`;
 export const maintenanceFetchChatHistoryRoute = (userid) => `${baseBackendUrl}/fetchchathistory?userid=${userid}`;

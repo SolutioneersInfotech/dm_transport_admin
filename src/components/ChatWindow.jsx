@@ -185,7 +185,7 @@
 //   );
 // }
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import {
   subscribeMessages as defaultSubscribeMessages,
   sendMessage as defaultSendMessage,
@@ -238,6 +238,8 @@ export default function ChatWindow({ driver, chatApi }) {
   })();
 
   const bottomRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+  const shouldScrollToBottomRef = useRef(true);
 
   const {
     subscribeMessages,
@@ -273,11 +275,13 @@ export default function ChatWindow({ driver, chatApi }) {
       });
     }
 
+    // Reset scroll flag when driver changes
+    shouldScrollToBottomRef.current = true;
+
     const unsubscribe = subscribeMessages(driverId, (nextMessages) => {
       console.log(nextMessages);
       setMessages(nextMessages || []);
       setLoading(false);
-      scrollToBottom();
       
       // Mark messages as seen after loading
       if (markMessagesAsSeen) {
@@ -294,6 +298,7 @@ export default function ChatWindow({ driver, chatApi }) {
     };
   }, [driverId, subscribeMessages, markMessagesAsSeen]);
 
+  // Focus input when driver changes
   useEffect(() => {
     if (!driverId) return;
     requestAnimationFrame(() => {
@@ -301,11 +306,45 @@ export default function ChatWindow({ driver, chatApi }) {
     });
   }, [driverId]);
 
-  function scrollToBottom(behavior = "auto") {
+  // Robust scroll to bottom function with multiple attempts
+  const scrollToBottom = useCallback((behavior = "auto") => {
+    // Use multiple attempts to ensure scroll happens after DOM updates
+    const scroll = () => {
+      if (bottomRef.current && messagesContainerRef.current) {
+        const container = messagesContainerRef.current;
+        const bottom = bottomRef.current;
+        
+        // Method 1: Scroll container to bottom (most reliable)
+        container.scrollTop = container.scrollHeight;
+        
+        // Method 2: Scroll into view as fallback
+        setTimeout(() => {
+          bottom.scrollIntoView({ behavior, block: "end" });
+        }, 50);
+      }
+    };
+    
+    // Try immediately
     requestAnimationFrame(() => {
-      bottomRef.current?.scrollIntoView({ behavior, block: "end" });
+      scroll();
+      // Try again after a short delay to ensure DOM is fully rendered
+      setTimeout(scroll, 100);
+      setTimeout(scroll, 300);
     });
-  }
+  }, []);
+
+  // Scroll to bottom when messages change (after initial load or new messages)
+  useEffect(() => {
+    if (messages.length > 0 && shouldScrollToBottomRef.current) {
+      // Use a longer delay to ensure all messages are rendered
+      const timeoutId = setTimeout(() => {
+        scrollToBottom("auto");
+        shouldScrollToBottomRef.current = false; // Only auto-scroll on initial load
+      }, 200);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [messages.length, driverId, scrollToBottom]);
 
   function toggleSelect(msgId) {
     setSelected((prev) =>
@@ -328,9 +367,14 @@ export default function ChatWindow({ driver, chatApi }) {
     };
 
     setMessages((prev) => [...prev, tempMsg]);
-    scrollToBottom();
     setText("");
+    
+    // Refocus input for better UX (allows continuous typing)
     inputRef.current?.focus();
+    
+    // Always scroll smoothly when sending a message to show the new message
+    shouldScrollToBottomRef.current = true;
+    setTimeout(() => scrollToBottom("smooth"), 100);
 
     await sendMessage(driverId, text);
   }
@@ -408,7 +452,10 @@ export default function ChatWindow({ driver, chatApi }) {
       </div>
 
       {/* ================= MESSAGE AREA ================= */}
-      <div className="flex-1 overflow-y-auto chat-list-scroll p-4 space-y-6 bg-[#0d1117]">
+      <div 
+        ref={messagesContainerRef}
+        className="flex-1 overflow-y-auto chat-list-scroll p-4 space-y-6 bg-[#0d1117]"
+      >
         {Object.keys(grouped).length === 0 && (
           <p className="text-center text-gray-500 text-sm mt-6">
             No messages yet

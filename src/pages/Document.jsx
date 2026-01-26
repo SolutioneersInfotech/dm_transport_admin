@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { format as formatDate } from "date-fns";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
-import { fetchDocuments, fetchMoreDocuments, resetPagination } from "../store/slices/documentsSlice";
+import { fetchDocuments, fetchMoreDocuments, resetPagination, updateDocument } from "../store/slices/documentsSlice";
 import DocumentPreviewContent from "../components/DocumentPreviewContent";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -72,6 +72,9 @@ export default function Documents() {
   const [selectedDocIds, setSelectedDocIds] = useState(new Set());
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewWidth, setPreviewWidth] = useState(480);
+  const [isMarkingAsSeen, setIsMarkingAsSeen] = useState(false);
+  const [showFlagModal, setShowFlagModal] = useState(false);
+  const [flagReason, setFlagReason] = useState("");
   const observerTarget = useRef(null);
   const isResizingRef = useRef(false);
   const layoutRef = useRef(null);
@@ -84,6 +87,24 @@ export default function Documents() {
   }));
 
   const [selectedFilters, setSelectedFilters] = useState([]); // Array of filter values
+
+  // Sync selectedDoc with Redux state when document is updated
+  useEffect(() => {
+    if (selectedDoc?.id) {
+      const updatedDoc = allDocuments.find((doc) => doc.id === selectedDoc.id);
+      if (updatedDoc && (
+        updatedDoc.seen !== selectedDoc.seen || 
+        JSON.stringify(updatedDoc.flag) !== JSON.stringify(selectedDoc.flag) ||
+        updatedDoc.state !== selectedDoc.state ||
+        updatedDoc.completed !== selectedDoc.completed ||
+        updatedDoc.type !== selectedDoc.type ||
+        updatedDoc.document_url !== selectedDoc.document_url ||
+        updatedDoc.acknowledgement !== selectedDoc.acknowledgement
+      )) {
+        setSelectedDoc(updatedDoc);
+      }
+    }
+  }, [allDocuments, selectedDoc]);
 
   useEffect(() => {
     if (!selectedDoc) {
@@ -923,7 +944,18 @@ export default function Documents() {
               </button>
               {/* Preview Content */}
               <div className="document-preview-scroll flex-1 overflow-y-auto p-4">
-                <DocumentPreviewContent selectedDoc={selectedDoc} />
+                <DocumentPreviewContent 
+                  selectedDoc={selectedDoc} 
+                  onDocUpdate={(updatedDoc) => {
+                    if (updatedDoc === null) {
+                      // Document was deleted, close preview
+                      setSelectedDoc(null);
+                      setIsPreviewOpen(false);
+                    } else {
+                      setSelectedDoc(updatedDoc);
+                    }
+                  }}
+                />
               </div>
             </div>
           )}
@@ -943,8 +975,23 @@ export default function Documents() {
               </div>
             </DrawerHeader>
             <div className="document-preview-scroll overflow-y-auto p-4">
-              {selectedDoc && <DocumentPreviewContent selectedDoc={selectedDoc} />}
+              {selectedDoc && (
+                <DocumentPreviewContent 
+                  selectedDoc={selectedDoc} 
+                  onDocUpdate={(updatedDoc) => {
+                    if (updatedDoc === null) {
+                      // Document was deleted, close preview
+                      setSelectedDoc(null);
+                    } else {
+                      setSelectedDoc(updatedDoc);
+                    }
+                  }}
+                />
+              )}
             </div>
+            
+            {/* Mark document as seen/unseen - Toggle functionality - Mobile */}
+            
           </DrawerContent>
         </Drawer>
       )}

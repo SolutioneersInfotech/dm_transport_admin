@@ -1,5 +1,6 @@
 import "./App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Toaster } from "sonner";
 import { AuthProvider } from "./context/AuthContext";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -35,6 +36,7 @@ function App() {
           {/* 404 - Catch all route */}
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        <Toaster position="top-right" richColors />
       </BrowserRouter>
     </AuthProvider>
   );
