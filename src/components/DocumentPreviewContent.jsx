@@ -646,15 +646,6 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                 )}
               </div>
               <div className="flex items-start gap-2">
-                <button
-                  type="button"
-                  onClick={handleChatWithDriver}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded border border-transparent text-[#1f6feb] transition-colors hover:border-[#1f6feb]/40 hover:bg-[#1f6feb]/10 hover:text-[#1a5fd4] mt-0.5"
-                  aria-label="Chat with driver"
-                  title="Chat with driver"
-                >
-                  <MessageCircle className="h-4 w-4" />
-                </button>
                 <div className="flex flex-col items-end gap-1">
                   {renderCopyButton(doc.driver_name || "Unknown", "driver name")}
                   {doc.driver_email && renderCopyButton(doc.driver_email, "driver email")}
@@ -936,6 +927,24 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
               </TooltipTrigger>
               <TooltipContent>
                 <p>{doc.completed === true ? "Undo Mark as Done" : "Mark as Done"}</p>
+              </TooltipContent>
+            </Tooltip>
+
+            {/* Chat with Driver */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={handleChatWithDriver}
+                  size="icon"
+                  variant="outline"
+                  className="h-10 w-10 cursor-pointer flex-1 border-[#1f6feb]/50 text-[#1f6feb] bg-[#111827] hover:bg-[#1f6feb]/10 hover:border-[#1f6feb]"
+                  aria-label="Chat with driver"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Chat with driver</p>
               </TooltipContent>
             </Tooltip>
 
