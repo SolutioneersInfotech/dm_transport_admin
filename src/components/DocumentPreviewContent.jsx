@@ -653,7 +653,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
             Uploaded By
           </span>
           <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3 min-w-0">
+            <div className="flex items-start gap-3 min-w-0 flex-1">
               <img
                 src={driverImage}
                 alt={driverName || "Driver profile"}
@@ -662,7 +662,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   e.currentTarget.src = "/default-user.png";
                 }}
               />
-              <div className="min-w-0 text-right">
+              <div className="min-w-0 text-right flex flex-col items-end">
                 <p className="text-sm font-semibold text-white truncate">
                   {driverName}
                 </p>
@@ -779,54 +779,54 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
           </div>
         )}
 
+        <div className="pt-4 border-t border-gray-700">
+          <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
+            Type
+          </span>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <Select
+                value={doc.type || ""}
+                onValueChange={handleChangeDocumentType}
+                disabled={isChangingType}
+              >
+                {({ value, onValueChange, open, setOpen, disabled }) => (
+                  <>
+                    <SelectTrigger className="w-full" disabled={disabled}>
+                      <span className="truncate">
+                        {isChangingType ? "Changing..." : getCurrentTypeLabel()}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.keys(FILTER_MAP).map((label) => {
+                        const typeValue = FILTER_MAP[label];
+                        const isSelected = value === typeValue;
+                        return (
+                          <SelectItem
+                            key={typeValue}
+                            value={typeValue}
+                            selected={isSelected}
+                            onSelect={(val) => {
+                              handleChangeDocumentType(val);
+                              setOpen(false);
+                            }}
+                          >
+                            {label}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </>
+                )}
+              </Select>
+            </div>
+            {doc.type && renderCopyButton(doc.type, "type")}
+          </div>
+        </div>
+
         {copiedValue && (
           <p className="text-xs text-green-400">Copied to clipboard.</p>
         )}
-      </div>
-
-      <div className="space-y-1 p-4 rounded-lg border border-gray-700 bg-[#161b22]">
-        <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
-          Type
-        </span>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <Select
-              value={doc.type || ""}
-              onValueChange={handleChangeDocumentType}
-              disabled={isChangingType}
-            >
-              {({ value, onValueChange, open, setOpen, disabled }) => (
-                <>
-                  <SelectTrigger className="w-full" disabled={disabled}>
-                    <span className="truncate">
-                      {isChangingType ? "Changing..." : getCurrentTypeLabel()}
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.keys(FILTER_MAP).map((label) => {
-                      const typeValue = FILTER_MAP[label];
-                      const isSelected = value === typeValue;
-                      return (
-                        <SelectItem
-                          key={typeValue}
-                          value={typeValue}
-                          selected={isSelected}
-                          onSelect={(val) => {
-                            handleChangeDocumentType(val);
-                            setOpen(false);
-                          }}
-                        >
-                          {label}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </>
-              )}
-            </Select>
-          </div>
-          {doc.type && renderCopyButton(doc.type, "type")}
-        </div>
       </div>
 
       {/* Action Buttons - Single Row with Tooltips */}
