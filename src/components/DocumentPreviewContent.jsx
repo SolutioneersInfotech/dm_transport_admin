@@ -679,15 +679,6 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
               </div>
             </div>
             <div className="flex items-start gap-2">
-              <button
-                type="button"
-                onClick={handleChatWithDriver}
-                className="inline-flex h-7 w-7 items-center justify-center rounded border border-transparent text-[#1f6feb] transition-colors hover:border-[#1f6feb]/40 hover:bg-[#1f6feb]/10 hover:text-[#1a5fd4] mt-0.5"
-                aria-label="Chat with driver"
-                title="Chat with driver"
-              >
-                <MessageCircle className="h-4 w-4" />
-              </button>
               <div className="flex flex-col items-end gap-1">
                 {renderCopyButton(driverName, "driver name")}
                 {driverEmail && renderCopyButton(driverEmail, "driver email")}
@@ -697,51 +688,18 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="space-y-1 flex-1 min-w-0">
-            <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
-              Type
-            </span>
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex-1 min-w-0">
-                <Select
-                  value={doc.type || ""}
-                  onValueChange={handleChangeDocumentType}
-                  disabled={isChangingType}
-                >
-                  {({ value, onValueChange, open, setOpen, disabled }) => (
-                    <>
-                      <SelectTrigger className="w-full" disabled={disabled}>
-                        <span className="truncate">
-                          {isChangingType ? "Changing..." : getCurrentTypeLabel()}
-                        </span>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.keys(FILTER_MAP).map((label) => {
-                          const typeValue = FILTER_MAP[label];
-                          const isSelected = value === typeValue;
-                          return (
-                            <SelectItem
-                              key={typeValue}
-                              value={typeValue}
-                              selected={isSelected}
-                              onSelect={(val) => {
-                                handleChangeDocumentType(val);
-                                setOpen(false);
-                              }}
-                            >
-                              {label}
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </>
-                  )}
-                </Select>
-              </div>
-              {doc.type && renderCopyButton(doc.type, "type")}
-            </div>
-          </div>
+        <div className="space-y-1">
+          <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
+            Chat
+          </span>
+          <button
+            type="button"
+            onClick={handleChatWithDriver}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-[#1f6feb]/40 bg-[#1f6feb]/10 px-3 py-2 text-sm font-medium text-[#1f6feb] transition-colors hover:border-[#1f6feb]/70 hover:bg-[#1f6feb]/20 hover:text-[#1a5fd4]"
+          >
+            <MessageCircle className="h-4 w-4" />
+            Chat with Driver
+          </button>
         </div>
 
         {/* Flag Modal */}
@@ -824,6 +782,51 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
         {copiedValue && (
           <p className="text-xs text-green-400">Copied to clipboard.</p>
         )}
+      </div>
+
+      <div className="space-y-1 p-4 rounded-lg border border-gray-700 bg-[#161b22]">
+        <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
+          Type
+        </span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <Select
+              value={doc.type || ""}
+              onValueChange={handleChangeDocumentType}
+              disabled={isChangingType}
+            >
+              {({ value, onValueChange, open, setOpen, disabled }) => (
+                <>
+                  <SelectTrigger className="w-full" disabled={disabled}>
+                    <span className="truncate">
+                      {isChangingType ? "Changing..." : getCurrentTypeLabel()}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.keys(FILTER_MAP).map((label) => {
+                      const typeValue = FILTER_MAP[label];
+                      const isSelected = value === typeValue;
+                      return (
+                        <SelectItem
+                          key={typeValue}
+                          value={typeValue}
+                          selected={isSelected}
+                          onSelect={(val) => {
+                            handleChangeDocumentType(val);
+                            setOpen(false);
+                          }}
+                        >
+                          {label}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </>
+              )}
+            </Select>
+          </div>
+          {doc.type && renderCopyButton(doc.type, "type")}
+        </div>
       </div>
 
       {/* Action Buttons - Single Row with Tooltips */}
