@@ -645,11 +645,11 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   </p>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-start gap-2">
                 <button
                   type="button"
                   onClick={handleChatWithDriver}
-                  className="text-[#1f6feb] hover:text-[#1a5fd4] transition-colors p-1.5 rounded hover:bg-[#1f6feb]/10"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded border border-transparent text-[#1f6feb] transition-colors hover:border-[#1f6feb]/40 hover:bg-[#1f6feb]/10 hover:text-[#1a5fd4] mt-0.5"
                   aria-label="Chat with driver"
                   title="Chat with driver"
                 >
@@ -748,7 +748,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   onClick={handleUnflagDocument}
                   variant="outline"
                   size="sm"
-                  className="h-7 px-3 text-xs border-gray-600 text-gray-300 hover:bg-[#1d232a]"
+                  className="h-8 px-3 text-xs border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a]"
                 >
                   Unflag
                 </Button>
@@ -757,7 +757,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   onClick={() => setShowFlagModal(true)}
                   variant="outline"
                   size="sm"
-                  className="h-7 px-3 text-xs border-[#1f6feb] text-[#1f6feb] hover:bg-[#1f6feb]/10"
+                  className="h-8 px-3 text-xs border-[#1f6feb] text-[#1f6feb] bg-[#111827] hover:bg-[#1f6feb]/10"
                 >
                   Flag Document
                 </Button>
@@ -898,8 +898,8 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   variant="outline"
                   className={`h-10 w-10 cursor-pointer flex-1 ${
                     doc.state === "markedForResend"
-                      ? "border-orange-500 text-orange-500 hover:bg-orange-500/10 hover:border-orange-400"
-                      : "border-gray-600 text-gray-300 hover:bg-gray-800 hover:border-gray-500"
+                      ? "border-orange-500 text-orange-500 bg-orange-500/10 hover:bg-orange-500/20 hover:border-orange-400"
+                      : "border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500"
                   }`}
                 >
                   {doc.state === "markedForResend" ? (
@@ -923,8 +923,8 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   variant="outline"
                   className={`h-10 w-10 cursor-pointer flex-1 ${
                     doc.completed === true
-                      ? "border-emerald-500 text-emerald-500 hover:bg-emerald-500/10 hover:border-emerald-400"
-                      : "border-gray-600 text-gray-300 hover:bg-gray-800 hover:border-gray-500"
+                      ? "border-emerald-500 text-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20 hover:border-emerald-400"
+                      : "border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500"
                   }`}
                 >
                   {doc.completed === true ? (
@@ -946,7 +946,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   onClick={() => setShowDeleteModal(true)}
                   size="icon"
                   variant="outline"
-                  className="h-10 w-10 cursor-pointer flex-1 border-red-500/50 text-red-500 hover:bg-red-500/10 hover:border-red-500"
+                  className="h-10 w-10 cursor-pointer flex-1 border-red-500/50 text-red-500 bg-[#111827] hover:bg-red-500/10 hover:border-red-500"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -964,7 +964,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                     <Button 
                       size="icon"
                       variant="outline"
-                      className="h-10 w-10 cursor-pointer flex-1 border-gray-600 text-gray-300 hover:bg-gray-800 hover:border-gray-500"
+                      className="h-10 w-10 cursor-pointer flex-1 border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500"
                     >
                       <FileText className="h-4 w-4" />
                     </Button>
