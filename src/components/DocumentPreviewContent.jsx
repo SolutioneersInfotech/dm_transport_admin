@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "./ui/button";
-import { Input } from "./ui/input";
 import { Copy, Flag, X, Check, MessageCircle, Send, RotateCcw, CheckCircle2, Circle, Trash2, FileText, Pencil, Plus } from "lucide-react";
 import { fetchDocumentByIdRoute } from "../utils/apiRoutes";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
@@ -274,7 +273,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
         u.driver_email?.toLowerCase() === email.toLowerCase()
       );
       if (userByEmail) {
-        return getUserId(userByEmail);
+        return userByEmail;
       }
     }
     
@@ -285,7 +284,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
         u.driver_name?.toLowerCase() === name.toLowerCase()
       );
       if (userByName) {
-        return getUserId(userByName);
+        return userByName;
       }
     }
     
@@ -302,7 +301,8 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     
     // If not found, try to find by email or name from users list
     if (!userId) {
-      userId = findDriverByEmailOrName(doc.driver_email, doc.driver_name);
+      const driverMatch = findDriverByEmailOrName(doc.driver_email, doc.driver_name);
+      userId = getUserId(driverMatch);
     }
     
     if (!userId) {
@@ -344,6 +344,14 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
       console.error("Failed to update mark for resend status:", error);
       toast.error("Failed to update mark for resend status. Please try again.");
     }
+  };
+
+  const handleToggleFlagStatus = () => {
+    if (doc.flag?.flagged) {
+      handleUnflagDocument();
+      return;
+    }
+    setShowFlagModal(true);
   };
 
   // Toggle completed status
@@ -567,6 +575,17 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     </button>
   );
 
+  const matchedDriver = findDriverByEmailOrName(doc.driver_email, doc.driver_name);
+  const driverName = doc.driver_name || matchedDriver?.name || matchedDriver?.driver_name || "Unknown";
+  const driverEmail = doc.driver_email || matchedDriver?.email || matchedDriver?.driver_email;
+  const driverPhone = doc.driver_phone || doc.driver_mobile || doc.phone || matchedDriver?.phone;
+  const driverImage =
+    doc.driver_image ||
+    matchedDriver?.profilePic ||
+    matchedDriver?.profilepic ||
+    matchedDriver?.image ||
+    "/default-user.png";
+
   return (
     <div className="space-y-6 text-white">
       {error && (
@@ -629,48 +648,51 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
       {/* Document Information */}
       <div className="space-y-4 p-4 rounded-lg border border-gray-700 bg-[#161b22]">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1">
-            <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
-              Uploaded By
-            </span>
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
+        <div className="space-y-1">
+          <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
+            Uploaded By
+          </span>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3 min-w-0">
+              <img
+                src={driverImage}
+                alt={driverName || "Driver profile"}
+                className="h-11 w-11 rounded-full object-cover border border-gray-700 flex-shrink-0"
+                onError={(e) => {
+                  e.currentTarget.src = "/default-user.png";
+                }}
+              />
+              <div className="min-w-0 text-right">
                 <p className="text-sm font-semibold text-white truncate">
-                  {doc.driver_name || "Unknown"}
+                  {driverName}
                 </p>
-                {doc.driver_email && (
+                {driverEmail && (
                   <p className="text-xs text-gray-300 truncate">
-                    {doc.driver_email}
+                    {driverEmail}
+                  </p>
+                )}
+                {driverPhone && (
+                  <p className="text-xs text-gray-300 truncate">
+                    {driverPhone}
                   </p>
                 )}
               </div>
-              <div className="flex items-start gap-2">
-                <button
-                  type="button"
-                  onClick={handleChatWithDriver}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded border border-transparent text-[#1f6feb] transition-colors hover:border-[#1f6feb]/40 hover:bg-[#1f6feb]/10 hover:text-[#1a5fd4] mt-0.5"
-                  aria-label="Chat with driver"
-                  title="Chat with driver"
-                >
-                  <MessageCircle className="h-4 w-4" />
-                </button>
-                <div className="flex flex-col items-end gap-1">
-                  {renderCopyButton(doc.driver_name || "Unknown", "driver name")}
-                  {doc.driver_email && renderCopyButton(doc.driver_email, "driver email")}
-                </div>
-              </div>
             </div>
-          </div>
-          <div className="space-y-1">
-            <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
-              Date
-            </span>
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-white">
-                {new Date(doc.date).toLocaleDateString()}
-              </p>
-              {renderCopyButton(new Date(doc.date).toLocaleDateString(), "date")}
+            <div className="flex items-start gap-2">
+              <button
+                type="button"
+                onClick={handleChatWithDriver}
+                className="inline-flex h-7 w-7 items-center justify-center rounded border border-transparent text-[#1f6feb] transition-colors hover:border-[#1f6feb]/40 hover:bg-[#1f6feb]/10 hover:text-[#1a5fd4] mt-0.5"
+                aria-label="Chat with driver"
+                title="Chat with driver"
+              >
+                <MessageCircle className="h-4 w-4" />
+              </button>
+              <div className="flex flex-col items-end gap-1">
+                {renderCopyButton(driverName, "driver name")}
+                {driverEmail && renderCopyButton(driverEmail, "driver email")}
+                {driverPhone && renderCopyButton(driverPhone, "driver phone")}
+              </div>
             </div>
           </div>
         </div>
@@ -719,67 +741,6 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
               </div>
               {doc.type && renderCopyButton(doc.type, "type")}
             </div>
-          </div>
-          <div className="space-y-1 flex-1 min-w-0">
-            <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
-              Category
-            </span>
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-white truncate">
-                {doc.category || doc.feature || "—"}
-              </p>
-              {renderCopyButton(doc.category || doc.feature || "—", "category")}
-            </div>
-          </div>
-        </div>
-
-        {/* Flag Information and Actions */}
-        <div className="pt-4 border-t border-gray-700">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Flag className={`h-4 w-4 ${doc.flag?.flagged ? "text-[#1f6feb]" : "text-gray-600"}`} fill={doc.flag?.flagged ? "#1f6feb" : "none"} />
-              <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
-                Flag Status
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              {doc.flag?.flagged ? (
-                <Button
-                  onClick={handleUnflagDocument}
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-3 text-xs border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a]"
-                >
-                  Unflag
-                </Button>
-              ) : (
-                <Button
-                  onClick={() => setShowFlagModal(true)}
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-3 text-xs border-[#1f6feb] text-[#1f6feb] bg-[#111827] hover:bg-[#1f6feb]/10"
-                >
-                  Flag Document
-                </Button>
-              )}
-            </div>
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-white">
-                {doc.flag?.flagged ? "Flagged" : "Not Flagged"}
-              </p>
-              {renderCopyButton(doc.flag?.flagged ? "Flagged" : "Not Flagged", "flag status")}
-            </div>
-            {doc.flag?.flagged && doc.flag.reason && (
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-sm text-gray-300">
-                  <span className="text-gray-400">Reason: </span>
-                  {doc.flag.reason}
-                </p>
-                {renderCopyButton(doc.flag.reason, "flag reason")}
-              </div>
-            )}
           </div>
         </div>
 
@@ -936,6 +897,31 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
               </TooltipTrigger>
               <TooltipContent>
                 <p>{doc.completed === true ? "Undo Mark as Done" : "Mark as Done"}</p>
+              </TooltipContent>
+            </Tooltip>
+
+            {/* Flag Document */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={handleToggleFlagStatus}
+                  size="icon"
+                  variant="outline"
+                  className={`h-10 w-10 cursor-pointer flex-1 ${
+                    doc.flag?.flagged
+                      ? "border-[#1f6feb] text-[#1f6feb] bg-[#1f6feb]/10 hover:bg-[#1f6feb]/20"
+                      : "border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500"
+                  }`}
+                  aria-label={doc.flag?.flagged ? "Unflag document" : "Flag document"}
+                >
+                  <Flag
+                    className="h-4 w-4"
+                    fill={doc.flag?.flagged ? "#1f6feb" : "none"}
+                  />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{doc.flag?.flagged ? "Unflag Document" : "Flag Document"}</p>
               </TooltipContent>
             </Tooltip>
 
