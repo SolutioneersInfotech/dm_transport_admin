@@ -898,8 +898,8 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   variant="outline"
                   className={`h-10 w-10 cursor-pointer flex-1 ${
                     doc.state === "markedForResend"
-                      ? "border-orange-500 text-orange-500 hover:bg-orange-500/10 hover:border-orange-400"
-                      : "border-gray-600 text-gray-300 hover:bg-gray-800 hover:border-gray-500"
+                      ? "border-orange-500 text-orange-500 bg-orange-500/10 hover:bg-orange-500/20 hover:border-orange-400"
+                      : "border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500"
                   }`}
                 >
                   {doc.state === "markedForResend" ? (
@@ -923,8 +923,8 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   variant="outline"
                   className={`h-10 w-10 cursor-pointer flex-1 ${
                     doc.completed === true
-                      ? "border-emerald-500 text-emerald-500 hover:bg-emerald-500/10 hover:border-emerald-400"
-                      : "border-gray-600 text-gray-300 hover:bg-gray-800 hover:border-gray-500"
+                      ? "border-emerald-500 text-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20 hover:border-emerald-400"
+                      : "border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500"
                   }`}
                 >
                   {doc.completed === true ? (
@@ -946,7 +946,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   onClick={() => setShowDeleteModal(true)}
                   size="icon"
                   variant="outline"
-                  className="h-10 w-10 cursor-pointer flex-1 border-red-500/50 text-red-500 hover:bg-red-500/10 hover:border-red-500"
+                  className="h-10 w-10 cursor-pointer flex-1 border-red-500/50 text-red-500 bg-[#111827] hover:bg-red-500/10 hover:border-red-500"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -964,7 +964,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                     <Button 
                       size="icon"
                       variant="outline"
-                      className="h-10 w-10 cursor-pointer flex-1 border-gray-600 text-gray-300 hover:bg-gray-800 hover:border-gray-500"
+                      className="h-10 w-10 cursor-pointer flex-1 border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500"
                     >
                       <FileText className="h-4 w-4" />
                     </Button>
