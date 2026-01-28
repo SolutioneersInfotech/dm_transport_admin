@@ -827,7 +827,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
       </div>
 
       {/* Action Buttons - Single Row with Tooltips */}
-      <div className="mt-6 pt-4 border-t border-gray-700">
+      <div className="sticky bottom-0 z-20 -mx-4 mt-6 border-t border-gray-700 bg-[#161b22] pt-4 pb-4 px-4">
         <TooltipProvider>
           <div className="flex flex-row gap-2">
             {/* Mark as Seen/Unseen */}
