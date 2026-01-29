@@ -661,27 +661,29 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                 e.currentTarget.src = "/default-user.png";
               }}
             />
-            <div className="flex min-w-0 flex-1 items-start justify-end gap-2">
-              <div className="min-w-0 text-right flex flex-col items-end">
-                <p className="text-sm font-semibold text-white truncate">
+            <div className="flex min-w-0 flex-1 flex-col items-end gap-1 text-right">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold leading-none text-white truncate">
                   {driverName}
                 </p>
-                {driverEmail && (
-                  <p className="text-xs text-gray-300 truncate">
+                {renderCopyButton(driverName, "driver name")}
+              </div>
+              {driverEmail && (
+                <div className="flex items-center gap-2">
+                  <p className="text-xs leading-none text-gray-300 truncate">
                     {driverEmail}
                   </p>
-                )}
-                {driverPhone && (
-                  <p className="text-xs text-gray-300 truncate">
+                  {renderCopyButton(driverEmail, "driver email")}
+                </div>
+              )}
+              {driverPhone && (
+                <div className="flex items-center gap-2">
+                  <p className="text-xs leading-none text-gray-300 truncate">
                     {driverPhone}
                   </p>
-                )}
-              </div>
-              <div className="flex flex-col items-end gap-1">
-                {renderCopyButton(driverName, "driver name")}
-                {driverEmail && renderCopyButton(driverEmail, "driver email")}
-                {driverPhone && renderCopyButton(driverPhone, "driver phone")}
-              </div>
+                  {renderCopyButton(driverPhone, "driver phone")}
+                </div>
+              )}
             </div>
           </div>
         </div>
