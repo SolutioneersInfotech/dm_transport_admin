@@ -689,9 +689,6 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
         </div>
 
         <div className="space-y-1">
-          <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
-            Chat
-          </span>
           <button
             type="button"
             onClick={handleChatWithDriver}
