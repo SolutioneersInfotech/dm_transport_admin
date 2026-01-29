@@ -652,16 +652,16 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
           <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
             Uploaded By
           </span>
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3 min-w-0 flex-1">
-              <img
-                src={driverImage}
-                alt={driverName || "Driver profile"}
-                className="h-11 w-11 rounded-full object-cover border border-gray-700 flex-shrink-0"
-                onError={(e) => {
-                  e.currentTarget.src = "/default-user.png";
-                }}
-              />
+          <div className="flex items-start gap-3">
+            <img
+              src={driverImage}
+              alt={driverName || "Driver profile"}
+              className="h-11 w-11 rounded-full object-cover border border-gray-700 flex-shrink-0"
+              onError={(e) => {
+                e.currentTarget.src = "/default-user.png";
+              }}
+            />
+            <div className="flex min-w-0 flex-1 items-start justify-end gap-2">
               <div className="min-w-0 text-right flex flex-col items-end">
                 <p className="text-sm font-semibold text-white truncate">
                   {driverName}
@@ -677,8 +677,6 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   </p>
                 )}
               </div>
-            </div>
-            <div className="flex items-start gap-2">
               <div className="flex flex-col items-end gap-1">
                 {renderCopyButton(driverName, "driver name")}
                 {driverEmail && renderCopyButton(driverEmail, "driver email")}
