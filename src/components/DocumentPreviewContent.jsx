@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "./ui/button";
-import { Copy, Flag, X, Check, MessageCircle, Send, RotateCcw, CheckCircle2, Circle, Trash2, FileText, Pencil, Plus } from "lucide-react";
+import { Copy, Flag, X, Check, MessageCircle, Send, RotateCcw, CheckCircle2, Circle, Trash2, FileText, Pencil, Plus, Download } from "lucide-react";
 import { fetchDocumentByIdRoute } from "../utils/apiRoutes";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { updateDocument, deleteDocumentThunk, changeDocumentType } from "../store/slices/documentsSlice";
@@ -53,6 +53,49 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   const [isLoadingAcknowledgements, setIsLoadingAcknowledgements] = useState(false);
   const [isSendingAcknowledgement, setIsSendingAcknowledgement] = useState(false);
   const [isPdfLoading, setIsPdfLoading] = useState(true);
+  const [docSizeMb, setDocSizeMb] = useState(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  // Format date for In time / Out time display
+  const formatDateTime = (value) => {
+    if (value == null || value === "") return "—";
+    try {
+      const d = typeof value === "string" ? new Date(value) : value;
+      return isNaN(d.getTime()) ? "—" : d.toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" });
+    } catch {
+      return "—";
+    }
+  };
+
+  // Fetch document size via HEAD request (when doc URL is available)
+  const docUrl = fullDoc?.document_url || selectedDoc?.document_url;
+  useEffect(() => {
+    if (!docUrl) {
+      setDocSizeMb(null);
+      return;
+    }
+    let cancelled = false;
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const res = await fetch(docUrl, { method: "HEAD", signal: controller.signal });
+        if (cancelled) return;
+        const len = res.headers.get("Content-Length");
+        if (len != null) {
+          const bytes = parseInt(len, 10);
+          if (!isNaN(bytes)) setDocSizeMb((bytes / (1024 * 1024)).toFixed(2));
+        } else {
+          setDocSizeMb(null);
+        }
+      } catch {
+        if (!cancelled) setDocSizeMb(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [docUrl]);
 
   useEffect(() => {
     if (!selectedDoc?.id) return;
@@ -563,6 +606,29 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     setShowAddAcknowledgementModal(true);
   };
 
+  // Download document file
+  const handleDownload = async () => {
+    const doc = fullDoc || selectedDoc;
+    if (!doc?.document_url) return;
+    setIsDownloading(true);
+    try {
+      const res = await fetch(doc.document_url, { credentials: "omit" });
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      const ext = (doc.document_url?.split("?")[0]?.split(".").pop() || "file").toLowerCase();
+      a.download = `document-${doc.id || "download"}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast.success("Download started");
+    } catch (err) {
+      console.error(err);
+      toast.error("Download failed");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   const renderCopyButton = (value, label) => (
     <button
       type="button"
@@ -648,6 +714,43 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
       {/* Document Information */}
       <div className="space-y-4 p-4 rounded-lg border border-gray-700 bg-[#161b22]">
+        {/* In time, Out time, Size, Download */}
+        <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-center sm:gap-4 pb-4 border-b border-gray-700">
+          <div>
+            <span className="text-xs font-medium text-gray-400 uppercase tracking-wide block mb-0.5">In time</span>
+            <span className="text-sm text-white">{formatDateTime(doc.in_date_time)}</span>
+          </div>
+          <div>
+            <span className="text-xs font-medium text-gray-400 uppercase tracking-wide block mb-0.5">Out time</span>
+            <span className="text-sm text-white">{formatDateTime(doc.out_date_time)}</span>
+          </div>
+          <div>
+            <span className="text-xs font-medium text-gray-400 uppercase tracking-wide block mb-0.5">Size</span>
+            <span className="text-sm text-white">{docSizeMb != null ? `${docSizeMb} MB` : "—"}</span>
+          </div>
+          <div className="flex items-end">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 border-gray-600 text-gray-300 hover:bg-[#1d232a] hover:text-white"
+                    onClick={handleDownload}
+                    disabled={isDownloading || !doc.document_url}
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Download document</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        </div>
+
         <div className="space-y-1">
           <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
             Uploaded By

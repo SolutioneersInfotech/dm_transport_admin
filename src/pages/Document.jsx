@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "../components/ui/table";
 import { Checkbox } from "../components/ui/checkbox";
-import { X, Search, Flag, ChevronDown, Check } from "lucide-react";
+import { X, Search, Flag, ChevronDown, Check, CheckCircle2 } from "lucide-react";
 import DocumentTableSkeleton from "../components/skeletons/DocumentTableSkeleton";
 import {
   Drawer,
@@ -25,6 +25,11 @@ import {
   DrawerTitle,
   DrawerClose,
 } from "../components/ui/drawer";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "../components/ui/popover";
 
 const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
 
@@ -162,6 +167,7 @@ export default function Documents() {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showFilterTypeDropdown, setShowFilterTypeDropdown] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+  const [driverPopupDoc, setDriverPopupDoc] = useState(null);
   const filterTypeDropdownRef = useRef(null);
 
   // Debounce search input
@@ -799,10 +805,15 @@ export default function Documents() {
                     {groupedDocuments[group].map((doc) => (
                       <TableRow
                         key={doc.id}
-                        className="border-gray-800 hover:bg-[#1d232a]/50 cursor-pointer transition-colors"
+                        className={`border-gray-800 hover:bg-[#1d232a]/50 cursor-pointer transition-colors ${
+                          selectedDoc?.id === doc.id ? "bg-[#1f6feb]/15 ring-1 ring-inset ring-[#1f6feb]/40" : ""
+                        }`}
                         onClick={() => {
                           setSelectedDoc(doc);
                           setIsPreviewOpen(true);
+                          if (doc.seen !== true) {
+                            dispatch(updateDocument({ document: doc, seen: true }));
+                          }
                         }}
                       >
                         <TableCell className="px-1 sm:px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
@@ -815,36 +826,77 @@ export default function Documents() {
                           />
                         </TableCell>
                         <TableCell className="px-1 sm:px-2 py-1.5">
-                          <div className="flex items-center gap-1 sm:gap-1.5">
-                            <span
-                              className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${doc.seen === false
-                                  ? "bg-blue-500"
-                                  : doc.seen === true
-                                    ? "bg-green-500"
-                                    : "bg-gray-500"
-                                }`}
-                            />
-                            <span className="text-[10px] sm:text-[11px] text-gray-400">
-                              {doc.seen === false ? "Unseen" : doc.seen === true ? "Seen" : "Unknown"}
-                            </span>
+                          <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
+                            <div className="flex items-center gap-1 sm:gap-1.5">
+                              <span
+                                className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full flex-shrink-0 ${doc.seen === false
+                                    ? "bg-blue-500"
+                                    : doc.seen === true
+                                      ? "bg-green-500"
+                                      : "bg-gray-500"
+                                  }`}
+                              />
+                              <span className="text-[10px] sm:text-[11px] text-gray-400">
+                                {doc.seen === false ? "Unseen" : doc.seen === true ? "Seen" : "Unknown"}
+                              </span>
+                            </div>
+                            {doc.completed === true && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] sm:text-[10px] text-emerald-400" title="Done">
+                                <CheckCircle2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0" />
+                                Done
+                              </span>
+                            )}
                           </div>
                         </TableCell>
-                        <TableCell className="px-1 sm:px-2 py-1.5">
-                          <div className="flex items-center gap-1.5 sm:gap-2">
-                            {doc.driver_image && (
-                              <img
-                                src={doc.driver_image}
-                                alt={doc.driver_name}
-                                className="w-5 h-5 sm:w-6 sm:h-6 rounded-full object-cover border border-gray-700"
-                                onError={(e) => {
-                                  e.target.style.display = "none";
+                        <TableCell className="px-1 sm:px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
+                          <Popover open={driverPopupDoc?.id === doc.id} onOpenChange={(open) => !open && setDriverPopupDoc(null)}>
+                            <PopoverTrigger asChild>
+                              <button
+                                type="button"
+                                className="flex items-center gap-1.5 sm:gap-2 w-full text-left rounded hover:bg-[#1d232a]/50 -m-1 p-1"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDriverPopupDoc(driverPopupDoc?.id === doc.id ? null : doc);
                                 }}
-                              />
-                            )}
-                            <span className="text-[10px] sm:text-xs font-medium text-white truncate max-w-[100px] sm:max-w-none">
-                              {doc.driver_name || "Unknown"}
-                            </span>
-                          </div>
+                              >
+                                {doc.driver_image && (
+                                  <img
+                                    src={doc.driver_image}
+                                    alt={doc.driver_name}
+                                    className="w-5 h-5 sm:w-6 sm:h-6 rounded-full object-cover border border-gray-700 flex-shrink-0"
+                                    onError={(e) => {
+                                      e.target.style.display = "none";
+                                    }}
+                                  />
+                                )}
+                                <span className="text-[10px] sm:text-xs font-medium text-white truncate max-w-[100px] sm:max-w-none">
+                                  {doc.driver_name || "Unknown"}
+                                </span>
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-72 p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                              <div className="p-4 space-y-3 border-b border-gray-700">
+                                <div className="flex items-center gap-3">
+                                  <img
+                                    src={doc.driver_image || "/default-user.png"}
+                                    alt={doc.driver_name}
+                                    className="w-14 h-14 rounded-full object-cover border border-gray-700"
+                                    onError={(e) => { e.target.src = "/default-user.png"; }}
+                                  />
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-semibold text-white truncate">{doc.driver_name || "Unknown"}</p>
+                                    {doc.driver_email && <p className="text-xs text-gray-400 truncate">{doc.driver_email}</p>}
+                                    {doc.userid && <p className="text-xs text-gray-500 truncate">ID: {doc.userid}</p>}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="p-3 space-y-2 text-xs text-gray-300">
+                                {doc.driver_email && <p><span className="text-gray-500">Email:</span> {doc.driver_email}</p>}
+                                {doc.category && <p><span className="text-gray-500">Category:</span> {doc.category}</p>}
+                                {doc.date && <p><span className="text-gray-500">Document date:</span> {new Date(doc.date).toLocaleString()}</p>}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
                         </TableCell>
                         <TableCell className="px-1 sm:px-2 py-1.5 hidden md:table-cell">
                           <div className="text-[10px] sm:text-xs text-gray-300">
