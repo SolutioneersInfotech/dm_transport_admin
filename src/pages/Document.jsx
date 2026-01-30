@@ -1098,7 +1098,8 @@ export default function Documents() {
                 <X className="h-4 w-4" />
               </button>
               {/* Preview Content */}
-              <div className="document-preview-scroll flex-1 overflow-y-auto p-4">
+              <div className="document-preview-scroll flex-1 overflow-y-auto p-0">
+                <div className="p-4">
                 <DocumentPreviewContent 
                   selectedDoc={selectedDoc} 
                   onDocUpdate={(updatedDoc) => {
@@ -1111,6 +1112,7 @@ export default function Documents() {
                     }
                   }}
                 />
+                </div>
               </div>
             </div>
           )}
