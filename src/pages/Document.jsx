@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "../components/ui/table";
 import { Checkbox } from "../components/ui/checkbox";
-import { X, Search, Flag, ChevronDown, Check, CheckCircle2 } from "lucide-react";
+import { X, Search, Flag, ChevronDown, Check, CheckCircle2, Copy } from "lucide-react";
 import DocumentTableSkeleton from "../components/skeletons/DocumentTableSkeleton";
 import {
   Drawer,
@@ -30,6 +30,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../components/ui/popover";
+import { toast } from "sonner";
 
 const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
 
@@ -178,6 +179,32 @@ export default function Documents() {
 
     return () => clearTimeout(timer);
   }, [search]);
+
+  const handleCopy = async (value, label) => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`Copied ${label}`);
+    } catch (copyError) {
+      console.error("Failed to copy value", copyError);
+      toast.error("Failed to copy to clipboard");
+    }
+  };
+
+  const renderCopyButton = (value, label) => (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        handleCopy(value, label);
+      }}
+      className="text-gray-500 hover:text-gray-200 transition-colors"
+      aria-label={`Copy ${label}`}
+      title={`Copy ${label}`}
+    >
+      <Copy className="h-3.5 w-3.5" />
+    </button>
+  );
 
 
   // Convert status filter to isSeen parameter
@@ -848,55 +875,89 @@ export default function Documents() {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="px-1 sm:px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
-                          <Popover open={driverPopupDoc?.id === doc.id} onOpenChange={(open) => !open && setDriverPopupDoc(null)}>
-                            <PopoverTrigger asChild>
-                              <button
-                                type="button"
-                                className="flex items-center gap-1.5 sm:gap-2 w-full text-left rounded hover:bg-[#1d232a]/50 -m-1 p-1"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setDriverPopupDoc(driverPopupDoc?.id === doc.id ? null : doc);
-                                }}
-                              >
-                                {doc.driver_image && (
-                                  <img
-                                    src={doc.driver_image}
-                                    alt={doc.driver_name}
-                                    className="w-5 h-5 sm:w-6 sm:h-6 rounded-full object-cover border border-gray-700 flex-shrink-0"
-                                    onError={(e) => {
-                                      e.target.style.display = "none";
-                                    }}
-                                  />
-                                )}
+                        <TableCell className="px-1 sm:px-2 py-1.5">
+                          {(() => {
+                            const driverName = doc.driver_name || "Unknown";
+                            const driverEmail = doc.driver_email;
+                            const driverPhone = doc.driver_phone || doc.driver_mobile || doc.phone;
+                            const driverImage = doc.driver_image || "/default-user.png";
+
+                            return (
+                              <div className="flex items-center gap-1.5 sm:gap-2">
+                                <Popover
+                                  open={driverPopupDoc?.id === doc.id}
+                                  onOpenChange={(open) => !open && setDriverPopupDoc(null)}
+                                >
+                                  <PopoverTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className="flex items-center rounded-full border border-gray-700 overflow-hidden"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDriverPopupDoc(driverPopupDoc?.id === doc.id ? null : doc);
+                                      }}
+                                      aria-label={`View ${driverName} contact details`}
+                                    >
+                                      <img
+                                        src={driverImage}
+                                        alt={driverName}
+                                        className="w-5 h-5 sm:w-6 sm:h-6 object-cover"
+                                        onError={(e) => {
+                                          e.currentTarget.src = "/default-user.png";
+                                        }}
+                                      />
+                                    </button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-72 p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                                    <div className="p-4 space-y-3 border-b border-gray-700">
+                                      <div className="flex items-center gap-3">
+                                        <img
+                                          src={driverImage}
+                                          alt={driverName}
+                                          className="w-14 h-14 rounded-full object-cover border border-gray-700"
+                                          onError={(e) => { e.currentTarget.src = "/default-user.png"; }}
+                                        />
+                                        <div className="min-w-0 flex-1">
+                                          <p className="text-sm font-semibold text-white truncate">{driverName}</p>
+                                          {driverEmail && <p className="text-xs text-gray-400 truncate">{driverEmail}</p>}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="p-3 space-y-2 text-xs text-gray-300">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <span className="text-gray-500">Driver Name</span>
+                                        <div className="flex items-center gap-2 min-w-0">
+                                          <span className="text-white truncate">{driverName}</span>
+                                          {renderCopyButton(driverName, "driver name")}
+                                        </div>
+                                      </div>
+                                      {driverEmail && (
+                                        <div className="flex items-center justify-between gap-3">
+                                          <span className="text-gray-500">Email</span>
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            <span className="text-white truncate">{driverEmail}</span>
+                                            {renderCopyButton(driverEmail, "driver email")}
+                                          </div>
+                                        </div>
+                                      )}
+                                      {driverPhone && (
+                                        <div className="flex items-center justify-between gap-3">
+                                          <span className="text-gray-500">Phone</span>
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            <span className="text-white truncate">{driverPhone}</span>
+                                            {renderCopyButton(driverPhone, "driver phone")}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
                                 <span className="text-[10px] sm:text-xs font-medium text-white truncate max-w-[100px] sm:max-w-none">
-                                  {doc.driver_name || "Unknown"}
+                                  {driverName}
                                 </span>
-                              </button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-72 p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
-                              <div className="p-4 space-y-3 border-b border-gray-700">
-                                <div className="flex items-center gap-3">
-                                  <img
-                                    src={doc.driver_image || "/default-user.png"}
-                                    alt={doc.driver_name}
-                                    className="w-14 h-14 rounded-full object-cover border border-gray-700"
-                                    onError={(e) => { e.target.src = "/default-user.png"; }}
-                                  />
-                                  <div className="min-w-0">
-                                    <p className="text-sm font-semibold text-white truncate">{doc.driver_name || "Unknown"}</p>
-                                    {doc.driver_email && <p className="text-xs text-gray-400 truncate">{doc.driver_email}</p>}
-                                    {doc.userid && <p className="text-xs text-gray-500 truncate">ID: {doc.userid}</p>}
-                                  </div>
-                                </div>
                               </div>
-                              <div className="p-3 space-y-2 text-xs text-gray-300">
-                                {doc.driver_email && <p><span className="text-gray-500">Email:</span> {doc.driver_email}</p>}
-                                {doc.category && <p><span className="text-gray-500">Category:</span> {doc.category}</p>}
-                                {doc.date && <p><span className="text-gray-500">Document date:</span> {new Date(doc.date).toLocaleString()}</p>}
-                              </div>
-                            </PopoverContent>
-                          </Popover>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="px-1 sm:px-2 py-1.5 hidden md:table-cell">
                           <div className="text-[10px] sm:text-xs text-gray-300">
