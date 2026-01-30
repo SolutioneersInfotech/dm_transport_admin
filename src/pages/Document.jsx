@@ -72,6 +72,7 @@ export default function Documents() {
     lastFetchParams,
     lastFetched,
   } = useAppSelector((state) => state.documents);
+  const { users } = useAppSelector((state) => state.users);
   const documentDropDownRef = useRef(null);
 
   const [selectedDoc, setSelectedDoc] = useState(null);
@@ -204,6 +205,37 @@ export default function Documents() {
     >
       <Copy className="h-3.5 w-3.5" />
     </button>
+  );
+
+  const findDriverByEmailOrName = useCallback(
+    (email, name) => {
+      if (!users?.length) return null;
+
+      if (email) {
+        const userByEmail = users.find(
+          (u) =>
+            u.email?.toLowerCase() === email.toLowerCase() ||
+            u.driver_email?.toLowerCase() === email.toLowerCase()
+        );
+        if (userByEmail) {
+          return userByEmail;
+        }
+      }
+
+      if (name) {
+        const userByName = users.find(
+          (u) =>
+            u.name?.toLowerCase() === name.toLowerCase() ||
+            u.driver_name?.toLowerCase() === name.toLowerCase()
+        );
+        if (userByName) {
+          return userByName;
+        }
+      }
+
+      return null;
+    },
+    [users]
   );
 
 
@@ -878,9 +910,19 @@ export default function Documents() {
                         <TableCell className="px-1 sm:px-2 py-1.5">
                           {(() => {
                             const driverName = doc.driver_name || "Unknown";
-                            const driverEmail = doc.driver_email;
-                            const driverPhone = doc.driver_phone || doc.driver_mobile || doc.phone;
-                            const driverImage = doc.driver_image || "/default-user.png";
+                            const matchedDriver = findDriverByEmailOrName(doc.driver_email, doc.driver_name);
+                            const driverEmail =
+                              doc.driver_email || matchedDriver?.email || matchedDriver?.driver_email;
+                            const driverPhone =
+                              doc.driver_phone ||
+                              doc.driver_mobile ||
+                              doc.phone ||
+                              matchedDriver?.phone;
+                            const driverImage =
+                              doc.driver_image ||
+                              matchedDriver?.profilePic ||
+                              matchedDriver?.image ||
+                              "/default-user.png";
 
                             return (
                               <div className="flex items-center gap-1.5 sm:gap-2">
