@@ -1092,7 +1092,7 @@ export default function Documents() {
                   setSelectedDoc(null);
                   setIsPreviewOpen(false);
                 }}
-                className="absolute top-3 right-5 text-gray-400 hover:text-white rounded p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                className="absolute top-3 right-5 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-700 bg-slate-900/90 text-slate-200 shadow-sm transition hover:bg-slate-700 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 aria-label="Close document preview"
               >
                 <X className="h-4 w-4" />
