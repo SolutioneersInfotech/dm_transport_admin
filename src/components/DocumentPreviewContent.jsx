@@ -60,7 +60,15 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   const formatDateTime = (value) => {
     if (value == null || value === "") return "—";
     try {
-      const d = typeof value === "string" ? new Date(value) : value;
+      if (value && typeof value.toDate === "function") {
+        const d = value.toDate();
+        return isNaN(d.getTime()) ? "—" : d.toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" });
+      }
+      if (value && typeof value.seconds === "number") {
+        const d = new Date(value.seconds * 1000);
+        return isNaN(d.getTime()) ? "—" : d.toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" });
+      }
+      const d = typeof value === "string" || typeof value === "number" ? new Date(value) : value;
       return isNaN(d.getTime()) ? "—" : d.toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" });
     } catch {
       return "—";
@@ -70,6 +78,11 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   // Fetch document size via HEAD request (when doc URL is available)
   const docUrl = fullDoc?.document_url || selectedDoc?.document_url;
   useEffect(() => {
+    const bytes = fullDoc?.file_size_bytes ?? selectedDoc?.file_size_bytes;
+    if (typeof bytes === "number" && !Number.isNaN(bytes)) {
+      setDocSizeMb((bytes / (1024 * 1024)).toFixed(2));
+      return;
+    }
     if (!docUrl) {
       setDocSizeMb(null);
       return;
@@ -82,20 +95,20 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
         if (cancelled) return;
         const len = res.headers.get("Content-Length");
         if (len != null) {
-          const bytes = parseInt(len, 10);
-          if (!isNaN(bytes)) setDocSizeMb((bytes / (1024 * 1024)).toFixed(2));
-        } else {
-          setDocSizeMb(null);
+          const parsedBytes = parseInt(len, 10);
+          if (!isNaN(parsedBytes)) setDocSizeMb((parsedBytes / (1024 * 1024)).toFixed(2));
         }
       } catch {
-        if (!cancelled) setDocSizeMb(null);
+        if (!cancelled) {
+          setDocSizeMb(null);
+        }
       }
     })();
     return () => {
       cancelled = true;
       controller.abort();
     };
-  }, [docUrl]);
+  }, [docUrl, fullDoc?.file_size_bytes, selectedDoc?.file_size_bytes]);
 
   useEffect(() => {
     if (!selectedDoc?.id) return;
@@ -166,6 +179,8 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   if (!selectedDoc) return null;
 
   const doc = fullDoc || selectedDoc;
+  const inVal = doc.in_date_time ?? doc.inTime ?? doc.in_time ?? doc.inDateTime;
+  const outVal = doc.out_date_time ?? doc.outTime ?? doc.out_time ?? doc.outDateTime;
   const url = doc.document_url;
   const cleanURL = url?.split("?")[0];
   const ext = cleanURL?.split(".").pop()?.toLowerCase();
@@ -717,11 +732,11 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
             <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
               <span className="font-medium text-gray-400 uppercase tracking-wide">In time:</span>
-              <span className="text-white">{formatDateTime(doc.in_date_time)}</span>
+              <span className="text-white">{formatDateTime(inVal)}</span>
             </div>
             <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
               <span className="font-medium text-gray-400 uppercase tracking-wide">Out time:</span>
-              <span className="text-white">{formatDateTime(doc.out_date_time)}</span>
+              <span className="text-white">{formatDateTime(outVal)}</span>
             </div>
           </div>
           <div className="flex items-center gap-x-3 sm:ml-auto">
