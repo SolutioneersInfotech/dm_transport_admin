@@ -816,6 +816,12 @@ export default function Documents() {
                   Status
                 </TableHead>
                 <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                  Category
+                </TableHead>
+                <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                  Flag
+                </TableHead>
+                <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   Uploaded By
                 </TableHead>
                 <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider hidden md:table-cell">
@@ -823,12 +829,6 @@ export default function Documents() {
                 </TableHead>
                 <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider hidden sm:table-cell">
                   Type
-                </TableHead>
-                <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                  Category
-                </TableHead>
-                <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                  Flag
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -906,6 +906,18 @@ export default function Documents() {
                               </span>
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell className="px-1 sm:px-2 py-1.5">
+                          <span className="inline-flex items-center px-1 sm:px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-medium bg-gray-800/50 text-gray-300 border border-gray-700">
+                            {doc.category || "—"}
+                          </span>
+                        </TableCell>
+                        <TableCell className="px-1 sm:px-2 py-1.5">
+                          {doc.flag?.flagged || doc.flagged || doc.isFlagged ? (
+                            <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-[#1f6feb]" fill="#1f6feb" />
+                          ) : (
+                            <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-gray-600" />
+                          )}
                         </TableCell>
                         <TableCell className="px-1 sm:px-2 py-1.5">
                           {(() => {
@@ -1011,18 +1023,6 @@ export default function Documents() {
                         </TableCell>
                         <TableCell className="px-1 sm:px-2 py-1.5 hidden sm:table-cell">
                           <span className="text-[10px] sm:text-xs text-gray-300 truncate max-w-[80px]">{doc.type || "—"}</span>
-                        </TableCell>
-                        <TableCell className="px-1 sm:px-2 py-1.5">
-                          <span className="inline-flex items-center px-1 sm:px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-medium bg-gray-800/50 text-gray-300 border border-gray-700">
-                            {doc.category || "—"}
-                          </span>
-                        </TableCell>
-                        <TableCell className="px-1 sm:px-2 py-1.5">
-                          {doc.flag?.flagged || doc.flagged || doc.isFlagged ? (
-                            <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-[#1f6feb]" fill="#1f6feb" />
-                          ) : (
-                            <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-gray-600" />
-                          )}
                         </TableCell>
                       </TableRow>
                     ))}
