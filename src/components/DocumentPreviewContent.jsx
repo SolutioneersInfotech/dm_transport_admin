@@ -661,74 +661,72 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
       )}
 
       {/* Preview Area */}
-      <div className="w-full rounded-lg overflow-hidden bg-black/20 border border-gray-700 min-h-[500px] flex items-center justify-center relative">
-        {isImage && (
-          <img
-            src={url}
-            alt="Document Preview"
-            className="max-h-full max-w-full object-contain"
-            onLoad={() => setIsPdfLoading(false)}
-            onError={() => setIsPdfLoading(false)}
-          />
-        )}
-
-        {isPDF && (
-          <>
-            {isPdfLoading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
-                <div className="text-center space-y-4">
-                  <div className="w-8 h-8 border-2 border-gray-600 border-t-blue-500 rounded-full animate-spin mx-auto" />
-                  <p className="text-sm text-gray-400">Loading PDF...</p>
-                </div>
-              </div>
-            )}
-            <iframe
-              src={`https://docs.google.com/viewer?url=${encodeURIComponent(
-                url
-              )}&embedded=true`}
-              className="w-full h-[600px] rounded"
-              title="PDF Preview"
+      <div className="w-full rounded-lg overflow-hidden bg-black/20 border border-gray-700">
+        <div className="min-h-[500px] flex items-center justify-center relative">
+          {isImage && (
+            <img
+              src={url}
+              alt="Document Preview"
+              className="max-h-full max-w-full object-contain"
               onLoad={() => setIsPdfLoading(false)}
               onError={() => setIsPdfLoading(false)}
             />
-          </>
-        )}
+          )}
 
-        {!isImage && !isPDF && (
-          <div className="text-center p-8 space-y-4">
-            <p className="text-sm text-gray-400">
-              Unable to preview this file type.
-            </p>
-            <Button asChild variant="outline" className="border-gray-600 text-white hover:bg-gray-800">
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Open File
-              </a>
-            </Button>
-          </div>
-        )}
-      </div>
+          {isPDF && (
+            <>
+              {isPdfLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+                  <div className="text-center space-y-4">
+                    <div className="w-8 h-8 border-2 border-gray-600 border-t-blue-500 rounded-full animate-spin mx-auto" />
+                    <p className="text-sm text-gray-400">Loading PDF...</p>
+                  </div>
+                </div>
+              )}
+              <iframe
+                src={`https://docs.google.com/viewer?url=${encodeURIComponent(
+                  url
+                )}&embedded=true`}
+                className="w-full h-[600px] rounded"
+                title="PDF Preview"
+                onLoad={() => setIsPdfLoading(false)}
+                onError={() => setIsPdfLoading(false)}
+              />
+            </>
+          )}
 
-      {/* Document Information */}
-      <div className="space-y-4 p-4 rounded-lg border border-gray-700 bg-[#161b22]">
-        {/* In time, Out time, Size, Download */}
-        <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-center sm:gap-4 pb-4 border-b border-gray-700">
+          {!isImage && !isPDF && (
+            <div className="text-center p-8 space-y-4">
+              <p className="text-sm text-gray-400">
+                Unable to preview this file type.
+              </p>
+              <Button asChild variant="outline" className="border-gray-600 text-white hover:bg-gray-800">
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open File
+                </a>
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 px-4 py-2 sm:grid-cols-4 sm:items-center border-t border-gray-700 bg-black/30">
           <div>
-            <span className="text-xs font-medium text-gray-400 uppercase tracking-wide block mb-0.5">In time</span>
-            <span className="text-sm text-white">{formatDateTime(doc.in_date_time)}</span>
+            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wide block leading-tight">In time</span>
+            <span className="text-xs text-white">{formatDateTime(doc.in_date_time)}</span>
           </div>
           <div>
-            <span className="text-xs font-medium text-gray-400 uppercase tracking-wide block mb-0.5">Out time</span>
-            <span className="text-sm text-white">{formatDateTime(doc.out_date_time)}</span>
+            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wide block leading-tight">Out time</span>
+            <span className="text-xs text-white">{formatDateTime(doc.out_date_time)}</span>
           </div>
           <div>
-            <span className="text-xs font-medium text-gray-400 uppercase tracking-wide block mb-0.5">Size</span>
-            <span className="text-sm text-white">{docSizeMb != null ? `${docSizeMb} MB` : "—"}</span>
+            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wide block leading-tight">Size</span>
+            <span className="text-xs text-white">{docSizeMb != null ? `${docSizeMb} MB` : "—"}</span>
           </div>
-          <div className="flex items-end">
+          <div className="flex items-center justify-start sm:justify-end">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -736,7 +734,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                     type="button"
                     variant="outline"
                     size="icon"
-                    className="h-9 w-9 border-gray-600 text-gray-300 hover:bg-[#1d232a] hover:text-white"
+                    className="h-8 w-8 border-gray-600 text-gray-300 hover:bg-[#1d232a] hover:text-white"
                     onClick={handleDownload}
                     disabled={isDownloading || !doc.document_url}
                   >
@@ -750,6 +748,10 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
             </TooltipProvider>
           </div>
         </div>
+      </div>
+
+      {/* Document Information */}
+      <div className="space-y-4 p-4 rounded-lg border border-gray-700 bg-[#161b22]">
 
         <div className="space-y-1">
           <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
