@@ -713,20 +713,20 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3 px-4 py-2 sm:grid-cols-4 sm:items-center border-t border-gray-700 bg-black/30">
-          <div>
-            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wide block leading-tight">In time</span>
-            <span className="text-xs text-white">{formatDateTime(doc.in_date_time)}</span>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2 border-t border-gray-700 bg-black/30">
+          <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
+            <span className="font-medium text-gray-400 uppercase tracking-wide">In time:</span>
+            <span className="text-white">{formatDateTime(doc.in_date_time)}</span>
           </div>
-          <div>
-            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wide block leading-tight">Out time</span>
-            <span className="text-xs text-white">{formatDateTime(doc.out_date_time)}</span>
+          <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
+            <span className="font-medium text-gray-400 uppercase tracking-wide">Out time:</span>
+            <span className="text-white">{formatDateTime(doc.out_date_time)}</span>
           </div>
-          <div>
-            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wide block leading-tight">Size</span>
-            <span className="text-xs text-white">{docSizeMb != null ? `${docSizeMb} MB` : "—"}</span>
+          <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
+            <span className="font-medium text-gray-400 uppercase tracking-wide">Size:</span>
+            <span className="text-white">{docSizeMb != null ? `${docSizeMb} MB` : "—"}</span>
           </div>
-          <div className="flex items-center justify-start sm:justify-end">
+          <div className="flex items-center justify-start sm:ml-auto">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -734,11 +734,11 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                     type="button"
                     variant="outline"
                     size="icon"
-                    className="h-8 w-8 border-gray-600 text-gray-300 hover:bg-[#1d232a] hover:text-white"
+                    className="h-7 w-7 border-gray-600 bg-transparent text-gray-400 hover:bg-[#1d232a] hover:text-white"
                     onClick={handleDownload}
                     disabled={isDownloading || !doc.document_url}
                   >
-                    <Download className="h-4 w-4" />
+                    <Download className="h-3.5 w-3.5" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
