@@ -713,20 +713,22 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2 border-t border-gray-700 bg-black/30">
-          <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
-            <span className="font-medium text-gray-400 uppercase tracking-wide">In time:</span>
-            <span className="text-white">{formatDateTime(doc.in_date_time)}</span>
+        <div className="flex flex-wrap items-center gap-y-2 px-4 py-2 border-t border-gray-700 bg-black/30">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
+              <span className="font-medium text-gray-400 uppercase tracking-wide">In time:</span>
+              <span className="text-white">{formatDateTime(doc.in_date_time)}</span>
+            </div>
+            <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
+              <span className="font-medium text-gray-400 uppercase tracking-wide">Out time:</span>
+              <span className="text-white">{formatDateTime(doc.out_date_time)}</span>
+            </div>
           </div>
-          <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
-            <span className="font-medium text-gray-400 uppercase tracking-wide">Out time:</span>
-            <span className="text-white">{formatDateTime(doc.out_date_time)}</span>
-          </div>
-          <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
-            <span className="font-medium text-gray-400 uppercase tracking-wide">Size:</span>
-            <span className="text-white">{docSizeMb != null ? `${docSizeMb} MB` : "—"}</span>
-          </div>
-          <div className="flex items-center justify-start sm:ml-auto">
+          <div className="flex items-center gap-x-3 sm:ml-auto">
+            <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
+              <span className="font-medium text-gray-400 uppercase tracking-wide">Size:</span>
+              <span className="text-white">{docSizeMb != null ? `${docSizeMb} MB` : "—"}</span>
+            </div>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
