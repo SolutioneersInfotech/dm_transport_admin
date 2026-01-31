@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
 import ChatList from "../components/ChatList";
 import ChatWindow from "../components/ChatWindow";
 import * as chatAPI from "../services/chatAPI";
@@ -89,14 +90,32 @@ const Chat = () => {
       </div>
 
       {/* RIGHT CHAT WINDOW (TAKES REST SPACE) */}
-      <div className="flex-1 h-full overflow-hidden">
-        {selectedDriver ? (
-          <ChatWindow driver={selectedDriver} chatApi={chatAPI} />
-        ) : (
-          <div className="flex justify-center items-center h-full text-gray-500">
-            Select a driver to start chat
-          </div>
-        )}
+      <div className="flex-1 h-full overflow-hidden min-w-0">
+        <AnimatePresence mode="wait">
+          {selectedDriver ? (
+            <motion.div
+              key={selectedDriver.userid ?? selectedDriver.id ?? "chat"}
+              className="h-full"
+              initial={{ opacity: 0, x: 16 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 16 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+            >
+              <ChatWindow driver={selectedDriver} chatApi={chatAPI} />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="placeholder"
+              className="flex justify-center items-center h-full text-gray-500"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+            >
+              Select a driver to start chat
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

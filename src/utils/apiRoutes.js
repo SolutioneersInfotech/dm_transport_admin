@@ -62,9 +62,12 @@ export const fetchDocumentsRoute = (startDate, endDate, options = {}) => {
     params.append("isFlagged", options.isFlagged);
   }
 
-  // Category filter (document type) - single value
-  if (options.category) {
-    params.append("category", options.category);
+  // Category filter - send as array: repeated param (category=C&category=D)
+  if (options.category != null && options.category !== "") {
+    const arr = Array.isArray(options.category)
+      ? options.category.filter(Boolean).map((c) => String(c).trim())
+      : String(options.category).trim().split(/\s*,\s*/).filter(Boolean);
+    arr.forEach((c) => params.append("category", c));
   }
 
   // Type filters (multiple document types) - for backward compatibility

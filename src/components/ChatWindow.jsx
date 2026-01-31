@@ -186,6 +186,7 @@
 // }
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import {
   subscribeMessages as defaultSubscribeMessages,
   sendMessage as defaultSendMessage,
@@ -198,13 +199,14 @@ import { groupMessagesByDate } from "../utils/groupMessages";
 import ChatWindowSkeleton from "./skeletons/ChatWindowSkeleton";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+import { Checkbox } from "./ui/checkbox";
 
 /* ================= LAST SEEN FORMATTER ================= */
 function formatLastSeen(lastSeen) {
-  if (!lastSeen || !lastSeen._seconds) return "Recently";
-
-  const date = new Date(lastSeen._seconds * 1000);
-
+  if (!lastSeen) return "Recently";
+  const sec = lastSeen._seconds ?? lastSeen.seconds;
+  const date = sec != null ? new Date(sec * 1000) : new Date(lastSeen);
+  if (Number.isNaN(date.getTime())) return "Recently";
   return date.toLocaleString("en-GB", {
     day: "2-digit",
     month: "short",
@@ -215,8 +217,10 @@ function formatLastSeen(lastSeen) {
 
 export default function ChatWindow({ driver, chatApi }) {
   const [messages, setMessages] = useState([]);
-
   const [selected, setSelected] = useState([]);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [replyTo, setReplyTo] = useState(null);
   const [text, setText] = useState("");
   const inputRef = useRef(null);
   const [loading, setLoading] = useState(false);
@@ -267,6 +271,9 @@ export default function ChatWindow({ driver, chatApi }) {
     setLoading(true);
     setMessages([]);
     setSelected([]);
+    setSelectionMode(false);
+    setContextMenu(null);
+    setReplyTo(null);
 
     // Mark messages as seen when chat window opens
     if (markMessagesAsSeen) {
@@ -307,44 +314,53 @@ export default function ChatWindow({ driver, chatApi }) {
   }, [driverId]);
 
   // Robust scroll to bottom function with multiple attempts
-  const scrollToBottom = useCallback((behavior = "auto") => {
-    // Use multiple attempts to ensure scroll happens after DOM updates
-    const scroll = () => {
-      if (bottomRef.current && messagesContainerRef.current) {
-        const container = messagesContainerRef.current;
-        const bottom = bottomRef.current;
+  // const scrollToBottom = useCallback((behavior = "auto") => {
+  //   // Use multiple attempts to ensure scroll happens after DOM updates
+  //   const scroll = () => {
+  //     if (bottomRef.current && messagesContainerRef.current) {
+  //       const container = messagesContainerRef.current;
+  //       const bottom = bottomRef.current;
         
-        // Method 1: Scroll container to bottom (most reliable)
-        container.scrollTop = container.scrollHeight;
+  //       // Method 1: Scroll container to bottom (most reliable)
+  //       container.scrollTop = container.scrollHeight;
         
-        // Method 2: Scroll into view as fallback
-        setTimeout(() => {
-          bottom.scrollIntoView({ behavior, block: "end" });
-        }, 50);
-      }
-    };
+  //       // Method 2: Scroll into view as fallback
+  //       setTimeout(() => {
+  //         bottom.scrollIntoView({ behavior, block: "end" });
+  //       }, 50);
+  //     }
+  //   };
     
-    // Try immediately
+  //   // Try immediately
+  //   requestAnimationFrame(() => {
+  //     scroll();
+  //     // Try again after a short delay to ensure DOM is fully rendered
+  //     setTimeout(scroll, 100);
+  //     setTimeout(scroll, 300);
+  //   });
+  // }, []);
+  const scrollToBottom = useCallback((behavior = "auto") => {
+    if (!messagesContainerRef.current) return;
+
     requestAnimationFrame(() => {
-      scroll();
-      // Try again after a short delay to ensure DOM is fully rendered
-      setTimeout(scroll, 100);
-      setTimeout(scroll, 300);
+      const el = messagesContainerRef.current;
+      if (!el) return;
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior,
+      });
     });
   }, []);
+  
 
   // Scroll to bottom when messages change (after initial load or new messages)
   useEffect(() => {
-    if (messages.length > 0 && shouldScrollToBottomRef.current) {
-      // Use a longer delay to ensure all messages are rendered
-      const timeoutId = setTimeout(() => {
-        scrollToBottom("auto");
-        shouldScrollToBottomRef.current = false; // Only auto-scroll on initial load
-      }, 200);
-      
-      return () => clearTimeout(timeoutId);
-    }
-  }, [messages.length, driverId, scrollToBottom]);
+    if (!messages.length || !shouldScrollToBottomRef.current) return;
+  
+    scrollToBottom("auto");
+    shouldScrollToBottomRef.current = false;
+  }, [messages.length, scrollToBottom]);
+  
 
   function toggleSelect(msgId) {
     setSelected((prev) =>
@@ -353,6 +369,68 @@ export default function ChatWindow({ driver, chatApi }) {
         : [...prev, msgId]
     );
   }
+
+  function openContextMenu(e, msg) {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, msg });
+  }
+
+  function closeContextMenu() {
+    setContextMenu(null);
+  }
+
+  function handleContextReply() {
+    const msg = contextMenu?.msg;
+    if (!msg) return;
+
+    const rawMessage = msg.content?.message;
+    const messageText =
+      typeof rawMessage === "string"
+        ? rawMessage.trim()
+        : rawMessage != null
+          ? String(rawMessage).trim()
+          : "";
+    const replyMessage = messageText || "Attachment";
+    const replySender =
+      typeof driver?.driver_name === "string"
+        ? driver.driver_name
+        : driver?.driver_name != null
+          ? String(driver.driver_name)
+          : "Driver";
+
+    setReplyTo({
+      msgId: msg.msgId,
+      senderName: msg.type === 1 ? "You" : replySender,
+      message: replyMessage,
+    });
+
+    inputRef.current?.focus();
+    closeContextMenu();
+  }
+  
+
+  function handleContextSelect() {
+    if (contextMenu?.msg?.msgId) {
+      setSelectionMode(true);
+      setSelected((prev) =>
+        prev.includes(contextMenu.msg.msgId)
+          ? prev
+          : [...prev, contextMenu.msg.msgId]
+      );
+    }
+    closeContextMenu();
+  }
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const onDocClick = () => closeContextMenu();
+    const t = setTimeout(() => document.addEventListener("click", onDocClick), 0);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener("click", onDocClick);
+    };
+  }, [contextMenu]);
 
   /* ================= SEND MESSAGE ================= */
   async function handleSend() {
@@ -374,9 +452,10 @@ export default function ChatWindow({ driver, chatApi }) {
     
     // Always scroll smoothly when sending a message to show the new message
     shouldScrollToBottomRef.current = true;
-    setTimeout(() => scrollToBottom("smooth"), 100);
+    scrollToBottom("smooth");
 
-    await sendMessage(driverId, text);
+    await sendMessage(driverId, text, undefined, replyTo?.msgId ?? null);
+    setReplyTo(null);
   }
 
   /* ================= DELETE SELECTED ================= */
@@ -427,34 +506,77 @@ export default function ChatWindow({ driver, chatApi }) {
         </div>
 
         <div className="flex items-center gap-4">
-          <Button
-            onClick={handleDeleteSelected}
-            disabled={selected.length === 0}
-            variant="ghost"
-            size="icon"
-            className={`text-xl ${
-              selected.length
-                ? "text-red-500 hover:text-red-600"
-                : "text-gray-600"
-            }`}
-          >
-            🗑
-          </Button>
-
-          <Button
-            onClick={handleDeleteAll}
-            variant="destructive"
-            size="sm"
-          >
-            Delete All
-          </Button>
+          {selectionMode ? (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSelectionMode(false);
+                  setSelected([]);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleDeleteSelected}
+                disabled={selected.length === 0}
+                variant="ghost"
+                size="icon"
+                className={selected.length ? "text-red-500 hover:text-red-600" : "text-gray-600"}
+              >
+                🗑
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                onClick={handleDeleteSelected}
+                disabled={selected.length === 0}
+                variant="ghost"
+                size="icon"
+                className={selected.length ? "text-red-500 hover:text-red-600" : "text-gray-600"}
+              >
+                🗑
+              </Button>
+              <Button onClick={handleDeleteAll} variant="destructive" size="sm">
+                Delete All
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
+      {/* Context menu (right-click on message) */}
+      {contextMenu &&
+        createPortal(
+          <div
+            className="fixed z-[100] min-w-[140px] rounded-lg border border-gray-700 bg-[#161b22] py-1 shadow-xl"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="w-full px-3 py-2 text-left text-sm text-gray-200 hover:bg-[#1d232a]"
+              onClick={handleContextReply}
+            >
+              Reply
+            </button>
+            <button
+              type="button"
+              className="w-full px-3 py-2 text-left text-sm text-gray-200 hover:bg-[#1d232a]"
+              onClick={handleContextSelect}
+            >
+              Select
+            </button>
+          </div>,
+          document.body
+        )}
+
       {/* ================= MESSAGE AREA ================= */}
-      <div 
+      <div
         ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto chat-list-scroll p-4 space-y-6 bg-[#0d1117]"
+        className={`flex-1 overflow-y-auto chat-list-scroll space-y-6 bg-[#0d1117] ${selectionMode ? "pl-2 pr-4 pt-4 pb-4" : "p-4"}`}
       >
         {Object.keys(grouped).length === 0 && (
           <p className="text-center text-gray-500 text-sm mt-6">
@@ -466,23 +588,75 @@ export default function ChatWindow({ driver, chatApi }) {
           <div key={date}>
             <div className="text-center text-gray-400 text-xs my-2">{date}</div>
 
-            {grouped[date].map((msg) => (
-              <div
-                key={msg.msgId}
-                className="relative"
-                onClick={() => toggleSelect(msg.msgId)}
-              >
-                {selected.includes(msg.msgId) && (
-                  <div className="absolute -left-3 top-3 w-3 h-3 bg-red-500 rounded-full" />
-                )}
+            {grouped[date].map((msg, idx) => {
+              const senderName = msg.type === 1 ? "You" : (driver?.driver_name ?? "Driver");
+              const prevMsg = grouped[date][idx - 1];
+              const showSenderName = !prevMsg || prevMsg.type !== msg.type;
+              const replyToMessage = msg.replyTo
+                ? messages.find((m) => m.msgId === msg.replyTo)
+                : null;
+              return (
+                <div
+                  key={msg.msgId}
+                  id={`msg-${msg.msgId}`}
+                  className={`flex items-start gap-2 ${selectionMode ? "" : "relative"}`}
+                  onContextMenu={(e) => openContextMenu(e, msg)}
+                >
+                  {selectionMode && (
+                    <div className="flex-shrink-0 pt-6">
+                      <Checkbox
+                        checked={selected.includes(msg.msgId)}
+                        onCheckedChange={() => toggleSelect(msg.msgId)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="border-gray-500 data-[state=checked]:bg-[#1f6feb] data-[state=checked]:border-[#1f6feb]"
+                      />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <ChatMessageBubble
+                      msg={msg}
+                      senderName={senderName}
+                      showSenderName={showSenderName}
+                      replyToMessage={replyToMessage}
+                      onReplyClick={(msgId) => {
+                        const el = document.getElementById(`msg-${msgId}`);
+                        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                        el?.classList.add("ring-2", "ring-blue-500");
+                        setTimeout(() => el?.classList.remove("ring-2", "ring-blue-500"), 1200);
+                      }}
+                    />
 
-                <ChatMessageBubble msg={msg} />
-              </div>
-            ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ))}
         <div ref={bottomRef} />
       </div>
+      {replyTo && (
+  <div className="px-4 py-2 border-t border-gray-700 bg-[#0f172a] flex items-center justify-between">
+    <div className="border-l-4 border-blue-500 pl-3">
+      <p className="text-xs font-semibold text-blue-400">
+        Replying to {replyTo.senderName}
+      </p>
+      <p className="text-xs text-gray-300 truncate max-w-[260px]">
+        {typeof replyTo.message === "string"
+          ? replyTo.message
+          : replyTo.message != null
+            ? String(replyTo.message)
+            : ""}
+      </p>
+    </div>
+
+    <button
+      className="text-gray-400 hover:text-white"
+      onClick={() => setReplyTo(null)}
+    >
+      ✕
+    </button>
+  </div>
+)}
 
       {/* ================= INPUT BAR ================= */}
       <div className="p-4 border-t border-gray-700 bg-[#111827] sticky bottom-0 flex gap-2">

@@ -163,7 +163,7 @@ export default function Documents() {
   const [searchDebounced, setSearchDebounced] = useState("");
 
   const [statusFilter, setStatusFilter] = useState("all"); // all | seen | unseen
-  const [categoryFilter, setCategoryFilter] = useState(null); // C D F
+  const [categoryFilter, setCategoryFilter] = useState([]); // C D F
   const [flagFilter, setFlagFilter] = useState(null); // null | true | false (null = all)
   const [showDocumentTypeDropdown, setShowDocumentTypeDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
@@ -246,10 +246,10 @@ export default function Documents() {
     return null;
   }, [statusFilter]);
 
-  // Convert category filter to API format (C, D, F)
-  // Note: The API expects category as a single value, not an array
+  // Category: pass array so API gets category=C&category=D (multiple params)
   const categoryParam = useMemo(() => {
-    return categoryFilter || null;
+    if (!Array.isArray(categoryFilter) || categoryFilter.length === 0) return null;
+    return categoryFilter;
   }, [categoryFilter]);
 
   // Convert flag filter to API format
@@ -280,7 +280,7 @@ export default function Documents() {
       lastFetchParams.search !== searchDebounced ||
       lastFetchParams.isSeen !== isSeenParam ||
       lastFetchParams.isFlagged !== isFlaggedParam ||
-      lastFetchParams.category !== categoryParam ||
+      JSON.stringify(categoryParam ?? null) !== JSON.stringify(lastFetchParams.category ?? null) ||
       JSON.stringify(lastFetchParams.filters || []) !== JSON.stringify(typeFilters);
 
     const isStale = lastFetched && Date.now() - lastFetched > 5 * 60 * 1000;
@@ -632,23 +632,30 @@ export default function Documents() {
           />
         </div>
 
-        {/* Category Filters (C, D, F) */}
+        {/* Category Filters (C, D, E, F) - multi-select, sent as category=C&category=D */}
         <div className="flex gap-1.5 sm:gap-2">
-          {["C", "D", "F"].map((cat) => (
-            <Button
-              key={cat}
-              onClick={() => setCategoryFilter(categoryFilter === cat ? null : cat)}
-              variant={categoryFilter === cat ? "default" : "outline"}
-              size="sm"
-              className={`min-w-[36px] sm:min-w-[40px] h-8 sm:h-9 text-xs sm:text-sm ${
-                categoryFilter === cat
-                  ? "bg-[#1f6feb] text-white border-[#1f6feb] hover:bg-[#1a5fd4]"
-                  : "bg-[#161b22] border-gray-700 text-gray-300 hover:bg-[#1d232a] hover:border-gray-600"
-              }`}
-            >
-              {cat}
-            </Button>
-          ))}
+          {["C", "D", "E", "F"].map((cat) => {
+            const isSelected = Array.isArray(categoryFilter) && categoryFilter.includes(cat);
+            return (
+              <Button
+                key={cat}
+                onClick={() => {
+                  setCategoryFilter(
+                    isSelected ? categoryFilter.filter((c) => c !== cat) : [...categoryFilter, cat]
+                  );
+                }}
+                variant={isSelected ? "default" : "outline"}
+                size="sm"
+                className={`min-w-[36px] sm:min-w-[40px] h-8 sm:h-9 text-xs sm:text-sm ${
+                  isSelected
+                    ? "bg-[#1f6feb] text-white border-[#1f6feb] hover:bg-[#1a5fd4]"
+                    : "bg-[#161b22] border-gray-700 text-gray-300 hover:bg-[#1d232a] hover:border-gray-600"
+                }`}
+              >
+                {cat}
+              </Button>
+            );
+          })}
         </div>
 
         {/* All Documents Dropdown with Status Filter */}
@@ -665,11 +672,12 @@ export default function Documents() {
 
               <ChevronDown className={`h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform ${showDocumentTypeDropdown ? "rotate-180" : ""}`} />
             </button>
-            {(selectedFilters.length > 0 || statusFilter !== "all") && (
+            {(selectedFilters.length > 0 || statusFilter !== "all" || (Array.isArray(categoryFilter) && categoryFilter.length > 0)) && (
           <button
                 onClick={() => {
                   setSelectedFilters([]);
                   setStatusFilter("all");
+                  setCategoryFilter([]);
                   setShowDocumentTypeDropdown(false);
                   setShowStatusDropdown(false);
                 }}

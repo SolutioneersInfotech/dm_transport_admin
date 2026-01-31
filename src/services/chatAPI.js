@@ -149,26 +149,30 @@ export function subscribeMessages(userid, onChange) {
 /**
  * Send a message to a user
  * @param {string} userid - User ID
- * @param {string} text - Message text
- * @param {object} adminUser - Admin user object (optional, will fetch if not provided)
+ * @param {string} text - Message text (must be a string)
+ * @param {object} [adminUser] - Admin user object (optional, will fetch if not provided)
+ * @param {string|null} [replyToMsgId] - Optional message ID this message is replying to
  * @returns {Promise<{message: object}>}
  */
-export async function sendMessage(userid, text, adminUser = getAdminUser()) {
+export async function sendMessage(userid, text, adminUser = getAdminUser(), replyToMsgId = null) {
   const messageId = push(ref(database, `${ADMIN_GENERAL_PATH}/${userid}`)).key;
 
   if (!messageId) {
     throw new Error("Unable to generate message id.");
   }
 
+  const messageText = typeof text === "string" ? text : (text != null ? String(text) : "");
+  const replyTo = replyToMsgId != null && replyToMsgId !== "" ? replyToMsgId : null;
+
   const payload = {
     id: messageId,
     dateTime: new Date().toISOString(),
-    content: { message: text, attachmentUrl: "" },
+    content: { message: messageText, attachmentUrl: "" },
     status: 0,
     type: 0,
     contactId: userid,
     sendername: adminUser?.userid || "Admin",
-    replyTo: null,
+    replyTo,
   };
 
   const userPayload = {
