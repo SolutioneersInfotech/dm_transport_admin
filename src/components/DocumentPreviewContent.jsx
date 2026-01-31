@@ -731,11 +731,11 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
         <div className="flex flex-wrap items-center gap-y-2 px-4 py-2 border-t border-gray-700 bg-black/30">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
             <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
-              <span className="font-medium text-gray-400 uppercase tracking-wide">In time:</span>
+              <span className="font-medium text-gray-400 uppercase tracking-wide">In:</span>
               <span className="text-white">{formatDateTime(inVal)}</span>
             </div>
             <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
-              <span className="font-medium text-gray-400 uppercase tracking-wide">Out time:</span>
+              <span className="font-medium text-gray-400 uppercase tracking-wide">Out:</span>
               <span className="text-white">{formatDateTime(outVal)}</span>
             </div>
           </div>

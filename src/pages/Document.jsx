@@ -634,7 +634,7 @@ export default function Documents() {
 
         {/* Category Filters (C, D, E, F) - multi-select, sent as category=C&category=D */}
         <div className="flex gap-1.5 sm:gap-2">
-          {["C", "D", "E", "F"].map((cat) => {
+          {["C", "D", "F"].map((cat) => {
             const isSelected = Array.isArray(categoryFilter) && categoryFilter.includes(cat);
             return (
               <Button
