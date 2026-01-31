@@ -401,7 +401,7 @@ export default function ChatWindow({ driver, chatApi }) {
 
     setReplyTo({
       msgId: msg.msgId,
-      senderName: msg.type === 1 ? "You" : replySender,
+      senderName: msg.type === 1 ? (msg.sendername ?? "You") : replySender,
       message: replyMessage,
     });
 
@@ -481,6 +481,7 @@ export default function ChatWindow({ driver, chatApi }) {
 
   /* ================= GROUP MESSAGES ================= */
   const grouped = groupMessagesByDate(messages);
+  console.log(grouped);
 
   /* ================= LOADER ================= */
   if (loading) {
@@ -587,9 +588,11 @@ export default function ChatWindow({ driver, chatApi }) {
         {Object.keys(grouped).map((date) => (
           <div key={date}>
             <div className="text-center text-gray-400 text-xs my-2">{date}</div>
-
+            {console.log(grouped[date])}
             {grouped[date].map((msg, idx) => {
-              const senderName = msg.type === 1 ? "You" : (driver?.driver_name ?? "Driver");
+              const senderName = msg.type === 1
+                ? (msg.sendername ?? "You")
+                : (driver?.driver_name ?? msg.sendername ?? "Driver");
               const prevMsg = grouped[date][idx - 1];
               const showSenderName = !prevMsg || prevMsg.type !== msg.type;
               const replyToMessage = msg.replyTo
