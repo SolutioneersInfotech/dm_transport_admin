@@ -964,7 +964,11 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                       : "bg-[#1f6feb] hover:bg-[#1a5fd4] text-white"
                   }`}
                 >
-                  <Check className="h-4 w-4" />
+                  {doc.seen === true ? (
+                    <CheckCircle2 className="h-4 w-4" />
+                  ) : (
+                    <Circle className="h-4 w-4" />
+                  )}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
@@ -988,7 +992,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   {doc.state === "markedForResend" ? (
                     <RotateCcw className="h-4 w-4" />
                   ) : (
-                    <Send className="h-4 w-4" />
+                    <FileText className="h-4 w-4" />
                   )}
                 </Button>
               </TooltipTrigger>
@@ -1010,11 +1014,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                       : "border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500"
                   }`}
                 >
-                  {doc.completed === true ? (
-                    <Circle className="h-4 w-4" />
-                  ) : (
-                    <CheckCircle2 className="h-4 w-4" />
-                  )}
+                  <Check className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
@@ -1074,7 +1074,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                       variant="outline"
                       className="h-10 w-10 cursor-pointer flex-1 border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500"
                     >
-                      <FileText className="h-4 w-4" />
+                      <Send className="h-4 w-4" />
                     </Button>
                   </PopoverTrigger>
                 </TooltipTrigger>
