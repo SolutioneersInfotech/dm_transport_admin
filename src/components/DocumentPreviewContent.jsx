@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "./ui/button";
-import { Copy, Flag, X, Check, MessageCircle, Send, RotateCcw, CheckCircle2, Circle, Trash2, FileText, Pencil, Plus, Download } from "lucide-react";
+import { Copy, Flag, X, Check, MessageCircle, Send, CheckCircle2, Circle, Trash2, Pencil, Plus, Download, Redo2, Undo2 } from "lucide-react";
 import { fetchDocumentByIdRoute } from "../utils/apiRoutes";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { updateDocument, deleteDocumentThunk, changeDocumentType } from "../store/slices/documentsSlice";
@@ -146,7 +146,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     };
 
     fetchFullDocument();
-  }, [selectedDoc]);
+  }, [selectedDoc?.id]);
 
   // Fetch acknowledgements when dropdown opens
   useEffect(() => {
@@ -181,6 +181,8 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   const doc = fullDoc || selectedDoc;
   const inVal = doc.in_date_time ?? doc.inTime ?? doc.in_time ?? doc.inDateTime;
   const outVal = doc.out_date_time ?? doc.outTime ?? doc.out_time ?? doc.outDateTime;
+  const inFormatted = formatDateTime(inVal);
+  const outFormatted = formatDateTime(outVal);
   const url = doc.document_url;
   const cleanURL = url?.split("?")[0];
   const ext = cleanURL?.split(".").pop()?.toLowerCase();
@@ -205,7 +207,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
       await navigator.clipboard.writeText(value);
       setCopiedValue(value);
       setTimeout(() => setCopiedValue(""), 1500);
-      toast.success("Copied to clipboard");
+      toast.success("Copied");
     } catch (copyError) {
       console.error("Failed to copy value", copyError);
       toast.error("Failed to copy to clipboard");
@@ -213,15 +215,11 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   };
 
   const handleFlagDocument = async () => {
-    if (!flagReason.trim()) {
-      toast.error("Please enter a reason for flagging this document");
-      return;
-    }
-
     const doc = fullDoc || selectedDoc;
+    const reason = flagReason.trim();
     const flagData = {
       flagged: true,
-      reason: flagReason.trim(),
+      reason,
     };
 
     try {
@@ -648,9 +646,10 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     <button
       type="button"
       onClick={() => handleCopy(value)}
-      className="text-gray-500 hover:text-gray-200 transition-colors"
+      className="text-gray-500 hover:text-gray-200 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
       aria-label={`Copy ${label}`}
       title={`Copy ${label}`}
+      disabled={!value || value === "—"}
     >
       <Copy className="h-3.5 w-3.5" />
     </button>
@@ -732,11 +731,13 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
             <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
               <span className="font-medium text-gray-400 uppercase tracking-wide">In:</span>
-              <span className="text-white">{formatDateTime(inVal)}</span>
+              <span className="text-white">{inFormatted}</span>
+              {renderCopyButton(inFormatted, "in time")}
             </div>
             <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
               <span className="font-medium text-gray-400 uppercase tracking-wide">Out:</span>
-              <span className="text-white">{formatDateTime(outVal)}</span>
+              <span className="text-white">{outFormatted}</span>
+              {renderCopyButton(outFormatted, "out time")}
             </div>
           </div>
           <div className="flex items-center gap-x-3 sm:ml-auto">
@@ -839,7 +840,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-300">
-                  Reason for Flagging <span className="text-red-400">*</span>
+                  Reason for Flagging
                 </label>
                 <textarea
                   value={flagReason}
@@ -864,8 +865,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                 <Button
                   onClick={handleFlagDocument}
                   size="sm"
-                  disabled={!flagReason.trim()}
-                  className="bg-[#1f6feb] hover:bg-[#1a5fd4] text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-[#1f6feb] hover:bg-[#1a5fd4] text-white"
                 >
                   Flag Document
                 </Button>
@@ -990,9 +990,9 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   }`}
                 >
                   {doc.state === "markedForResend" ? (
-                    <RotateCcw className="h-4 w-4" />
+                    <Undo2 className="h-4 w-4" />
                   ) : (
-                    <FileText className="h-4 w-4" />
+                    <Redo2 className="h-4 w-4" />
                   )}
                 </Button>
               </TooltipTrigger>
@@ -1031,14 +1031,14 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   variant="outline"
                   className={`h-10 w-10 cursor-pointer flex-1 ${
                     doc.flag?.flagged
-                      ? "border-[#1f6feb] text-[#1f6feb] bg-[#1f6feb]/10 hover:bg-[#1f6feb]/20"
+                      ? "border-red-500 text-red-500 bg-red-500/10 hover:bg-red-500/20"
                       : "border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500"
                   }`}
                   aria-label={doc.flag?.flagged ? "Unflag document" : "Flag document"}
                 >
                   <Flag
                     className="h-4 w-4"
-                    fill={doc.flag?.flagged ? "#1f6feb" : "none"}
+                    fill={doc.flag?.flagged ? "#ef4444" : "none"}
                   />
                 </Button>
               </TooltipTrigger>
