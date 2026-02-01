@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { format as formatDate } from "date-fns";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
-import { fetchDocuments, fetchMoreDocuments, resetPagination, updateDocument } from "../store/slices/documentsSlice";
+import { fetchDocuments, fetchMoreDocuments, resetPagination, updateDocument, deleteDocumentThunk } from "../store/slices/documentsSlice";
 import DocumentPreviewContent from "../components/DocumentPreviewContent";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "../components/ui/table";
 import { Checkbox } from "../components/ui/checkbox";
-import { X, Search, Flag, ChevronDown, Check, CheckCircle2, Copy } from "lucide-react";
+import { X, Search, Flag, ChevronDown, Check, CheckCircle2, Copy, Download, Trash2, Redo2 } from "lucide-react";
 import DocumentTableSkeleton from "../components/skeletons/DocumentTableSkeleton";
 import {
   Drawer,
@@ -80,6 +80,8 @@ export default function Documents() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewWidth, setPreviewWidth] = useState(480);
   const [isMarkingAsSeen, setIsMarkingAsSeen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isBulkDownloading, setIsBulkDownloading] = useState(false);
   const [showFlagModal, setShowFlagModal] = useState(false);
   const [flagReason, setFlagReason] = useState("");
   const observerTarget = useRef(null);
@@ -389,6 +391,7 @@ export default function Documents() {
 
   const isAllSelected = allDocIds.size > 0 && selectedDocIds.size === allDocIds.size;
   const isIndeterminate = selectedDocIds.size > 0 && selectedDocIds.size < allDocIds.size;
+  const selectionMode = selectedDocIds.size > 0;
 
   const handleSelectAll = (checked) => {
     if (checked) {
@@ -406,6 +409,71 @@ export default function Documents() {
       newSelected.delete(docId);
     }
     setSelectedDocIds(newSelected);
+  };
+
+  const getSelectedDocs = useCallback(() => {
+    return filteredDocuments?.filter((doc) => selectedDocIds.has(doc.id)) || [];
+  }, [filteredDocuments, selectedDocIds]);
+
+  const handleBulkDownload = async () => {
+    const docsToDownload = getSelectedDocs();
+    if (docsToDownload.length === 0) return;
+    setIsBulkDownloading(true);
+    try {
+      for (const doc of docsToDownload) {
+        const docUrl = doc.document_url || doc.url || doc.file_url;
+        if (!docUrl) {
+          toast.error(`Missing file URL for ${doc.driver_name || "document"}`);
+          continue;
+        }
+        try {
+          const res = await fetch(docUrl, { credentials: "omit" });
+          const blob = await res.blob();
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          const ext = (docUrl.split("?")[0]?.split(".").pop() || "file").toLowerCase();
+          a.download = `document-${doc.id || "download"}.${ext}`;
+          a.click();
+          URL.revokeObjectURL(a.href);
+        } catch (error) {
+          console.error("Failed to download document", error);
+          toast.error("Download failed");
+        }
+      }
+    } finally {
+      setIsBulkDownloading(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const docsToDelete = getSelectedDocs();
+    if (docsToDelete.length === 0) return;
+    setIsBulkDeleting(true);
+    const deletedIds = new Set();
+    try {
+      for (const doc of docsToDelete) {
+        const result = await dispatch(deleteDocumentThunk({ document: doc }));
+        if (deleteDocumentThunk.fulfilled.match(result)) {
+          deletedIds.add(doc.id);
+        } else {
+          toast.error(result.payload || "Failed to delete document");
+        }
+      }
+    } catch (error) {
+      console.error("Failed to delete documents", error);
+      toast.error("Failed to delete selected documents");
+    } finally {
+      setIsBulkDeleting(false);
+    }
+
+    if (deletedIds.size > 0) {
+      setSelectedDocIds(new Set());
+      if (selectedDoc && deletedIds.has(selectedDoc.id)) {
+        setSelectedDoc(null);
+        setIsPreviewOpen(false);
+      }
+      toast.success("Selected documents deleted");
+    }
   };
   useEffect(() => {
     function handleClickOutside(event) {
@@ -621,7 +689,7 @@ export default function Documents() {
       {/* FILTER BAR - Horizontal Layout matching image */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-2">
         {/* Search Bar */}
-        <div className="relative flex-1 w-full sm:min-w-[200px]">
+        <div className="relative w-full sm:w-[260px] flex-none">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
             type="text"
@@ -772,7 +840,7 @@ export default function Documents() {
         </Button>
 
         {/* Date Range Picker */}
-        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:flex-1 sm:justify-end">
           <DateRangePicker value={dateRange} onChange={setDateRange} />
           {dateRange?.from &&
             dateRange?.to &&
@@ -789,6 +857,33 @@ export default function Documents() {
             </Button>
           )}
         </div>
+
+        {selectionMode && (
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleBulkDownload}
+              disabled={isBulkDownloading}
+              className="h-8 sm:h-9 border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500"
+            >
+              <Download className="h-4 w-4 mr-1.5" />
+              {isBulkDownloading ? "Downloading..." : "Download"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleBulkDelete}
+              disabled={isBulkDeleting}
+              className="h-8 sm:h-9 border-red-500/50 text-red-500 bg-[#111827] hover:bg-red-500/10 hover:border-red-500"
+            >
+              <Trash2 className="h-4 w-4 mr-1.5" />
+              {isBulkDeleting ? "Deleting..." : "Delete"}
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* MAIN LAYOUT */}
@@ -810,21 +905,25 @@ export default function Documents() {
             <TableHeader className="sticky top-0 bg-[#161b22] z-10 border-b border-gray-700">
               <TableRow className="hover:bg-transparent border-gray-700">
                 <TableHead className="w-10 sm:w-12 h-8 px-1 sm:px-2">
-                  <div className="flex items-center gap-0.5 sm:gap-1">
-                    <Checkbox
-                      checked={isAllSelected || isIndeterminate}
-                      onCheckedChange={handleSelectAll}
-                      aria-label="Select all"
-                      className="h-3 w-3 sm:h-3.5 sm:w-3.5"
-                    />
-                    <span className="text-[9px] sm:text-[10px] font-medium text-gray-400 hidden sm:inline">Select All</span>
-                  </div>
+                  {selectionMode ? (
+                    <div className="flex items-center gap-0.5 sm:gap-1">
+                      <Checkbox
+                        checked={isAllSelected || isIndeterminate}
+                        onCheckedChange={handleSelectAll}
+                        aria-label="Select all"
+                        className="h-3 w-3 sm:h-3.5 sm:w-3.5"
+                      />
+                      <span className="text-[9px] sm:text-[10px] font-medium text-gray-400 hidden sm:inline">Select All</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-0.5 sm:gap-1">
+                      <div className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                      <span className="text-[9px] sm:text-[10px] font-medium text-transparent hidden sm:inline">Select All</span>
+                    </div>
+                  )}
                 </TableHead>
                 <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   Status
-                </TableHead>
-                <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                  Category
                 </TableHead>
                 <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   Flag
@@ -837,6 +936,9 @@ export default function Documents() {
                 </TableHead>
                 <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider hidden sm:table-cell">
                   Type
+                </TableHead>
+                <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                  Category
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -872,7 +974,7 @@ export default function Documents() {
                     {groupedDocuments[group].map((doc) => (
                       <TableRow
                         key={doc.id}
-                        className={`border-gray-800 hover:bg-[#1d232a]/50 cursor-pointer transition-colors ${
+                        className={`group border-gray-800 hover:bg-[#1d232a]/50 cursor-pointer transition-colors ${
                           selectedDoc?.id === doc.id ? "bg-[#1f6feb]/15 ring-1 ring-inset ring-[#1f6feb]/40" : ""
                         }`}
                         onClick={() => {
@@ -884,13 +986,21 @@ export default function Documents() {
                         }}
                       >
                         <TableCell className="px-1 sm:px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
-                          <Checkbox
-                            checked={selectedDocIds.has(doc.id)}
-                            onCheckedChange={(checked) => handleSelectDoc(doc.id, checked)}
-                            onClick={(e) => e.stopPropagation()}
-                            aria-label={`Select ${doc.driver_name}`}
-                            className="h-3 w-3 sm:h-3.5 sm:w-3.5"
-                          />
+                          <div
+                            className={`transition-opacity ${
+                              selectionMode
+                                ? "opacity-100 pointer-events-auto"
+                                : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto"
+                            }`}
+                          >
+                            <Checkbox
+                              checked={selectedDocIds.has(doc.id)}
+                              onCheckedChange={(checked) => handleSelectDoc(doc.id, checked)}
+                              onClick={(e) => e.stopPropagation()}
+                              aria-label={`Select ${doc.driver_name}`}
+                              className="h-3 w-3 sm:h-3.5 sm:w-3.5"
+                            />
+                          </div>
                         </TableCell>
                         <TableCell className="px-1 sm:px-2 py-1.5">
                           <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
@@ -913,16 +1023,17 @@ export default function Documents() {
                                 Done
                               </span>
                             )}
+                            {doc.state === "markedForResend" && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] sm:text-[10px] text-orange-400" title="Marked for Resend">
+                                <Redo2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0" />
+                                Resend
+                              </span>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="px-1 sm:px-2 py-1.5">
-                          <span className="inline-flex items-center px-1 sm:px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-medium bg-gray-800/50 text-gray-300 border border-gray-700">
-                            {doc.category || "—"}
-                          </span>
-                        </TableCell>
-                        <TableCell className="px-1 sm:px-2 py-1.5">
                           {doc.flag?.flagged || doc.flagged || doc.isFlagged ? (
-                            <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-[#1f6feb]" fill="#1f6feb" />
+                            <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-red-500" fill="#ef4444" />
                           ) : (
                             <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-gray-600" />
                           )}
@@ -1031,6 +1142,11 @@ export default function Documents() {
                         </TableCell>
                         <TableCell className="px-1 sm:px-2 py-1.5 hidden sm:table-cell">
                           <span className="text-[10px] sm:text-xs text-gray-300 truncate max-w-[80px]">{doc.type || "—"}</span>
+                        </TableCell>
+                        <TableCell className="px-1 sm:px-2 py-1.5">
+                          <span className="inline-flex items-center px-1 sm:px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-medium bg-gray-800/50 text-gray-300 border border-gray-700">
+                            {doc.category || "—"}
+                          </span>
                         </TableCell>
                       </TableRow>
                     ))}
