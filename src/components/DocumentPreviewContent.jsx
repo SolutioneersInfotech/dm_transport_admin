@@ -646,7 +646,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     <button
       type="button"
       onClick={() => handleCopy(value)}
-      className="text-gray-500 hover:text-gray-200 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+      className="inline-flex items-center justify-center pt-0.5 text-gray-500 hover:text-gray-200 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
       aria-label={`Copy ${label}`}
       title={`Copy ${label}`}
       disabled={!value || value === "—"}
@@ -985,8 +985,8 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   variant="outline"
                   className={`h-10 w-10 cursor-pointer flex-1 ${
                     doc.state === "markedForResend"
-                      ? "border-orange-500 text-orange-500 bg-orange-500/10 hover:bg-orange-500/20 hover:border-orange-400"
-                      : "border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500"
+                      ? "border-orange-500 text-orange-500 bg-orange-500/10 hover:bg-orange-500/20 hover:border-orange-400 hover:text-orange-400"
+                      : "border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500 hover:text-white"
                   }`}
                 >
                   {doc.state === "markedForResend" ? (
@@ -1010,8 +1010,8 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   variant="outline"
                   className={`h-10 w-10 cursor-pointer flex-1 ${
                     doc.completed === true
-                      ? "border-emerald-500 text-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20 hover:border-emerald-400"
-                      : "border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500"
+                      ? "border-emerald-500 text-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20 hover:border-emerald-400 hover:text-emerald-400"
+                      : "border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500 hover:text-white"
                   }`}
                 >
                   <Check className="h-4 w-4" />
@@ -1031,8 +1031,8 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   variant="outline"
                   className={`h-10 w-10 cursor-pointer flex-1 ${
                     doc.flag?.flagged
-                      ? "border-red-500 text-red-500 bg-red-500/10 hover:bg-red-500/20"
-                      : "border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500"
+                      ? "border-red-500 text-red-500 bg-red-500/10 hover:bg-red-500/20 hover:text-red-400"
+                      : "border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500 hover:text-white"
                   }`}
                   aria-label={doc.flag?.flagged ? "Unflag document" : "Flag document"}
                 >
@@ -1054,7 +1054,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   onClick={() => setShowDeleteModal(true)}
                   size="icon"
                   variant="outline"
-                  className="h-10 w-10 cursor-pointer flex-1 border-red-500/50 text-red-500 bg-[#111827] hover:bg-red-500/10 hover:border-red-500"
+                  className="h-10 w-10 cursor-pointer flex-1 border-red-500/50 text-red-500 bg-[#111827] hover:bg-red-500/10 hover:border-red-500 hover:text-red-400"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -1072,7 +1072,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                     <Button 
                       size="icon"
                       variant="outline"
-                      className="h-10 w-10 cursor-pointer flex-1 border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500"
+                      className="h-10 w-10 cursor-pointer flex-1 border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500 hover:text-white"
                     >
                       <Send className="h-4 w-4" />
                     </Button>

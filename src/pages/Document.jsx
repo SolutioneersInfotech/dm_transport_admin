@@ -689,7 +689,7 @@ export default function Documents() {
       {/* FILTER BAR - Horizontal Layout matching image */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-2">
         {/* Search Bar */}
-        <div className="relative w-full sm:w-[260px] flex-none">
+        <div className="relative w-full sm:flex-1 min-w-[220px]">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
             type="text"
