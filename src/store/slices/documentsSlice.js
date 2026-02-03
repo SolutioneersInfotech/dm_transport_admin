@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { fetchDocumentsRoute, fetchDocumentCountRoute, updateDocumentRoute, changeDocumentTypeRoute } from "../../utils/apiRoutes";
-import { deleteDocument } from "../../services/documentDeleteAPI";
+import { deleteDocument, deleteDocuments } from "../../services/documentDeleteAPI";
 
 const isDeletedDocument = (document) => {
   const value = document?.isDeleted;
@@ -276,6 +276,30 @@ export const deleteDocumentThunk = createAsyncThunk(
   }
 );
 
+// Async thunk for deleting multiple documents (hard delete)
+export const deleteDocumentsThunk = createAsyncThunk(
+  "documents/deleteDocuments",
+  async ({ documents }, { rejectWithValue }) => {
+    try {
+      if (!Array.isArray(documents) || documents.length === 0) {
+        return rejectWithValue("Documents are required");
+      }
+
+      const result = await deleteDocuments(documents);
+
+      if (!result.success) {
+        return rejectWithValue(result.error || "Failed to delete documents");
+      }
+
+      return {
+        documentIds: documents.map((doc) => doc.id),
+      };
+    } catch (error) {
+      return rejectWithValue(error.message || "Failed to delete documents");
+    }
+  }
+);
+
 // Async thunk for changing document type
 export const changeDocumentType = createAsyncThunk(
   "documents/changeDocumentType",
@@ -451,6 +475,21 @@ const documentsSlice = createSlice({
       .addCase(deleteDocumentThunk.rejected, (state, action) => {
         // Error handling - log error but don't break the UI
         console.error("Failed to delete document:", action.payload);
+      })
+      .addCase(deleteDocumentsThunk.pending, (state) => {
+        // Optional: Set loading state if needed
+      })
+      .addCase(deleteDocumentsThunk.fulfilled, (state, action) => {
+        const { documentIds } = action.payload;
+        if (Array.isArray(documentIds) && documentIds.length > 0) {
+          state.documents = state.documents.filter((doc) => !documentIds.includes(doc.id));
+          if (state.total > 0) {
+            state.total = Math.max(state.total - documentIds.length, 0);
+          }
+        }
+      })
+      .addCase(deleteDocumentsThunk.rejected, (state, action) => {
+        console.error("Failed to delete documents:", action.payload);
       })
       // Change document type
       .addCase(changeDocumentType.pending, (state) => {

@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { format as formatDate } from "date-fns";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
-import { fetchDocuments, fetchMoreDocuments, resetPagination, updateDocument, deleteDocumentThunk } from "../store/slices/documentsSlice";
+import { fetchDocuments, fetchMoreDocuments, resetPagination, updateDocument, deleteDocumentThunk, deleteDocumentsThunk } from "../store/slices/documentsSlice";
 import DocumentPreviewContent from "../components/DocumentPreviewContent";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -453,15 +453,13 @@ export default function Documents() {
       return;
     }
     setIsBulkDeleting(true);
-    const deletedIds = new Set();
+    let didDelete = false;
     try {
-      for (const doc of docsToDelete) {
-        const result = await dispatch(deleteDocumentThunk({ document: doc }));
-        if (deleteDocumentThunk.fulfilled.match(result)) {
-          deletedIds.add(doc.id);
-        } else {
-          toast.error(result.payload || "Failed to delete document");
-        }
+      const result = await dispatch(deleteDocumentsThunk({ documents: docsToDelete }));
+      if (deleteDocumentsThunk.fulfilled.match(result)) {
+        didDelete = true;
+      } else {
+        toast.error(result.payload || "Failed to delete documents");
       }
     } catch (error) {
       console.error("Failed to delete documents", error);
@@ -470,9 +468,9 @@ export default function Documents() {
       setIsBulkDeleting(false);
     }
 
-    if (deletedIds.size > 0) {
+    if (didDelete) {
       setSelectedDocIds(new Set());
-      if (selectedDoc && deletedIds.has(selectedDoc.id)) {
+      if (selectedDoc && docsToDelete.some((doc) => doc.id === selectedDoc.id)) {
         setSelectedDoc(null);
         setIsPreviewOpen(false);
       }
