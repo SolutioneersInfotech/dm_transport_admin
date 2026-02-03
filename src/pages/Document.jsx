@@ -1227,19 +1227,19 @@ export default function Documents() {
               </button>
               {/* Preview Content */}
               <div className="document-preview-scroll flex-1 overflow-y-auto p-0">
-                <div className="p-4">
-                <DocumentPreviewContent 
-                  selectedDoc={selectedDoc} 
-                  onDocUpdate={(updatedDoc) => {
-                    if (updatedDoc === null) {
-                      // Document was deleted, close preview
-                      setSelectedDoc(null);
-                      setIsPreviewOpen(false);
-                    } else {
-                      setSelectedDoc(updatedDoc);
-                    }
-                  }}
-                />
+                <div className="flex h-full flex-col p-4">
+                  <DocumentPreviewContent
+                    selectedDoc={selectedDoc}
+                    onDocUpdate={(updatedDoc) => {
+                      if (updatedDoc === null) {
+                        // Document was deleted, close preview
+                        setSelectedDoc(null);
+                        setIsPreviewOpen(false);
+                      } else {
+                        setSelectedDoc(updatedDoc);
+                      }
+                    }}
+                  />
                 </div>
               </div>
             </div>
@@ -1259,20 +1259,22 @@ export default function Documents() {
                 </DrawerClose>
               </div>
             </DrawerHeader>
-            <div className="document-preview-scroll overflow-y-auto p-4">
-              {selectedDoc && (
-                <DocumentPreviewContent 
-                  selectedDoc={selectedDoc} 
-                  onDocUpdate={(updatedDoc) => {
-                    if (updatedDoc === null) {
-                      // Document was deleted, close preview
-                      setSelectedDoc(null);
-                    } else {
-                      setSelectedDoc(updatedDoc);
-                    }
-                  }}
-                />
-              )}
+            <div className="document-preview-scroll overflow-y-auto p-0">
+              <div className="flex h-full flex-col p-4">
+                {selectedDoc && (
+                  <DocumentPreviewContent
+                    selectedDoc={selectedDoc}
+                    onDocUpdate={(updatedDoc) => {
+                      if (updatedDoc === null) {
+                        // Document was deleted, close preview
+                        setSelectedDoc(null);
+                      } else {
+                        setSelectedDoc(updatedDoc);
+                      }
+                    }}
+                  />
+                )}
+              </div>
             </div>
             
             {/* Mark document as seen/unseen - Toggle functionality - Mobile */}
