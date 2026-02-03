@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "../components/ui/table";
 import { Checkbox } from "../components/ui/checkbox";
-import { X, Search, Flag, ChevronDown, Check, Copy, Download, Trash2, Redo2 } from "lucide-react";
+import { X, Search, Flag, ChevronDown, Check, Copy, Download, Trash2, Redo2, RefreshCw } from "lucide-react";
 import DocumentTableSkeleton from "../components/skeletons/DocumentTableSkeleton";
 import {
   Drawer,
@@ -91,6 +91,7 @@ export default function Documents() {
   const tableScrollRef = useRef(null);
   const [skeletonRows, setSkeletonRows] = useState(12);
   const skeletonRowHeight = 36;
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
 
   const [searchParams] = useSearchParams();
 
@@ -301,6 +302,29 @@ export default function Documents() {
     return dateRange?.to ? formatLocalDate(dateRange.to) : undefined;
   }, [dateRange]);
 
+  const currentFetchArgs = useMemo(
+    () => ({
+      startDate,
+      endDate,
+      page: 1,
+      limit: 20,
+      search: searchDebounced,
+      isSeen: isSeenParam,
+      isFlagged: isFlaggedParam,
+      category: categoryParam,
+      filters: typeFilters,
+    }),
+    [
+      startDate,
+      endDate,
+      searchDebounced,
+      isSeenParam,
+      isFlaggedParam,
+      categoryParam,
+      typeFilters,
+    ]
+  );
+
   // Fetch documents when params change (initial load)
   useEffect(() => {
     const paramsChanged =
@@ -313,23 +337,11 @@ export default function Documents() {
       JSON.stringify(categoryParam ?? null) !== JSON.stringify(lastFetchParams.category ?? null) ||
       JSON.stringify(lastFetchParams.filters || []) !== JSON.stringify(typeFilters);
 
-    const isStale = lastFetched && Date.now() - lastFetched > 5 * 60 * 1000;
+    const isStale = lastFetched && Date.now() - lastFetched > 30 * 1000;
 
     if ((paramsChanged || isStale) && !loading) {
       dispatch(resetPagination());
-      dispatch(
-        fetchDocuments({
-          startDate,
-          endDate,
-          page: 1,
-          limit: 20,
-          search: searchDebounced,
-          isSeen: isSeenParam,
-          isFlagged: isFlaggedParam,
-          category: categoryParam,
-          filters: typeFilters,
-        })
-      );
+      dispatch(fetchDocuments(currentFetchArgs));
     }
   }, [
     dispatch,
@@ -343,7 +355,18 @@ export default function Documents() {
     lastFetchParams,
     lastFetched,
     loading,
+    currentFetchArgs,
   ]);
+
+  const handleManualRefresh = useCallback(async () => {
+    if (isManualRefreshing) return;
+    setIsManualRefreshing(true);
+    try {
+      await dispatch(fetchDocuments(currentFetchArgs)).unwrap();
+    } finally {
+      setIsManualRefreshing(false);
+    }
+  }, [dispatch, currentFetchArgs, isManualRefreshing]);
 
   useEffect(() => {
     const typeParam = searchParams.get("type");
@@ -502,6 +525,8 @@ export default function Documents() {
       toast.success("Selected documents deleted");
     }
   };
+
+  const showSkeleton = loading && !isManualRefreshing && filteredDocuments?.length === 0;
   useEffect(() => {
     function handleClickOutside(event) {
       if (
@@ -868,6 +893,17 @@ export default function Documents() {
 
         {/* Date Range Picker */}
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:justify-end sm:ml-auto">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={handleManualRefresh}
+            disabled={isManualRefreshing}
+            title="Refresh"
+            className="h-8 w-8 text-gray-400 hover:text-gray-200 hover:bg-[#1d232a] disabled:opacity-60"
+          >
+            <RefreshCw className={`h-4 w-4 ${isManualRefreshing ? "animate-spin" : ""}`} />
+          </Button>
           <DateRangePicker
             value={dateRange}
             onChange={setDateRange}
@@ -973,7 +1009,7 @@ export default function Documents() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? (
+              {showSkeleton ? (
                 <DocumentTableSkeleton
                   rows={skeletonRows}
                   showFlag
