@@ -5,6 +5,7 @@ export default function DocumentTableSkeleton({
   showFlag = false,
   compact = false,
   responsive = false,
+  rowHeightClass = "h-9",
 }) {
   const cellClass = compact ? "px-1 sm:px-2 py-1.5" : "p-3";
   const dateCellClass = `${cellClass}${responsive ? " hidden md:table-cell" : ""}`;
@@ -13,32 +14,40 @@ export default function DocumentTableSkeleton({
   return (
     <>
       {Array.from({ length: rows }).map((_, i) => (
-        <tr key={i} className="border-b border-gray-800">
+        <tr key={i} className={`border-b border-gray-800 ${rowHeightClass}`}>
           <td className={`${cellClass} w-10 sm:w-12`}>
-            <Skeleton width={14} height={14} />
+            <div className="h-3 w-3 sm:h-3.5 sm:w-3.5">
+              <Skeleton className="h-full w-full" />
+            </div>
           </td>
           <td className={cellClass}>
-            <Skeleton circle width={10} height={10} />
+            <div className="h-1.5 w-1.5 sm:h-2 sm:w-2">
+              <Skeleton circle className="h-full w-full" />
+            </div>
           </td>
           {showFlag && (
             <td className={cellClass}>
-              <Skeleton width={12} height={12} />
+              <div className="h-3 w-3 sm:h-3.5 sm:w-3.5">
+                <Skeleton className="h-full w-full" />
+              </div>
             </td>
           )}
           <td className={cellClass}>
             <div className="flex items-center gap-2">
-              <Skeleton circle width={24} height={24} />
-              <Skeleton className="h-3 w-full" />
+              <div className="h-5 w-5 sm:h-6 sm:w-6">
+                <Skeleton circle className="h-full w-full" />
+              </div>
+              <Skeleton className="h-3 sm:h-3.5 w-full" />
             </div>
           </td>
           <td className={dateCellClass}>
-            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 sm:h-3.5 w-full" />
           </td>
           <td className={typeCellClass}>
-            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 sm:h-3.5 w-full" />
           </td>
           <td className={cellClass}>
-            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-4 w-3/4" />
           </td>
         </tr>
       ))}
