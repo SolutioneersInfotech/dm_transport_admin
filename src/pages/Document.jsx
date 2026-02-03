@@ -1034,7 +1034,7 @@ export default function Documents() {
                             onCheckedChange={(checked) => handleSelectDoc(doc.id, checked)}
                             onClick={(e) => e.stopPropagation()}
                             aria-label={`Select ${doc.driver_name}`}
-                            className="h-3 w-3 sm:h-3.5 sm:w-3.5"
+                            className="h-3 w-3 sm:h-3.5 sm:w-3.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 data-[state=checked]:opacity-100 data-[state=indeterminate]:opacity-100"
                           />
                         </TableCell>
                         <TableCell className="px-1 sm:px-2 py-1.5">
