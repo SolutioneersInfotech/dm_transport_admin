@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "../components/ui/table";
 import { Checkbox } from "../components/ui/checkbox";
-import { X, Search, Flag, ChevronDown, Check, CheckCircle2, Copy, Download, Trash2, Redo2 } from "lucide-react";
+import { X, Search, Flag, ChevronDown, Check, Copy, Download, Trash2, Redo2 } from "lucide-react";
 import DocumentTableSkeleton from "../components/skeletons/DocumentTableSkeleton";
 import {
   Drawer,
@@ -689,7 +689,7 @@ export default function Documents() {
       {/* FILTER BAR - Horizontal Layout matching image */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-2">
         {/* Search Bar */}
-        <div className="relative w-full sm:flex-1 min-w-[220px]">
+        <div className="relative w-full sm:flex-1 sm:min-w-0">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
             type="text"
@@ -1004,23 +1004,20 @@ export default function Documents() {
                         </TableCell>
                         <TableCell className="px-1 sm:px-2 py-1.5">
                           <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
-                            <div className="flex items-center gap-1 sm:gap-1.5">
+                            <div className="flex items-center gap-1 sm:gap-1.5" title={doc.seen === false ? "Unseen" : doc.seen === true ? "Seen" : "Unknown"}>
                               <span
-                                className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full flex-shrink-0 ${doc.seen === false
+                                className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full flex-shrink-0 ${
+                                  doc.seen === false
                                     ? "bg-blue-500"
                                     : doc.seen === true
                                       ? "bg-green-500"
                                       : "bg-gray-500"
-                                  }`}
+                                }`}
                               />
-                              <span className="text-[10px] sm:text-[11px] text-gray-400">
-                                {doc.seen === false ? "Unseen" : doc.seen === true ? "Seen" : "Unknown"}
-                              </span>
                             </div>
                             {doc.completed === true && (
-                              <span className="inline-flex items-center gap-0.5 text-[9px] sm:text-[10px] text-emerald-400" title="Done">
-                                <CheckCircle2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0" />
-                                Done
+                              <span className="inline-flex items-center text-emerald-400" title="Done">
+                                <Check className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0" />
                               </span>
                             )}
                             {doc.state === "markedForResend" && (
