@@ -52,17 +52,24 @@ export default function DateRangePicker({
     return tempRange;
   }, [tempRange, hoverDate]);
 
-  const label =
-    value?.from && value?.to
-      ? `${format(value.from, "MMM dd, yyyy")} - ${format(value.to, "MMM dd, yyyy")}`
-      : "Select date range";
+  const formattedFrom = value?.from ? format(value.from, "MMM dd, yyyy") : null;
+  const formattedTo = value?.to ? format(value.to, "MMM dd, yyyy") : null;
+  const label = formattedFrom && formattedTo ? (
+    <span className={`flex w-full items-center justify-between gap-3 ${labelClassName}`}>
+      <span className="text-left">{formattedFrom}</span>
+      <span className="text-gray-400">-</span>
+      <span className="text-right">{formattedTo}</span>
+    </span>
+  ) : (
+    <span className={`w-full ${labelClassName}`}>Select date range</span>
+  );
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         className={`inline-flex ${triggerWidthClassName} items-center justify-center whitespace-nowrap bg-[#1d232a] border border-gray-700 rounded-md px-4 py-2 text-gray-300 transition-colors hover:bg-[#20262e] hover:border-gray-600`}
       >
-        <span className={`w-full ${labelClassName}`}>{label}</span>
+        {label}
       </PopoverTrigger>
 
       <PopoverContent className="p-3 bg-[#0f141a] border border-gray-800 rounded-xl w-auto">
