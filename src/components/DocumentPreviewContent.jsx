@@ -847,7 +847,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                 </button>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-300">
+                <label className="block mb-2 text-sm font-medium text-gray-300">
                   Reason for Flagging
                 </label>
                 <textarea
@@ -866,7 +866,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   }}
                   variant="outline"
                   size="sm"
-                  className="border-gray-600 text-gray-300 hover:bg-[#1d232a]"
+                  className="border-gray-600 bg-[#0f141a] text-gray-100 hover:bg-[#1d232a] hover:text-white"
                 >
                   Cancel
                 </Button>
