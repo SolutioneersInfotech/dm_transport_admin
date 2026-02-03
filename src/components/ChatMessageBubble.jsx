@@ -299,6 +299,10 @@
 // }
 
 
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { Copy, X } from "lucide-react";
+
 export default function ChatMessageBubble({
   msg,
   senderName,
@@ -310,12 +314,15 @@ export default function ChatMessageBubble({
   const isAdmin = msg?.type === 1;
 
   const text = String(msg?.content?.message ?? "").trim() || "";
-  const attachment =
-    typeof msg?.content?.attachmentUrl === "string"
-      ? msg.content.attachmentUrl
-      : msg?.content?.attachmentUrl != null
-        ? String(msg.content.attachmentUrl)
-        : "";
+  const attachmentData = msg?.content?.attachment ?? null;
+  const attachmentUrl =
+    typeof attachmentData?.url === "string"
+      ? attachmentData.url
+      : typeof msg?.content?.attachmentUrl === "string"
+        ? msg.content.attachmentUrl
+        : msg?.content?.attachmentUrl != null
+          ? String(msg.content.attachmentUrl)
+          : "";
 
   const date = msg?.dateTime ? new Date(msg.dateTime) : null;
   const time = date
@@ -339,11 +346,29 @@ export default function ChatMessageBubble({
     msg?.status === 2 ? "text-blue-400" : "text-gray-400";
 
   /* ================= ATTACHMENT TYPE ================= */
-  const lowerUrl = attachment ? String(attachment).toLowerCase() : "";
+  const attachmentKind = useMemo(() => {
+    if (attachmentData?.kind) return attachmentData.kind;
+    if (attachmentData?.mime?.startsWith("image/")) return "image";
+    if (attachmentData?.mime?.startsWith("video/")) return "video";
+    if (attachmentData?.mime?.startsWith("audio/")) return "audio";
+    if (attachmentData?.mime === "application/pdf") return "pdf";
 
-  // Match extension at end or before query string (?token=...), e.g. Firebase Storage URLs
-  const isImage = /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(lowerUrl);
-  const isPDF = /\.pdf(\?|$)/i.test(lowerUrl);
+    const lowerUrl = attachmentUrl ? String(attachmentUrl).toLowerCase() : "";
+    if (/\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(lowerUrl)) return "image";
+    if (/\.(mp4|webm|mov|m4v)(\?|$)/i.test(lowerUrl)) return "video";
+    if (/\.(mp3|wav|ogg|m4a)(\?|$)/i.test(lowerUrl)) return "audio";
+    if (/\.pdf(\?|$)/i.test(lowerUrl)) return "pdf";
+    return attachmentUrl ? "file" : null;
+  }, [attachmentData, attachmentUrl]);
+
+  const [modal, setModal] = useState(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timeout = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(timeout);
+  }, [copied]);
 
   /* ================= STYLES ================= */
   const containerAlign = isAdmin ? "justify-end" : "justify-start";
@@ -383,8 +408,24 @@ export default function ChatMessageBubble({
 
         {/* Bubble */}
         <div
-          className={`px-3 py-2 rounded-lg shadow text-sm ${bubbleStyle}`}
+          className={`group relative px-3 py-2 rounded-lg shadow text-sm ${bubbleStyle}`}
         >
+          {text && (
+            <button
+              type="button"
+              onClick={async () => {
+                if (!navigator?.clipboard?.writeText) return;
+                await navigator.clipboard.writeText(text);
+                setCopied(true);
+              }}
+              className={`absolute -top-2 right-2 rounded bg-black/40 px-2 py-1 text-[10px] opacity-0 transition ${
+                isAdmin ? "text-blue-100" : "text-gray-200"
+              } group-hover:opacity-100`}
+              aria-label="Copy message"
+            >
+              {copied ? "Copied" : <Copy className="h-3 w-3" />}
+            </button>
+          )}
           {/* Replying to */}
           {showReplyTo && (
             <button
@@ -403,37 +444,58 @@ export default function ChatMessageBubble({
           )}
 
           {/* 🖼 Image */}
-          {attachment && isImage && (
+          {attachmentUrl && attachmentKind === "image" && (
             <img
-              src={attachment}
-              alt="attachment"
+              src={attachmentUrl}
+              alt={attachmentData?.name || "attachment"}
               className="mb-2 max-h-64 rounded-lg object-cover cursor-pointer"
-              onClick={() => window.open(attachment, "_blank")}
+              onClick={() => setModal({ kind: "image", url: attachmentUrl })}
+            />
+          )}
+
+          {/* 🎥 Video */}
+          {attachmentUrl && attachmentKind === "video" && (
+            <video
+              src={attachmentUrl}
+              controls
+              className="mb-2 max-h-64 w-full rounded-lg"
+            />
+          )}
+
+          {/* 🎵 Audio */}
+          {attachmentUrl && attachmentKind === "audio" && (
+            <audio
+              src={attachmentUrl}
+              controls
+              className="mb-2 w-full"
             />
           )}
 
           {/* 📄 PDF */}
-          {attachment && isPDF && (
-            <a
-              href={attachment}
-              target="_blank"
-              rel="noopener noreferrer"
+          {attachmentUrl && attachmentKind === "pdf" && (
+            <button
+              type="button"
+              onClick={() => setModal({ kind: "pdf", url: attachmentUrl })}
               className="mb-2 flex items-center gap-2 rounded bg-black/30 px-3 py-2 text-sm hover:bg-black/40"
             >
-              📄 <span className="underline">Open PDF</span>
-            </a>
+              📄 <span className="underline">View PDF</span>
+            </button>
           )}
 
           {/* 📎 Other file */}
-          {attachment && !isImage && !isPDF && (
-            <a
-              href={attachment}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mb-2 block text-blue-300 underline"
-            >
-              📎 Open Attachment
-            </a>
+          {attachmentUrl && attachmentKind === "file" && (
+            <div className="mb-2 flex flex-col gap-1 rounded bg-black/20 px-3 py-2 text-xs">
+              <span className="text-gray-200">
+                {attachmentData?.name || "Attachment"}
+              </span>
+              <a
+                href={attachmentUrl}
+                download
+                className="text-blue-200 underline"
+              >
+                Download file
+              </a>
+            </div>
           )}
 
           {/* Text */}
@@ -456,7 +518,36 @@ export default function ChatMessageBubble({
           </div>
         </div>
       </div>
+      {modal &&
+        createPortal(
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4">
+            <div className="relative max-h-full w-full max-w-4xl rounded-lg bg-[#0d1117] p-4 shadow-xl">
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="absolute right-3 top-3 rounded bg-black/40 p-1 text-gray-200 hover:text-white"
+                aria-label="Close preview"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              {modal.kind === "image" && (
+                <img
+                  src={modal.url}
+                  alt="Attachment preview"
+                  className="max-h-[80vh] w-full object-contain"
+                />
+              )}
+              {modal.kind === "pdf" && (
+                <iframe
+                  src={modal.url}
+                  title="PDF preview"
+                  className="h-[80vh] w-full rounded"
+                />
+              )}
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
-

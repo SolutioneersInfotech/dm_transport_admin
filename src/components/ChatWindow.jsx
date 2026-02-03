@@ -185,8 +185,11 @@
 //   );
 // }
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { Paperclip, Loader2 } from "lucide-react";
+import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
+import { signInWithCustomToken } from "firebase/auth";
 import {
   subscribeMessages as defaultSubscribeMessages,
   sendMessage as defaultSendMessage,
@@ -200,6 +203,8 @@ import ChatWindowSkeleton from "./skeletons/ChatWindowSkeleton";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Checkbox } from "./ui/checkbox";
+import { auth, storage } from "../firebase/firebaseApp";
+import { getAdminFirebaseCustomToken } from "../services/adminFirebaseToken";
 
 /* ================= LAST SEEN FORMATTER ================= */
 function formatLastSeen(lastSeen) {
@@ -215,7 +220,7 @@ function formatLastSeen(lastSeen) {
   });
 }
 
-export default function ChatWindow({ driver, chatApi }) {
+export default function ChatWindow({ driver, chatApi, chatType = "general" }) {
   const [messages, setMessages] = useState([]);
   const [selected, setSelected] = useState([]);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -223,7 +228,10 @@ export default function ChatWindow({ driver, chatApi }) {
   const [replyTo, setReplyTo] = useState(null);
   const [text, setText] = useState("");
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const authPromiseRef = useRef(null);
   const [loading, setLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const driverId = (() => {
     const candidate =
       driver?.userid ??
@@ -244,6 +252,13 @@ export default function ChatWindow({ driver, chatApi }) {
   const bottomRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const shouldScrollToBottomRef = useRef(true);
+  const adminUser = useMemo(() => {
+    const stored = localStorage.getItem("adminUser");
+    return stored ? JSON.parse(stored) : null;
+  }, []);
+  const canDeleteAll = adminUser?.permissions?.includes("manage_chat_delete");
+  const driverEmail = driver?.driver_email || driver?.email || "";
+  const driverPhone = driver?.driver_phone || driver?.phone || "";
 
   const {
     subscribeMessages,
@@ -286,7 +301,6 @@ export default function ChatWindow({ driver, chatApi }) {
     shouldScrollToBottomRef.current = true;
 
     const unsubscribe = subscribeMessages(driverId, (nextMessages) => {
-      console.log(nextMessages);
       setMessages(nextMessages || []);
       setLoading(false);
       
@@ -422,6 +436,12 @@ export default function ChatWindow({ driver, chatApi }) {
     closeContextMenu();
   }
 
+  function handleContextCancelSelection() {
+    setSelectionMode(false);
+    setSelected([]);
+    closeContextMenu();
+  }
+
   useEffect(() => {
     if (!contextMenu) return;
     const onDocClick = () => closeContextMenu();
@@ -433,29 +453,106 @@ export default function ChatWindow({ driver, chatApi }) {
   }, [contextMenu]);
 
   /* ================= SEND MESSAGE ================= */
-  async function handleSend() {
-    if (!text.trim()) return;
+  async function ensureFirebaseAuth() {
+    if (auth.currentUser) return auth.currentUser;
+    if (!authPromiseRef.current) {
+      authPromiseRef.current = (async () => {
+        const token = await getAdminFirebaseCustomToken();
+        const result = await signInWithCustomToken(auth, token);
+        return result.user;
+      })();
+    }
+    try {
+      const user = await authPromiseRef.current;
+      authPromiseRef.current = null;
+      return user;
+    } catch (error) {
+      authPromiseRef.current = null;
+      throw error;
+    }
+  }
+
+  function getAttachmentKind(mime) {
+    if (mime?.startsWith("image/")) return "image";
+    if (mime?.startsWith("video/")) return "video";
+    if (mime?.startsWith("audio/")) return "audio";
+    if (mime === "application/pdf") return "pdf";
+    return "file";
+  }
+
+  async function sendMessageWithContent(content) {
+    const messageText = content?.message ?? "";
+    const attachment = content?.attachment ?? null;
+    const hasMessage = messageText && String(messageText).trim() !== "";
+    if (!hasMessage && !attachment) return;
+
+    const payloadContent = {
+      message: hasMessage ? String(messageText).trim() : "",
+      attachment,
+      attachmentUrl: attachment?.url || "",
+    };
 
     const tempMsg = {
-      msgId: Math.random().toString(),
+      msgId: `temp-${Date.now()}`,
       type: 1, // ADMIN
-      content: { message: text, attachmentUrl: "" },
+      content: payloadContent,
       dateTime: new Date().toISOString(),
       status: 0,
+      replyTo: replyTo?.msgId ?? null,
+      sendername: adminUser?.userid || "Admin",
     };
 
     setMessages((prev) => [...prev, tempMsg]);
     setText("");
-    
+
     // Refocus input for better UX (allows continuous typing)
     inputRef.current?.focus();
-    
+
     // Always scroll smoothly when sending a message to show the new message
     shouldScrollToBottomRef.current = true;
     scrollToBottom("smooth");
 
-    await sendMessage(driverId, text, undefined, replyTo?.msgId ?? null);
+    await sendMessage(driverId, payloadContent, undefined, replyTo?.msgId ?? null);
     setReplyTo(null);
+  }
+
+  async function handleSend() {
+    const messageText = text.trim();
+    if (!messageText) return;
+    await sendMessageWithContent({ message: messageText });
+  }
+
+  async function handleAttachmentChange(event) {
+    const file = event.target.files?.[0];
+    if (!file || !driverId) return;
+    event.target.value = "";
+
+    try {
+      setIsUploading(true);
+      await ensureFirebaseAuth();
+      const timestamp = Date.now();
+      const safeName = file.name.replace(/\s+/g, "_");
+      const path = `chat_attachments/${chatType}/${driverId}/${timestamp}_${safeName}`;
+      const fileRef = storageRef(storage, path);
+      await uploadBytes(fileRef, file);
+      const url = await getDownloadURL(fileRef);
+      const attachment = {
+        url,
+        name: file.name,
+        size: file.size,
+        mime: file.type,
+        kind: getAttachmentKind(file.type),
+      };
+
+      await sendMessageWithContent({
+        message: text.trim(),
+        attachment,
+      });
+    } catch (error) {
+      console.error("Failed to upload attachment:", error);
+    } finally {
+      setIsUploading(false);
+    }
   }
 
   /* ================= DELETE SELECTED ================= */
@@ -481,7 +578,6 @@ export default function ChatWindow({ driver, chatApi }) {
 
   /* ================= GROUP MESSAGES ================= */
   const grouped = groupMessagesByDate(messages);
-  console.log(grouped);
 
   /* ================= LOADER ================= */
   if (loading) {
@@ -501,8 +597,14 @@ export default function ChatWindow({ driver, chatApi }) {
           <div>
             <p className="font-semibold">{driver.driver_name}</p>
             <p className="text-gray-400 text-xs">
-              Last seen: {formatLastSeen(driver.lastSeen)}
+              Last seen: {formatLastSeen(driver.lastSeen || driver.last_seen)}
             </p>
+            {(driverEmail || driverPhone) && (
+              <div className="text-[11px] text-gray-400 space-y-0.5">
+                {driverEmail && <p>Email: {driverEmail}</p>}
+                {driverPhone && <p>Phone: {driverPhone}</p>}
+              </div>
+            )}
           </div>
         </div>
 
@@ -540,9 +642,11 @@ export default function ChatWindow({ driver, chatApi }) {
               >
                 🗑
               </Button>
-              <Button onClick={handleDeleteAll} variant="destructive" size="sm">
-                Delete All
-              </Button>
+              {canDeleteAll && (
+                <Button onClick={handleDeleteAll} variant="destructive" size="sm">
+                  Delete All
+                </Button>
+              )}
             </>
           )}
         </div>
@@ -570,6 +674,13 @@ export default function ChatWindow({ driver, chatApi }) {
             >
               Select
             </button>
+            <button
+              type="button"
+              className="w-full px-3 py-2 text-left text-sm text-gray-200 hover:bg-[#1d232a]"
+              onClick={handleContextCancelSelection}
+            >
+              Cancel Selection
+            </button>
           </div>,
           document.body
         )}
@@ -588,7 +699,6 @@ export default function ChatWindow({ driver, chatApi }) {
         {Object.keys(grouped).map((date) => (
           <div key={date}>
             <div className="text-center text-gray-400 text-xs my-2">{date}</div>
-            {console.log(grouped[date])}
             {grouped[date].map((msg, idx) => {
               const senderName = msg.type === 1
                 ? (msg.sendername ?? "You")
@@ -663,7 +773,22 @@ export default function ChatWindow({ driver, chatApi }) {
 
       {/* ================= INPUT BAR ================= */}
       <div className="p-4 border-t border-gray-700 bg-[#111827] sticky bottom-0 flex gap-2">
-        <Button variant="ghost" size="icon" className="text-2xl text-gray-300 hover:text-white">📎</Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={handleAttachmentChange}
+        />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-gray-300 hover:text-white"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isUploading}
+          aria-label="Add attachment"
+        >
+          {isUploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Paperclip className="h-5 w-5" />}
+        </Button>
 
         <Input
           className="flex-1 bg-[#1f2937]"

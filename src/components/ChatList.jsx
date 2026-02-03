@@ -5,7 +5,7 @@ import ChatListItem from "./ChatListItem";
 import SkeletonLoader from "./skeletons/Skeleton";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { fetchMessages as defaultFetchMessages } from "../services/chatAPI";
+import { fetchMessages as defaultFetchMessages, getAdminId as defaultGetAdminId } from "../services/chatAPI";
 
 const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const dispatch = useAppDispatch();
@@ -15,15 +15,23 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   // console.log(users);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState([]); // Array of selected categories: ["F", "D", "C"]
+  const [seenFilter, setSeenFilter] = useState("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const observerTarget = useRef(null);
   const hasInitiallyFetched = useRef(false);
   const [isFetchingMessages, setIsFetchingMessages] = useState(false);
   const fetchedUsersRef = useRef(new Set());
   const [unreadCounts, setUnreadCounts] = useState({});
   const unsubscribeUnreadRefs = useRef({});
+  const lastReadCacheRef = useRef(new Set());
+  const [lastReadMap, setLastReadMap] = useState({});
   
   const fetchMessages = chatApi?.fetchMessages || defaultFetchMessages;
   const subscribeUnreadCount = chatApi?.subscribeUnreadCount;
+  const fetchAdminLastRead = chatApi?.fetchAdminLastRead;
+  const getAdminId = chatApi?.getAdminId || defaultGetAdminId;
+  const chatType = chatApi?.chatType || "general";
 
   function getDriverId(driver) {
     const candidate =
@@ -217,6 +225,12 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   // Subscribe to unread counts for all users
   useEffect(() => {
     if (!subscribeUnreadCount || !users?.length) return;
+    const dateRangeKey = `${startDate || ""}-${endDate || ""}`;
+    const startDateValue = startDate ? new Date(startDate) : null;
+    const endDateValue = endDate ? new Date(endDate) : null;
+    if (endDateValue) {
+      endDateValue.setHours(23, 59, 59, 999);
+    }
 
     // Subscribe to unread counts for each user
     users.forEach((u) => {
@@ -224,17 +238,28 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       if (!userId) return;
 
       // If already subscribed, skip
-      if (unsubscribeUnreadRefs.current[userId]) return;
+      if (unsubscribeUnreadRefs.current[userId]?.key === dateRangeKey) return;
+      if (unsubscribeUnreadRefs.current[userId]) {
+        unsubscribeUnreadRefs.current[userId]?.unsubscribe?.();
+        delete unsubscribeUnreadRefs.current[userId];
+      }
 
       // Subscribe to unread count changes
-      const unsubscribe = subscribeUnreadCount(userId, (count) => {
-        setUnreadCounts((prev) => ({
-          ...prev,
-          [userId]: count,
-        }));
-      });
+      const unsubscribe = subscribeUnreadCount(
+        userId,
+        (count) => {
+          setUnreadCounts((prev) => ({
+            ...prev,
+            [userId]: count,
+          }));
+        },
+        {
+          startDate: startDateValue,
+          endDate: endDateValue,
+        }
+      );
 
-      unsubscribeUnreadRefs.current[userId] = unsubscribe;
+      unsubscribeUnreadRefs.current[userId] = { unsubscribe, key: dateRangeKey };
     });
 
     // Cleanup: unsubscribe from users that are no longer in the list
@@ -242,11 +267,9 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       const currentUserIds = new Set(users.map((u) => getDriverId(u)).filter(Boolean));
       Object.keys(unsubscribeUnreadRefs.current).forEach((userId) => {
         if (!currentUserIds.has(userId)) {
-          const unsubscribe = unsubscribeUnreadRefs.current[userId];
-          if (unsubscribe) {
-            unsubscribe();
-            delete unsubscribeUnreadRefs.current[userId];
-          }
+          const unsubscribe = unsubscribeUnreadRefs.current[userId]?.unsubscribe;
+          if (unsubscribe) unsubscribe();
+          delete unsubscribeUnreadRefs.current[userId];
           // Remove from unread counts
           setUnreadCounts((prev) => {
             const next = { ...prev };
@@ -256,7 +279,29 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         }
       });
     };
-  }, [users, subscribeUnreadCount]);
+  }, [users, subscribeUnreadCount, startDate, endDate]);
+
+  useEffect(() => {
+    if (!fetchAdminLastRead || !users?.length) return;
+    const adminId = getAdminId();
+
+    users.forEach((user) => {
+      const userId = getDriverId(user);
+      if (!userId || lastReadCacheRef.current.has(userId)) return;
+      lastReadCacheRef.current.add(userId);
+      fetchAdminLastRead(chatType, adminId, userId)
+        .then((lastReadAt) => {
+          if (!lastReadAt) return;
+          setLastReadMap((prev) => ({
+            ...prev,
+            [userId]: lastReadAt,
+          }));
+        })
+        .catch((error) => {
+          console.error("Failed to fetch admin read status:", error);
+        });
+    });
+  }, [users, fetchAdminLastRead, getAdminId, chatType]);
 
   // Transform users from Redux to drivers format
   // Redux already preserves all users, so we use it directly
@@ -278,10 +323,13 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
           driver_name: u.name || u.driver_name,
           driver_image: u.profilePic || u.image || null,
           lastSeen: u.lastSeen || null,
+          last_seen: u.last_seen || null,
+          status: u.status || null,
           last_message: u.last_message || "",
           last_chat_time: u.last_chat_time || null,
           unreadCount: unreadCounts[userId] || 0,
           category: u.category || null, // Include category field
+          lastReadAt: lastReadMap[userId] || null,
         };
       })
       .filter(Boolean);
@@ -300,7 +348,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
    
 
     return driversWithIds;
-  }, [users, unreadCounts]);
+  }, [users, unreadCounts, lastReadMap]);
 
   // Client-side filtering - filter by search and category
   const filtered = useMemo(() => {
@@ -322,9 +370,32 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         return driverName.includes(searchTerm);
       });
     }
+
+    if (seenFilter === "unseen") {
+      driversCopy = driversCopy.filter((driver) => driver.unreadCount > 0);
+    } else if (seenFilter === "seen") {
+      driversCopy = driversCopy.filter((driver) => driver.unreadCount === 0);
+    }
+
+    if (startDate || endDate) {
+      const start = startDate ? new Date(startDate) : null;
+      const end = endDate ? new Date(endDate) : null;
+      if (end) {
+        end.setHours(23, 59, 59, 999);
+      }
+
+      driversCopy = driversCopy.filter((driver) => {
+        if (!driver.last_chat_time) return false;
+        const chatDate = new Date(driver.last_chat_time);
+        if (Number.isNaN(chatDate.getTime())) return false;
+        if (start && chatDate < start) return false;
+        if (end && chatDate > end) return false;
+        return true;
+      });
+    }
     
     return driversCopy;
-  }, [drivers, search, categoryFilter]);
+  }, [drivers, search, categoryFilter, seenFilter, startDate, endDate]);
   
   const selectedDriverId = getDriverId(selectedDriver);
 
@@ -369,6 +440,36 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
                 </Button>
               );
             })}
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-gray-400">
+          <div className="flex items-center gap-2">
+            <span>Seen:</span>
+            <select
+              className="h-8 rounded border border-gray-700 bg-[#111827] px-2 text-xs text-gray-200"
+              value={seenFilter}
+              onChange={(e) => setSeenFilter(e.target.value)}
+            >
+              <option value="all">All</option>
+              <option value="unseen">Unseen</option>
+              <option value="seen">Seen</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span>Date:</span>
+            <Input
+              type="date"
+              className="h-8 w-[120px] bg-[#111827] text-xs"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+            <span className="text-gray-600">to</span>
+            <Input
+              type="date"
+              className="h-8 w-[120px] bg-[#111827] text-xs"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
           </div>
         </div>
       </div>

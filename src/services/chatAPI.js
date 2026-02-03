@@ -1,19 +1,17 @@
 import {
   get,
-  limitToLast,
   onValue,
-  orderByChild,
   push,
-  query,
   ref,
   remove,
   set,
-  update,
 } from "firebase/database";
 import { database } from "../firebase/firebaseApp";
 
 const ADMIN_GENERAL_PATH = "chat/users/admin/general";
 const USER_MIRROR_BASE = "chat/users";
+const ADMIN_READS_PATH = "chat/adminReads";
+export const chatType = "general";
 const FETCH_USERS_URL =
   "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin/fetchusers";
 
@@ -23,6 +21,61 @@ function getToken() {
 
 function getAdminUser() {
   return JSON.parse(localStorage.getItem("adminUser"));
+}
+
+export function getAdminId() {
+  return getAdminUser()?.userid || "admin";
+}
+
+function buildContentPayload(input) {
+  if (input && typeof input === "object" && !Array.isArray(input)) {
+    const message =
+      typeof input.message === "string"
+        ? input.message
+        : input.message != null
+          ? String(input.message)
+          : "";
+    const attachment = input.attachment ?? null;
+    const attachmentUrl =
+      typeof input.attachmentUrl === "string"
+        ? input.attachmentUrl
+        : attachment?.url || "";
+    return { message, attachment, attachmentUrl };
+  }
+
+  const message =
+    typeof input === "string" ? input : input != null ? String(input) : "";
+  return {
+    message,
+    attachment: null,
+    attachmentUrl: "",
+  };
+}
+
+function parseMessageDate(msg) {
+  const rawDate = msg?.dateTime ?? msg?.datetime;
+  if (!rawDate) return null;
+  const parsed = new Date(rawDate);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function buildDateRange(startDate, endDate) {
+  const start =
+    startDate instanceof Date
+      ? startDate
+      : startDate
+        ? new Date(startDate)
+        : null;
+  const end =
+    endDate instanceof Date
+      ? endDate
+      : endDate
+        ? new Date(endDate)
+        : null;
+
+  if (start && Number.isNaN(start.getTime())) return { start: null, end };
+  if (end && Number.isNaN(end.getTime())) return { start, end: null };
+  return { start, end };
 }
 
 function normalizeMessage(messageId, msg) {
@@ -36,22 +89,30 @@ function normalizeMessage(messageId, msg) {
     msg?.type === 1 ? 0 :
     msg?.type;
 
+  const attachmentUrl =
+    msg?.content?.attachment?.url ??
+    msg?.content?.attachmentUrl ??
+    msg?.attachmentUrl ??
+    "";
+  const attachment =
+    msg?.content?.attachment ??
+    msg?.attachment ??
+    (attachmentUrl ? { url: attachmentUrl, name: "Attachment" } : null);
+
   return {
     msgId: messageId,
     id: messageId,
     dateTime,
     content: {
       message: msg?.content?.message ?? msg?.message ?? "",
-      attachmentUrl: msg?.content?.attachmentUrl ?? msg?.attachmentUrl ?? "",
+      attachment,
+      attachmentUrl,
     },
     status: msg?.status ?? 0,
     type: typeof type === "number" ? type : 0,
     contactId: msg?.contactId ?? msg?.userid ?? null,
     sendername: msg?.sendername ?? "Unknown",
     replyTo: msg?.replyTo ?? null,
-    seenByAdmin: msg?.seenByAdmin ?? false,
-    seenAt: msg?.seenAt ?? null,
-    seenBy: msg?.seenBy ?? null,
   };
 }
 
@@ -95,11 +156,7 @@ export async function fetchMessages(userid, messageLimit = 10) {
   // FIX: Fetch more messages and sort by timestamp to get the actual most recent
   // limitToLast() uses Firebase key order, not timestamp order, so we need to sort
   // Fetch more messages (20) to ensure we get the most recent even if keys are out of order
-  const fetchLimit = messageLimit === 1 ? 20 : messageLimit; // Fetch more if we only need 1
-  
-  const messagesRef = query(
-    ref(database, `${ADMIN_GENERAL_PATH}/${userid}`)
-  );
+  const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
   
   const snapshot = await get(messagesRef);
   const messagesObject = snapshot.exists() ? snapshot.val() : {};
@@ -161,13 +218,18 @@ export async function sendMessage(userid, text, adminUser = getAdminUser(), repl
     throw new Error("Unable to generate message id.");
   }
 
-  const messageText = typeof text === "string" ? text : (text != null ? String(text) : "");
+  const content = buildContentPayload(text);
+  const messageText = content.message;
   const replyTo = replyToMsgId != null && replyToMsgId !== "" ? replyToMsgId : null;
 
   const payload = {
     id: messageId,
     dateTime: new Date().toISOString(),
-    content: { message: messageText, attachmentUrl: "" },
+    content: {
+      message: messageText,
+      attachment: content.attachment ?? null,
+      attachmentUrl: content.attachment?.url || content.attachmentUrl || "",
+    },
     status: 0,
     type: 0,
     contactId: userid,
@@ -224,43 +286,9 @@ export async function deleteChatHistory(userid) {
  */
 export async function markMessagesAsSeen(userid) {
   try {
-    const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
-    const snapshot = await get(messagesRef);
-    
-    if (!snapshot.exists()) {
-      return { success: true };
-    }
-
-    const messagesObject = snapshot.val();
-    const updateData = {};
-    const adminUser = getAdminUser();
-    const adminId = adminUser?.userid || "admin";
     const seenTimestamp = new Date().toISOString();
-
-    // Update all unread messages (type === 1, from user) to mark them as seen
-    Object.keys(messagesObject).forEach((messageId) => {
-      const msg = messagesObject[messageId];
-      // Only mark messages from user (type === 1) that haven't been seen
-      if (msg.type === 1 && !msg.seenByAdmin) {
-        const messagePath = `${ADMIN_GENERAL_PATH}/${userid}/${messageId}`;
-        updateData[`${messagePath}/seenByAdmin`] = true;
-        updateData[`${messagePath}/seenAt`] = seenTimestamp;
-        updateData[`${messagePath}/seenBy`] = adminId;
-      }
-    });
-
-    if (Object.keys(updateData).length > 0) {
-      // Use update to batch update all fields at once
-      await update(ref(database), updateData);
-    }
-
-    // Store last seen timestamp for this user
-    const lastSeenRef = ref(database, `chat/admin/lastSeen/${userid}`);
-    await set(lastSeenRef, {
-      timestamp: seenTimestamp,
-      adminId: adminId,
-    });
-
+    const adminId = getAdminId();
+    await setAdminLastRead(chatType, adminId, userid, seenTimestamp);
     return { success: true };
   } catch (error) {
     console.error("Error marking messages as seen:", error);
@@ -268,13 +296,30 @@ export async function markMessagesAsSeen(userid) {
   }
 }
 
+export async function fetchAdminLastRead(chatTypeParam, adminId, userId) {
+  const snapshot = await get(
+    ref(database, `${ADMIN_READS_PATH}/${chatTypeParam}/${adminId}/${userId}`)
+  );
+  if (!snapshot.exists()) return null;
+  return snapshot.val()?.lastReadAt ?? null;
+}
+
+export async function setAdminLastRead(chatTypeParam, adminId, userId, lastReadAt) {
+  await set(
+    ref(database, `${ADMIN_READS_PATH}/${chatTypeParam}/${adminId}/${userId}`),
+    { lastReadAt }
+  );
+}
+
 /**
  * Get unread message count for a user
  * @param {string} userid - User ID
  * @returns {Promise<number>}
  */
-export async function getUnreadCount(userid) {
+export async function getUnreadCount(userid, options = {}) {
   try {
+    const adminId = options.adminId || getAdminId();
+    const { start, end } = buildDateRange(options.startDate, options.endDate);
     const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
     const snapshot = await get(messagesRef);
     
@@ -283,13 +328,18 @@ export async function getUnreadCount(userid) {
     }
 
     const messagesObject = snapshot.val();
+    const lastReadAt = await fetchAdminLastRead(chatType, adminId, userid);
+    const lastReadDate = lastReadAt ? new Date(lastReadAt) : null;
     let unreadCount = 0;
 
     Object.values(messagesObject).forEach((msg) => {
-      // Count messages from user (type === 1) that haven't been seen
-      if (msg.type === 1 && !msg.seenByAdmin) {
-        unreadCount++;
-      }
+      if (msg.type !== 1) return;
+      const msgDate = parseMessageDate(msg);
+      if (!msgDate) return;
+      if (lastReadDate && msgDate <= lastReadDate) return;
+      if (start && msgDate < start) return;
+      if (end && msgDate > end) return;
+      unreadCount += 1;
     });
 
     return unreadCount;
@@ -305,26 +355,50 @@ export async function getUnreadCount(userid) {
  * @param {function} onChange - Callback function called when unread count changes
  * @returns {function} Unsubscribe function
  */
-export function subscribeUnreadCount(userid, onChange) {
+export function subscribeUnreadCount(userid, onChange, options = {}) {
   const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
-  
-  const unsubscribe = onValue(messagesRef, (snapshot) => {
-    if (!snapshot.exists()) {
+  const adminId = options.adminId || getAdminId();
+  const readsRef = ref(
+    database,
+    `${ADMIN_READS_PATH}/${chatType}/${adminId}/${userid}`
+  );
+  const { start, end } = buildDateRange(options.startDate, options.endDate);
+  let lastReadDate = null;
+  let messagesObject = {};
+
+  const computeUnread = () => {
+    if (!messagesObject || Object.keys(messagesObject).length === 0) {
       onChange(0);
       return;
     }
 
-    const messagesObject = snapshot.val();
     let unreadCount = 0;
-
     Object.values(messagesObject).forEach((msg) => {
-      if (msg.type === 1 && !msg.seenByAdmin) {
-        unreadCount++;
-      }
+      if (msg.type !== 1) return;
+      const msgDate = parseMessageDate(msg);
+      if (!msgDate) return;
+      if (lastReadDate && msgDate <= lastReadDate) return;
+      if (start && msgDate < start) return;
+      if (end && msgDate > end) return;
+      unreadCount += 1;
     });
 
     onChange(unreadCount);
+  };
+  
+  const unsubscribeMessages = onValue(messagesRef, (snapshot) => {
+    messagesObject = snapshot.exists() ? snapshot.val() : {};
+    computeUnread();
   });
 
-  return unsubscribe;
+  const unsubscribeReads = onValue(readsRef, (snapshot) => {
+    const lastReadAt = snapshot.exists() ? snapshot.val()?.lastReadAt : null;
+    lastReadDate = lastReadAt ? new Date(lastReadAt) : null;
+    computeUnread();
+  });
+
+  return () => {
+    unsubscribeMessages();
+    unsubscribeReads();
+  };
 }

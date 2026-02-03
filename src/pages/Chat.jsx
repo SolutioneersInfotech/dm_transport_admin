@@ -101,7 +101,7 @@ const Chat = () => {
               exit={{ opacity: 0, x: 16 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
             >
-              <ChatWindow driver={selectedDriver} chatApi={chatAPI} />
+              <ChatWindow driver={selectedDriver} chatApi={chatAPI} chatType="general" />
             </motion.div>
           ) : (
             <motion.div

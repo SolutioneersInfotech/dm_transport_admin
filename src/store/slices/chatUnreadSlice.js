@@ -17,13 +17,13 @@ const chatUnreadSlice = createSlice({
       }
       state.unreadCountsByUser[userId][chatType] = count;
       
-      // Recalculate totals
+      // Recalculate totals (count users with unread, not messages)
       let regularTotal = 0;
       let maintenanceTotal = 0;
       
       Object.values(state.unreadCountsByUser).forEach((counts) => {
-        regularTotal += counts.regular || 0;
-        maintenanceTotal += counts.maintenance || 0;
+        if ((counts.regular || 0) > 0) regularTotal += 1;
+        if ((counts.maintenance || 0) > 0) maintenanceTotal += 1;
       });
       
       state.regularChatUnreadCount = regularTotal;
@@ -39,11 +39,16 @@ const chatUnreadSlice = createSlice({
     removeUserUnreadCounts: (state, action) => {
       const userId = action.payload;
       if (state.unreadCountsByUser[userId]) {
-        const counts = state.unreadCountsByUser[userId];
-        state.regularChatUnreadCount -= counts.regular || 0;
-        state.maintenanceChatUnreadCount -= counts.maintenance || 0;
         delete state.unreadCountsByUser[userId];
-        state.totalUnreadCount = state.regularChatUnreadCount + state.maintenanceChatUnreadCount;
+        let regularTotal = 0;
+        let maintenanceTotal = 0;
+        Object.values(state.unreadCountsByUser).forEach((counts) => {
+          if ((counts.regular || 0) > 0) regularTotal += 1;
+          if ((counts.maintenance || 0) > 0) maintenanceTotal += 1;
+        });
+        state.regularChatUnreadCount = regularTotal;
+        state.maintenanceChatUnreadCount = maintenanceTotal;
+        state.totalUnreadCount = regularTotal + maintenanceTotal;
       }
     },
   },

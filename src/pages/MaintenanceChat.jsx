@@ -18,7 +18,11 @@ const MaintenanceChat = () => {
 
       <div className="flex-1 h-full overflow-hidden">
         {selectedDriver ? (
-          <ChatWindow driver={selectedDriver} chatApi={maintenanceChatAPI} />
+          <ChatWindow
+            driver={selectedDriver}
+            chatApi={maintenanceChatAPI}
+            chatType="maintenance"
+          />
         ) : (
           <div className="flex justify-center items-center h-full text-gray-500">
             Select a driver to start chat

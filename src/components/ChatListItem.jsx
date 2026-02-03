@@ -35,6 +35,17 @@ const ChatListItem = ({ driver, onClick, isSelected }) => {
     : "";
 
   const unreadCount = driver.unreadCount || 0;
+  const isOnline = (() => {
+    if (driver?.status === "active") return true;
+    const lastSeenValue = driver?.last_seen ?? driver?.lastSeen ?? null;
+    if (!lastSeenValue) return false;
+    const seconds = lastSeenValue?._seconds ?? lastSeenValue?.seconds;
+    const parsed = seconds
+      ? new Date(seconds * 1000)
+      : new Date(lastSeenValue);
+    if (Number.isNaN(parsed.getTime())) return false;
+    return Date.now() - parsed.getTime() <= 3 * 60 * 1000;
+  })();
 
   return (
     <div
@@ -44,11 +55,14 @@ const ChatListItem = ({ driver, onClick, isSelected }) => {
       } ${unreadCount > 0 ? "bg-[#1d232a]" : ""}`}
     >
       <div className="relative">
-      <img
-        src={driver.driver_image || "/default-user.png"}
-        alt="profile"
-        className="w-10 h-10 rounded-full"
-      />
+        <img
+          src={driver.driver_image || "/default-user.png"}
+          alt="profile"
+          className="w-10 h-10 rounded-full"
+        />
+        {isOnline && (
+          <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full border-2 border-white bg-emerald-400"></span>
+        )}
         {unreadCount > 0 && (
           <span className="absolute -top-1 -right-1 bg-[#1f6feb] text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1.5 border-2 border-[#0d1117]">
             {unreadCount > 99 ? "99+" : unreadCount}
@@ -86,4 +100,3 @@ const ChatListItem = ({ driver, onClick, isSelected }) => {
 };
 
 export default ChatListItem;
-
