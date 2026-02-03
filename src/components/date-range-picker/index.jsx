@@ -9,6 +9,7 @@ export default function DateRangePicker({
   onChange,
   showPresets = true,
   triggerWidthClassName = "w-fit",
+  labelClassName = "text-center",
 }) {
   const [open, setOpen] = useState(false);
   const presets = useMemo(() => buildPresets(new Date()), []);
@@ -59,9 +60,9 @@ export default function DateRangePicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        className={`inline-flex ${triggerWidthClassName} items-center whitespace-nowrap bg-[#1d232a] border border-gray-700 rounded-md px-4 py-2 text-left text-gray-300 transition-colors hover:bg-[#20262e] hover:border-gray-600`}
+        className={`inline-flex ${triggerWidthClassName} items-center justify-center whitespace-nowrap bg-[#1d232a] border border-gray-700 rounded-md px-4 py-2 text-gray-300 transition-colors hover:bg-[#20262e] hover:border-gray-600`}
       >
-        {label}
+        <span className={`w-full ${labelClassName}`}>{label}</span>
       </PopoverTrigger>
 
       <PopoverContent className="p-3 bg-[#0f141a] border border-gray-800 rounded-xl w-auto">

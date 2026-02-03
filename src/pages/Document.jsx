@@ -844,7 +844,8 @@ export default function Documents() {
           <DateRangePicker
             value={dateRange}
             onChange={setDateRange}
-            triggerWidthClassName="w-[240px] sm:w-[280px]"
+            triggerWidthClassName="w-[260px] sm:w-[320px]"
+            labelClassName="text-center"
           />
           {dateRange?.from &&
             dateRange?.to &&
