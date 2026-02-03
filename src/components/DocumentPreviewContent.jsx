@@ -183,6 +183,8 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   const outVal = doc.out_date_time ?? doc.outTime ?? doc.out_time ?? doc.outDateTime;
   const inFormatted = formatDateTime(inVal);
   const outFormatted = formatDateTime(outVal);
+  const showInTime = inVal != null && inVal !== "" && inFormatted !== "—";
+  const showOutTime = outVal != null && outVal !== "" && outFormatted !== "—";
   const url = doc.document_url;
   const cleanURL = url?.split("?")[0];
   const ext = cleanURL?.split(".").pop()?.toLowerCase();
@@ -728,18 +730,24 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-y-2 px-4 py-2 border-t border-gray-700 bg-black/30">
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-            <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
-              <span className="font-medium text-gray-400 uppercase tracking-wide">In:</span>
-              <span className="text-white">{inFormatted}</span>
-              {renderCopyButton(inFormatted, "in time")}
+          {(showInTime || showOutTime) && (
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              {showInTime && (
+                <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
+                  <span className="font-medium text-gray-400 uppercase tracking-wide">In:</span>
+                  <span className="text-white">{inFormatted}</span>
+                  {renderCopyButton(inFormatted, "in time")}
+                </div>
+              )}
+              {showOutTime && (
+                <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
+                  <span className="font-medium text-gray-400 uppercase tracking-wide">Out:</span>
+                  <span className="text-white">{outFormatted}</span>
+                  {renderCopyButton(outFormatted, "out time")}
+                </div>
+              )}
             </div>
-            <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
-              <span className="font-medium text-gray-400 uppercase tracking-wide">Out:</span>
-              <span className="text-white">{outFormatted}</span>
-              {renderCopyButton(outFormatted, "out time")}
-            </div>
-          </div>
+          )}
           <div className="flex items-center gap-x-3 sm:ml-auto">
             <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
               <span className="font-medium text-gray-400 uppercase tracking-wide">Size:</span>
