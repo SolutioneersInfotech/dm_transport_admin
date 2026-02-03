@@ -1012,11 +1012,18 @@ export default function Documents() {
                     </TableRow>
 
                     {/* Group Rows */}
-                    {groupedDocuments[group].map((doc) => (
+                    {groupedDocuments[group].map((doc) => {
+                      const isActive = selectedDoc?.id === doc.id;
+                      const isSelected = selectedDocIds.has(doc.id);
+
+                      return (
                       <TableRow
                         key={doc.id}
+                        data-state={isSelected ? "selected" : undefined}
                         className={`group h-9 border-gray-800 hover:bg-[#1d232a]/50 cursor-pointer transition-colors ${
-                          selectedDoc?.id === doc.id ? "bg-[#1f6feb]/15 ring-1 ring-inset ring-[#1f6feb]/40" : ""
+                          isActive ? "bg-[#1f6feb]/15 ring-1 ring-inset ring-[#1f6feb]/40" : ""
+                        } ${
+                          isSelected && !isActive ? "bg-[#1f6feb]/10 ring-1 ring-inset ring-[#1f6feb]/30" : ""
                         }`}
                         onClick={() => {
                           setSelectedDoc(doc);
@@ -1187,7 +1194,8 @@ export default function Documents() {
                           </span>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </>
                 ))
               )}
