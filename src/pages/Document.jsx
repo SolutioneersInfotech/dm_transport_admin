@@ -948,7 +948,7 @@ export default function Documents() {
                       className="h-3 w-3 sm:h-3.5 sm:w-3.5"
                     />
                     <span className="text-[9px] sm:text-[10px] font-medium text-gray-400 hidden sm:inline">
-                      Select All
+                      
                     </span>
                   </div>
                 </TableHead>
