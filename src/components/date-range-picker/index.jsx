@@ -4,7 +4,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns";
 import { buildPresets } from "@/lib/dateRangePresets";
 
-export default function DateRangePicker({ value, onChange, showPresets = true }) {
+export default function DateRangePicker({
+  value,
+  onChange,
+  showPresets = true,
+  triggerWidthClassName = "w-fit",
+  labelClassName = "text-center",
+}) {
   const [open, setOpen] = useState(false);
   const presets = useMemo(() => buildPresets(new Date()), []);
   const today = useMemo(() => new Date(), []);
@@ -46,14 +52,25 @@ export default function DateRangePicker({ value, onChange, showPresets = true })
     return tempRange;
   }, [tempRange, hoverDate]);
 
-  const label =
-    value?.from && value?.to
-      ? `${format(value.from, "MMM dd, yyyy")} - ${format(value.to, "MMM dd, yyyy")}`
-      : "Select date range";
+  const formattedFrom = value?.from ? format(value.from, "MMM dd, yyyy") : null;
+  const formattedTo = value?.to ? format(value.to, "MMM dd, yyyy") : null;
+  const label = formattedFrom && formattedTo ? (
+    <span
+      className={`grid w-full grid-cols-[1fr_auto_1fr] items-center gap-1 ${labelClassName}`}
+    >
+      <span className="text-left">{formattedFrom}</span>
+      <span className="text-gray-400">-</span>
+      <span className="text-right">{formattedTo}</span>
+    </span>
+  ) : (
+    <span className={`w-full ${labelClassName}`}>Select date range</span>
+  );
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger className="inline-flex w-fit items-center whitespace-nowrap bg-[#1d232a] border border-gray-700 rounded-md px-4 py-2 text-left text-gray-300 transition-colors hover:bg-[#20262e] hover:border-gray-600">
+      <PopoverTrigger
+        className={`inline-flex ${triggerWidthClassName} items-center justify-center whitespace-nowrap bg-[#1d232a] border border-gray-700 rounded-md px-8 py-2 text-gray-300 transition-colors hover:bg-[#20262e] hover:border-gray-600`}
+      >
         {label}
       </PopoverTrigger>
 

@@ -843,7 +843,12 @@ export default function Documents() {
 
         {/* Date Range Picker */}
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:justify-end sm:ml-auto">
-          <DateRangePicker value={dateRange} onChange={setDateRange} />
+          <DateRangePicker
+            value={dateRange}
+            onChange={setDateRange}
+            triggerWidthClassName="w-[260px] sm:w-[320px]"
+            labelClassName="text-center"
+          />
           {dateRange?.from &&
             dateRange?.to &&
             (formatLocalDate(dateRange.from) !== defaultDates.start ||
