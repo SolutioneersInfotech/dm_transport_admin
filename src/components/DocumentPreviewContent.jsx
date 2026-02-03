@@ -1192,7 +1192,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                 onClick={() => setShowDeleteModal(false)}
                 variant="outline"
                 size="sm"
-                className="border-gray-600 text-gray-300 hover:bg-[#1d232a]"
+                className="border-gray-600 text-gray-100 hover:bg-[#1d232a] hover:text-white"
                 disabled={isDeleting}
               >
                 Cancel
