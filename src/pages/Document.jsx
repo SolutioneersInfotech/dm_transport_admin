@@ -82,6 +82,7 @@ export default function Documents() {
   const [isMarkingAsSeen, setIsMarkingAsSeen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isBulkDownloading, setIsBulkDownloading] = useState(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [showFlagModal, setShowFlagModal] = useState(false);
   const [flagReason, setFlagReason] = useState("");
   const observerTarget = useRef(null);
@@ -475,11 +476,8 @@ export default function Documents() {
   const handleBulkDelete = async () => {
     const docsToDelete = getSelectedDocs();
     if (docsToDelete.length === 0) return;
-    const message = `You have selected '${docsToDelete.length}' documents for deletion. This action cannot be undone. Are you sure you want to delete them permanently?`;
-    if (!window.confirm(message)) {
-      return;
-    }
     setIsBulkDeleting(true);
+    setShowBulkDeleteModal(false);
     let didDelete = false;
     try {
       const result = await dispatch(deleteDocumentsThunk({ documents: docsToDelete }));
@@ -909,7 +907,10 @@ export default function Documents() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={handleBulkDelete}
+              onClick={() => {
+                if (selectedDocIds.size === 0) return;
+                setShowBulkDeleteModal(true);
+              }}
               disabled={isBulkDeleting}
               className="h-8 mr-0.5 sm:h-9 border-red-500/60 bg-[#0f172a]/70 text-red-400 shadow-sm hover:bg-red-500/20 hover:text-red-100 hover:border-red-400 hover:shadow-md active:shadow-sm"
             >
@@ -1279,6 +1280,53 @@ export default function Documents() {
           )}
         </div>
       </div>
+
+      {/* Bulk Delete Confirmation Modal */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-md rounded-lg border border-gray-700 bg-[#161b22] p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white">Delete Selected Documents</h3>
+              <button
+                onClick={() => setShowBulkDeleteModal(false)}
+                className="text-gray-400 hover:text-white"
+                disabled={isBulkDeleting}
+                aria-label="Close delete confirmation"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm text-gray-300">
+                You have selected {selectedDocIds.size} document{selectedDocIds.size === 1 ? "" : "s"} for deletion.
+                This action cannot be undone.
+              </p>
+              <p className="text-xs text-gray-400">
+                The selected documents will be removed permanently and cannot be recovered.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 justify-end">
+              <Button
+                onClick={() => setShowBulkDeleteModal(false)}
+                variant="outline"
+                size="sm"
+                className="border-gray-600 text-gray-800 hover:bg-[#1d232a] hover:text-white"
+                disabled={isBulkDeleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleBulkDelete}
+                size="sm"
+                disabled={isBulkDeleting}
+                className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isBulkDeleting ? "Deleting..." : "Delete"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Mobile Drawer for Document Preview */}
       {isMobile && (
