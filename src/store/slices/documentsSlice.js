@@ -2,6 +2,11 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { fetchDocumentsRoute, fetchDocumentCountRoute, updateDocumentRoute, changeDocumentTypeRoute } from "../../utils/apiRoutes";
 import { deleteDocument } from "../../services/documentDeleteAPI";
 
+const isDeletedDocument = (document) => {
+  const value = document?.isDeleted;
+  return value === true || value === "true" || value === "yes" || value === 1 || value === "1";
+};
+
 // Async thunk for fetching initial documents
 export const fetchDocuments = createAsyncThunk(
   "documents/fetchDocuments",
@@ -46,8 +51,9 @@ export const fetchDocuments = createAsyncThunk(
         return rejectWithValue(data.message || "Failed to fetch documents");
       }
 
+      const documents = (data.documents || []).filter((document) => !isDeletedDocument(document));
       return {
-        documents: data.documents || [],
+        documents,
         hasMore: data.hasMore !== undefined ? data.hasMore : (data.documents?.length || 0) >= limit,
         page: data.page || page,
         limit: data.limit || limit,
@@ -103,8 +109,9 @@ export const fetchMoreDocuments = createAsyncThunk(
         return rejectWithValue(data.message || "Failed to fetch more documents");
       }
       
+      const documents = (data.documents || []).filter((document) => !isDeletedDocument(document));
       return {
-        documents: data.documents || [],
+        documents,
         hasMore: data.hasMore !== undefined ? data.hasMore : (data.documents?.length || 0) >= limit,
         page: data.page || page,
         limit: data.limit || limit,
@@ -253,7 +260,7 @@ export const deleteDocumentThunk = createAsyncThunk(
         return rejectWithValue("Document type and ID are required");
       }
 
-      const result = await deleteDocument(docType, docId);
+      const result = await deleteDocument(document);
 
       if (!result.success) {
         return rejectWithValue(result.error || "Failed to delete document");

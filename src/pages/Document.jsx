@@ -448,6 +448,10 @@ export default function Documents() {
   const handleBulkDelete = async () => {
     const docsToDelete = getSelectedDocs();
     if (docsToDelete.length === 0) return;
+    const message = `You have selected '${docsToDelete.length}' documents for deletion. This action cannot be undone. Are you sure you want to delete them permanently?`;
+    if (!window.confirm(message)) {
+      return;
+    }
     setIsBulkDeleting(true);
     const deletedIds = new Set();
     try {

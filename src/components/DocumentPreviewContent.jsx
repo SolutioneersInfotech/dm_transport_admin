@@ -1181,10 +1181,10 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
             </div>
             <div className="space-y-2">
               <p className="text-sm text-gray-300">
-                Are you sure you want to delete this document? This action cannot be undone.
+                Are you sure you want to delete this document permanently? This action cannot be undone.
               </p>
               <p className="text-xs text-gray-400">
-                The document will be marked as deleted and removed from the list.
+                The document will be removed permanently and cannot be recovered.
               </p>
             </div>
             <div className="flex items-center gap-2 justify-end">
