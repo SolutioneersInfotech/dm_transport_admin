@@ -55,7 +55,9 @@ export default function DateRangePicker({
   const formattedFrom = value?.from ? format(value.from, "MMM dd, yyyy") : null;
   const formattedTo = value?.to ? format(value.to, "MMM dd, yyyy") : null;
   const label = formattedFrom && formattedTo ? (
-    <span className={`flex w-full items-center justify-between gap-3 ${labelClassName}`}>
+    <span
+      className={`grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 ${labelClassName}`}
+    >
       <span className="text-left">{formattedFrom}</span>
       <span className="text-gray-400">-</span>
       <span className="text-right">{formattedTo}</span>
@@ -67,7 +69,7 @@ export default function DateRangePicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        className={`inline-flex ${triggerWidthClassName} items-center justify-center whitespace-nowrap bg-[#1d232a] border border-gray-700 rounded-md px-4 py-2 text-gray-300 transition-colors hover:bg-[#20262e] hover:border-gray-600`}
+        className={`inline-flex ${triggerWidthClassName} items-center justify-center whitespace-nowrap bg-[#1d232a] border border-gray-700 rounded-md px-6 py-2 text-gray-300 transition-colors hover:bg-[#20262e] hover:border-gray-600`}
       >
         {label}
       </PopoverTrigger>
