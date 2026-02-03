@@ -951,7 +951,7 @@ export default function Documents() {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <DocumentTableSkeleton rows={12} />
+                <DocumentTableSkeleton rows={12} showFlag compact responsive />
               ) : Object.keys(groupedDocuments).length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="h-64 text-center">
