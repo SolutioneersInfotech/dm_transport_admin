@@ -1,32 +1,39 @@
-import { updateDocumentRoute } from "../utils/apiRoutes";
+import { deleteDocumentsRoute } from "../utils/apiRoutes";
 
 /**
- * Soft delete a document by marking it as deleted
- * @param {object} document - Document data
+ * Permanently delete documents
+ * @param {object[]} documents - Document data
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-export async function deleteDocument(document) {
+export async function deleteDocuments(documents) {
   try {
-    if (!document?.type || !document?.id) {
+    if (!Array.isArray(documents) || documents.length === 0) {
+      throw new Error("Documents are required");
+    }
+
+    const payload = documents.reduce((acc, document) => {
+      if (!document?.type || !document?.id) {
+        return acc;
+      }
+      if (!acc[document.type]) {
+        acc[document.type] = [];
+      }
+      acc[document.type].push(document.id);
+      return acc;
+    }, {});
+
+    if (Object.keys(payload).length === 0) {
       throw new Error("Document type and ID are required");
     }
 
     const token = localStorage.getItem("adminToken");
-    const requestBody = {
-      ...document,
-      isDeleted: "yes",
-    };
-    delete requestBody.flag;
-    delete requestBody.flagged;
-    delete requestBody.flagged_reason;
-
-    const res = await fetch(updateDocumentRoute, {
+    const res = await fetch(deleteDocumentsRoute, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify(payload),
     });
 
     const data = await res.json();
@@ -43,4 +50,13 @@ export async function deleteDocument(document) {
       error: error.message || "Failed to delete document",
     };
   }
+}
+
+/**
+ * Permanently delete a document
+ * @param {object} document - Document data
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function deleteDocument(document) {
+  return deleteDocuments([document]);
 }

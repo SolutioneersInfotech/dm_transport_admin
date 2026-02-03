@@ -122,6 +122,7 @@ export const fetchDocumentByIdRoute = (documentId, type) => {
 
 // Update document route
 export const updateDocumentRoute = `${baseBackendUrl}/updateDocument`;
+export const deleteDocumentsRoute = `${baseBackendUrl}/deletedocuments`;
 
 // Change document type route
 export const changeDocumentTypeRoute = `${baseBackendUrl}/changedocumenttype`;

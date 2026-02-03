@@ -1,6 +1,11 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { fetchDocumentsRoute, fetchDocumentCountRoute, updateDocumentRoute, changeDocumentTypeRoute } from "../../utils/apiRoutes";
-import { deleteDocument } from "../../services/documentDeleteAPI";
+import { deleteDocument, deleteDocuments } from "../../services/documentDeleteAPI";
+
+const isDeletedDocument = (document) => {
+  const value = document?.isDeleted;
+  return value === true || value === "true" || value === "yes" || value === 1 || value === "1";
+};
 
 // Async thunk for fetching initial documents
 export const fetchDocuments = createAsyncThunk(
@@ -46,8 +51,9 @@ export const fetchDocuments = createAsyncThunk(
         return rejectWithValue(data.message || "Failed to fetch documents");
       }
 
+      const documents = (data.documents || []).filter((document) => !isDeletedDocument(document));
       return {
-        documents: data.documents || [],
+        documents,
         hasMore: data.hasMore !== undefined ? data.hasMore : (data.documents?.length || 0) >= limit,
         page: data.page || page,
         limit: data.limit || limit,
@@ -103,8 +109,9 @@ export const fetchMoreDocuments = createAsyncThunk(
         return rejectWithValue(data.message || "Failed to fetch more documents");
       }
       
+      const documents = (data.documents || []).filter((document) => !isDeletedDocument(document));
       return {
-        documents: data.documents || [],
+        documents,
         hasMore: data.hasMore !== undefined ? data.hasMore : (data.documents?.length || 0) >= limit,
         page: data.page || page,
         limit: data.limit || limit,
@@ -265,6 +272,30 @@ export const deleteDocumentThunk = createAsyncThunk(
       };
     } catch (error) {
       return rejectWithValue(error.message || "Failed to delete document");
+    }
+  }
+);
+
+// Async thunk for deleting multiple documents (hard delete)
+export const deleteDocumentsThunk = createAsyncThunk(
+  "documents/deleteDocuments",
+  async ({ documents }, { rejectWithValue }) => {
+    try {
+      if (!Array.isArray(documents) || documents.length === 0) {
+        return rejectWithValue("Documents are required");
+      }
+
+      const result = await deleteDocuments(documents);
+
+      if (!result.success) {
+        return rejectWithValue(result.error || "Failed to delete documents");
+      }
+
+      return {
+        documentIds: documents.map((doc) => doc.id),
+      };
+    } catch (error) {
+      return rejectWithValue(error.message || "Failed to delete documents");
     }
   }
 );
@@ -444,6 +475,21 @@ const documentsSlice = createSlice({
       .addCase(deleteDocumentThunk.rejected, (state, action) => {
         // Error handling - log error but don't break the UI
         console.error("Failed to delete document:", action.payload);
+      })
+      .addCase(deleteDocumentsThunk.pending, (state) => {
+        // Optional: Set loading state if needed
+      })
+      .addCase(deleteDocumentsThunk.fulfilled, (state, action) => {
+        const { documentIds } = action.payload;
+        if (Array.isArray(documentIds) && documentIds.length > 0) {
+          state.documents = state.documents.filter((doc) => !documentIds.includes(doc.id));
+          if (state.total > 0) {
+            state.total = Math.max(state.total - documentIds.length, 0);
+          }
+        }
+      })
+      .addCase(deleteDocumentsThunk.rejected, (state, action) => {
+        console.error("Failed to delete documents:", action.payload);
       })
       // Change document type
       .addCase(changeDocumentType.pending, (state) => {
