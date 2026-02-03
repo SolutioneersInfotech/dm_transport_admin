@@ -1,25 +1,39 @@
-import { doc, updateDoc } from "firebase/firestore";
-import { firestore } from "../firebase/firebaseApp";
+import { updateDocumentRoute } from "../utils/apiRoutes";
 
 /**
  * Soft delete a document by marking it as deleted
- * @param {string} docType - Document type (e.g., "pick_up", "delivery", etc.)
- * @param {string} docId - Document ID
+ * @param {object} document - Document data
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-export async function deleteDocument(docType, docId) {
+export async function deleteDocument(document) {
   try {
-    if (!docType || !docId) {
+    if (!document?.type || !document?.id) {
       throw new Error("Document type and ID are required");
     }
 
-    // Firestore path: documents/{docType}/uploads/{docId}
-    const docRef = doc(firestore, "documents", docType, "uploads", docId);
-    
-    // Soft delete by setting isDeleted to "yes"
-    await updateDoc(docRef, {
+    const token = localStorage.getItem("adminToken");
+    const requestBody = {
+      ...document,
       isDeleted: "yes",
+    };
+    delete requestBody.flag;
+    delete requestBody.flagged;
+    delete requestBody.flagged_reason;
+
+    const res = await fetch(updateDocumentRoute, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(requestBody),
     });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.message || "Failed to delete document");
+    }
 
     return { success: true };
   } catch (error) {
