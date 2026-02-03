@@ -840,7 +840,7 @@ export default function Documents() {
         </Button>
 
         {/* Date Range Picker */}
-        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:flex-1 sm:justify-end">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:justify-end sm:ml-auto">
           <DateRangePicker value={dateRange} onChange={setDateRange} />
           {dateRange?.from &&
             dateRange?.to &&
