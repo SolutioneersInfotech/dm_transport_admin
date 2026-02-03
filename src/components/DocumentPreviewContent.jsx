@@ -194,7 +194,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex flex-1 items-center justify-center">
         <div className="text-center space-y-4">
           <div className="w-8 h-8 border-2 border-gray-600 border-t-blue-500 rounded-full animate-spin mx-auto" />
           <p className="text-sm text-gray-400">Loading document details...</p>
