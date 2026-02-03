@@ -169,6 +169,9 @@ export const updateDocument = createAsyncThunk(
       
       // Build the request body
       const requestBody = { ...document };
+      delete requestBody.flag;
+      delete requestBody.flagged;
+      delete requestBody.flagged_reason;
       
       // Update seen status if provided
       if (seen !== undefined) {
@@ -177,7 +180,8 @@ export const updateDocument = createAsyncThunk(
       
       // Update flag if provided
       if (flag !== undefined) {
-        requestBody.flag = flag;
+        requestBody.flagged = flag.flagged;
+        requestBody.flagged_reason = flag.reason ?? "";
       }
       
       // Update state if provided
@@ -448,4 +452,3 @@ const documentsSlice = createSlice({
 
 export const { clearDocuments, markDocumentAsSeen, resetPagination } = documentsSlice.actions;
 export default documentsSlice.reducer;
-
