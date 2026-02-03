@@ -215,8 +215,25 @@ export const updateDocument = createAsyncThunk(
         return rejectWithValue(data.message || "Failed to update document");
       }
 
+      const responseDocument = data.document || requestBody;
+      const normalizedFlag =
+        flag !== undefined
+          ? flag
+          : responseDocument.flag !== undefined
+            ? responseDocument.flag
+            : responseDocument.flagged !== undefined ||
+                responseDocument.flagged_reason !== undefined
+              ? {
+                  flagged: responseDocument.flagged ?? false,
+                  reason: responseDocument.flagged_reason ?? "",
+                }
+              : undefined;
+
       return {
-        document: data.document || requestBody,
+        document: {
+          ...responseDocument,
+          ...(normalizedFlag !== undefined ? { flag: normalizedFlag } : {}),
+        },
       };
     } catch (error) {
       return rejectWithValue(error.message || "Failed to update document");
