@@ -253,7 +253,7 @@ export const deleteDocumentThunk = createAsyncThunk(
         return rejectWithValue("Document type and ID are required");
       }
 
-      const result = await deleteDocument(docType, docId);
+      const result = await deleteDocument(document);
 
       if (!result.success) {
         return rejectWithValue(result.error || "Failed to delete document");
