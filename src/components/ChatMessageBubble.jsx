@@ -299,6 +299,10 @@
 // }
 
 
+import { useState } from "react";
+import { createPortal } from "react-dom";
+import { Copy } from "lucide-react";
+
 export default function ChatMessageBubble({
   msg,
   senderName,
@@ -311,11 +315,17 @@ export default function ChatMessageBubble({
 
   const text = String(msg?.content?.message ?? "").trim() || "";
   const attachment =
-    typeof msg?.content?.attachmentUrl === "string"
-      ? msg.content.attachmentUrl
-      : msg?.content?.attachmentUrl != null
-        ? String(msg.content.attachmentUrl)
-        : "";
+    msg?.content?.attachment ??
+    (msg?.content?.attachmentUrl
+      ? {
+          url: String(msg.content.attachmentUrl),
+          name: "Attachment",
+          mime: "",
+          size: null,
+          kind: "file",
+        }
+      : null);
+  const attachmentUrl = attachment?.url ?? "";
 
   const date = msg?.dateTime ? new Date(msg.dateTime) : null;
   const time = date
@@ -338,12 +348,36 @@ export default function ChatMessageBubble({
   const statusColor =
     msg?.status === 2 ? "text-blue-400" : "text-gray-400";
 
-  /* ================= ATTACHMENT TYPE ================= */
-  const lowerUrl = attachment ? String(attachment).toLowerCase() : "";
+  const [preview, setPreview] = useState(null);
+  const [copied, setCopied] = useState(false);
 
-  // Match extension at end or before query string (?token=...), e.g. Firebase Storage URLs
-  const isImage = /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(lowerUrl);
-  const isPDF = /\.pdf(\?|$)/i.test(lowerUrl);
+  function resolveAttachmentKind() {
+    if (attachment?.kind) return attachment.kind;
+    if (attachment?.mime?.startsWith("image/")) return "image";
+    if (attachment?.mime?.startsWith("video/")) return "video";
+    if (attachment?.mime?.startsWith("audio/")) return "audio";
+    if (attachment?.mime === "application/pdf") return "pdf";
+
+    const lowerUrl = attachmentUrl.toLowerCase();
+    if (/\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(lowerUrl)) return "image";
+    if (/\.pdf(\?|$)/i.test(lowerUrl)) return "pdf";
+    if (/\.(mp4|webm|ogg)(\?|$)/i.test(lowerUrl)) return "video";
+    if (/\.(mp3|wav|ogg)(\?|$)/i.test(lowerUrl)) return "audio";
+    return "file";
+  }
+
+  const attachmentKind = attachmentUrl ? resolveAttachmentKind() : null;
+
+  async function handleCopy() {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (error) {
+      console.error("Failed to copy message:", error);
+    }
+  }
 
   /* ================= STYLES ================= */
   const containerAlign = isAdmin ? "justify-end" : "justify-start";
@@ -361,6 +395,7 @@ export default function ChatMessageBubble({
             ? String(replyToMessage.content.message).trim()
             : "")
         || (replyToMessage.content?.attachmentUrl ? "Attachment" : "")
+        || (replyToMessage.content?.attachment?.url ? "Attachment" : "")
         || "Message"
       : "Message";
 
@@ -368,95 +403,154 @@ export default function ChatMessageBubble({
 
   /* ================= RENDER ================= */
   return (
-    <div className={`flex ${containerAlign} mb-2`}>
-      <div className={`flex flex-col max-w-[65%] ${bubbleAlign}`}>
-        {/* Sender name */}
-        {showSenderName && (
-          <span
-            className={`text-xs text-gray-400 mb-0.5 px-1 ${
-              isAdmin ? "pr-2" : "pl-2"
-            }`}
-          >
-            {displayName}
-          </span>
-        )}
-
-        {/* Bubble */}
-        <div
-          className={`px-3 py-2 rounded-lg shadow text-sm ${bubbleStyle}`}
-        >
-          {/* Replying to */}
-          {showReplyTo && (
-            <button
-              type="button"
-              onClick={() => onReplyClick?.(msg.replyTo)}
-              className={`mb-2 w-full text-left rounded border-l-2 pl-2 py-1 text-xs ${
-                isAdmin
-                  ? "border-blue-400 bg-blue-500/30 text-blue-100"
-                  : "border-gray-500 bg-black/20 text-gray-300"
-              } truncate`}
-              title={replyToPreview}
+    <>
+      <div className={`flex ${containerAlign} mb-2`}>
+        <div className={`flex flex-col max-w-[65%] ${bubbleAlign}`}>
+          {/* Sender name */}
+          {showSenderName && (
+            <span
+              className={`text-xs text-gray-400 mb-0.5 px-1 ${
+                isAdmin ? "pr-2" : "pl-2"
+              }`}
             >
-              <span className="font-medium opacity-90">Replying to: </span>
-              {replyToPreview}
-            </button>
-          )}
-
-          {/* 🖼 Image */}
-          {attachment && isImage && (
-            <img
-              src={attachment}
-              alt="attachment"
-              className="mb-2 max-h-64 rounded-lg object-cover cursor-pointer"
-              onClick={() => window.open(attachment, "_blank")}
-            />
-          )}
-
-          {/* 📄 PDF */}
-          {attachment && isPDF && (
-            <a
-              href={attachment}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mb-2 flex items-center gap-2 rounded bg-black/30 px-3 py-2 text-sm hover:bg-black/40"
-            >
-              📄 <span className="underline">Open PDF</span>
-            </a>
-          )}
-
-          {/* 📎 Other file */}
-          {attachment && !isImage && !isPDF && (
-            <a
-              href={attachment}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mb-2 block text-blue-300 underline"
-            >
-              📎 Open Attachment
-            </a>
-          )}
-
-          {/* Text */}
-          {text && (
-            <p className="whitespace-pre-wrap break-words">
-              {text}
-            </p>
-          )}
-
-          {/* Meta */}
-          <div className="mt-1 flex items-center justify-end gap-1">
-            <span className="text-[10px] text-gray-300">
-              {time}
+              {displayName}
             </span>
-            {statusIcon && (
-              <span className={`text-[11px] ${statusColor}`}>
-                {statusIcon}
+          )}
+
+          {/* Bubble */}
+          <div
+            className={`group relative px-3 py-2 rounded-lg shadow text-sm ${bubbleStyle}`}
+          >
+            {text && (
+              <button
+                type="button"
+                onClick={handleCopy}
+                className={`absolute -top-3 ${isAdmin ? "-left-3" : "-right-3"} rounded-full border border-white/10 bg-black/40 p-1 text-[10px] opacity-0 transition group-hover:opacity-100`}
+                aria-label="Copy message"
+              >
+                <Copy className="h-3 w-3" />
+              </button>
+            )}
+            {copied && (
+              <span
+                className={`absolute -top-6 ${isAdmin ? "-left-2" : "-right-2"} rounded bg-black/70 px-2 py-0.5 text-[10px]`}
+              >
+                Copied
               </span>
             )}
+            {/* Replying to */}
+            {showReplyTo && (
+              <button
+                type="button"
+                onClick={() => onReplyClick?.(msg.replyTo)}
+                className={`mb-2 w-full text-left rounded border-l-2 pl-2 py-1 text-xs ${
+                  isAdmin
+                    ? "border-blue-400 bg-blue-500/30 text-blue-100"
+                    : "border-gray-500 bg-black/20 text-gray-300"
+                } truncate`}
+                title={replyToPreview}
+              >
+                <span className="font-medium opacity-90">Replying to: </span>
+                {replyToPreview}
+              </button>
+            )}
+
+            {/* 🖼 Image */}
+            {attachmentUrl && attachmentKind === "image" && (
+              <img
+                src={attachmentUrl}
+                alt={attachment?.name || "attachment"}
+                className="mb-2 max-h-64 rounded-lg object-cover cursor-pointer"
+                onClick={() =>
+                  setPreview({ type: "image", url: attachmentUrl })
+                }
+              />
+            )}
+
+            {attachmentUrl && attachmentKind === "video" && (
+              <video
+                src={attachmentUrl}
+                controls
+                className="mb-2 max-h-64 w-full rounded-lg"
+              />
+            )}
+
+            {attachmentUrl && attachmentKind === "audio" && (
+              <audio
+                src={attachmentUrl}
+                controls
+                className="mb-2 w-full"
+              />
+            )}
+
+            {attachmentUrl && attachmentKind === "pdf" && (
+              <button
+                type="button"
+                className="mb-2 flex items-center gap-2 rounded bg-black/30 px-3 py-2 text-sm hover:bg-black/40"
+                onClick={() => setPreview({ type: "pdf", url: attachmentUrl })}
+              >
+                📄 <span className="underline">View PDF</span>
+              </button>
+            )}
+
+            {attachmentUrl && attachmentKind === "file" && (
+              <div className="mb-2 rounded bg-black/20 px-3 py-2 text-sm">
+                <p className="truncate">{attachment?.name || "Attachment"}</p>
+                <a
+                  href={attachmentUrl}
+                  download={attachment?.name}
+                  className="text-blue-200 underline"
+                >
+                  Download
+                </a>
+              </div>
+            )}
+
+            {/* Text */}
+            {text && <p className="whitespace-pre-wrap break-words">{text}</p>}
+
+            {/* Meta */}
+            <div className="mt-1 flex items-center justify-end gap-1">
+              <span className="text-[10px] text-gray-300">{time}</span>
+              {statusIcon && (
+                <span className={`text-[11px] ${statusColor}`}>
+                  {statusIcon}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+
+      {preview &&
+        createPortal(
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4">
+            <div className="relative max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-lg bg-[#0b0f16] p-3">
+              <button
+                type="button"
+                className="absolute right-3 top-3 rounded bg-black/60 px-2 py-1 text-xs text-white"
+                onClick={() => setPreview(null)}
+              >
+                Close
+              </button>
+              {preview.type === "image" && (
+                <img
+                  src={preview.url}
+                  alt="preview"
+                  className="max-h-[80vh] w-full rounded object-contain"
+                />
+              )}
+              {preview.type === "pdf" && (
+                <iframe
+                  title="PDF preview"
+                  src={preview.url}
+                  className="h-[80vh] w-full rounded"
+                />
+              )}
+            </div>
+          </div>,
+          document.body
+        )}
+    </>
   );
 }
-

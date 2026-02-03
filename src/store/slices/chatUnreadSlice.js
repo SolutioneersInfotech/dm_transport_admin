@@ -3,9 +3,9 @@ import { createSlice } from "@reduxjs/toolkit";
 const chatUnreadSlice = createSlice({
   name: "chatUnread",
   initialState: {
-    totalUnreadCount: 0,
-    regularChatUnreadCount: 0,
-    maintenanceChatUnreadCount: 0,
+    totalUnreadUsersCount: 0,
+    regularUnreadUsersCount: 0,
+    maintenanceUnreadUsersCount: 0,
     unreadCountsByUser: {}, // { userId: { regular: number, maintenance: number } }
   },
   reducers: {
@@ -22,28 +22,44 @@ const chatUnreadSlice = createSlice({
       let maintenanceTotal = 0;
       
       Object.values(state.unreadCountsByUser).forEach((counts) => {
-        regularTotal += counts.regular || 0;
-        maintenanceTotal += counts.maintenance || 0;
+        if ((counts.regular || 0) > 0) {
+          regularTotal += 1;
+        }
+        if ((counts.maintenance || 0) > 0) {
+          maintenanceTotal += 1;
+        }
       });
       
-      state.regularChatUnreadCount = regularTotal;
-      state.maintenanceChatUnreadCount = maintenanceTotal;
-      state.totalUnreadCount = regularTotal + maintenanceTotal;
+      state.regularUnreadUsersCount = regularTotal;
+      state.maintenanceUnreadUsersCount = maintenanceTotal;
+      state.totalUnreadUsersCount = regularTotal + maintenanceTotal;
     },
     clearUnreadCounts: (state) => {
-      state.totalUnreadCount = 0;
-      state.regularChatUnreadCount = 0;
-      state.maintenanceChatUnreadCount = 0;
+      state.totalUnreadUsersCount = 0;
+      state.regularUnreadUsersCount = 0;
+      state.maintenanceUnreadUsersCount = 0;
       state.unreadCountsByUser = {};
     },
     removeUserUnreadCounts: (state, action) => {
       const userId = action.payload;
       if (state.unreadCountsByUser[userId]) {
-        const counts = state.unreadCountsByUser[userId];
-        state.regularChatUnreadCount -= counts.regular || 0;
-        state.maintenanceChatUnreadCount -= counts.maintenance || 0;
         delete state.unreadCountsByUser[userId];
-        state.totalUnreadCount = state.regularChatUnreadCount + state.maintenanceChatUnreadCount;
+
+        let regularTotal = 0;
+        let maintenanceTotal = 0;
+
+        Object.values(state.unreadCountsByUser).forEach((counts) => {
+          if ((counts.regular || 0) > 0) {
+            regularTotal += 1;
+          }
+          if ((counts.maintenance || 0) > 0) {
+            maintenanceTotal += 1;
+          }
+        });
+
+        state.regularUnreadUsersCount = regularTotal;
+        state.maintenanceUnreadUsersCount = maintenanceTotal;
+        state.totalUnreadUsersCount = regularTotal + maintenanceTotal;
       }
     },
   },

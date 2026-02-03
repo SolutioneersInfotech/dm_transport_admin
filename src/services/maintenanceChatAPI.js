@@ -2,16 +2,16 @@ import {
   get,
   onValue,
   push,
-  query,
   ref,
   remove,
   set,
-  update,
 } from "firebase/database";
 import { database } from "../firebase/firebaseApp";
 
 const ADMIN_MAINTENANCE_PATH = "chat/users/admin/maintenance";
 const USER_MAINTENANCE_PATH = "chat/users";
+const ADMIN_READS_BASE = "chat/adminReads";
+export const chatType = "maintenance";
 const FETCH_CHAT_THREADS_URL =
   "https://northamerica-northeast1-dmtransport-1.cloudfunctions.net/api/admin/fetchchatthreads?chatType=maintenance";
 
@@ -21,6 +21,37 @@ function getToken() {
 
 function getAdminUser() {
   return JSON.parse(localStorage.getItem("adminUser"));
+}
+
+export function getAdminId() {
+  return getAdminUser()?.userid || "admin";
+}
+
+export async function fetchAdminLastRead(chatTypeValue, adminId, userId) {
+  if (!chatTypeValue || !adminId || !userId) return null;
+  const readRef = ref(
+    database,
+    `${ADMIN_READS_BASE}/${chatTypeValue}/${adminId}/${userId}`
+  );
+  const snapshot = await get(readRef);
+  if (!snapshot.exists()) return null;
+  return snapshot.val()?.lastReadAt ?? null;
+}
+
+export async function setAdminLastRead(
+  chatTypeValue,
+  adminId,
+  userId,
+  lastReadAt
+) {
+  if (!chatTypeValue || !adminId || !userId) return;
+  const readRef = ref(
+    database,
+    `${ADMIN_READS_BASE}/${chatTypeValue}/${adminId}/${userId}`
+  );
+  await set(readRef, {
+    lastReadAt,
+  });
 }
 
 function normalizeMessage(messageId, msg) {
@@ -33,6 +64,17 @@ function normalizeMessage(messageId, msg) {
     msg?.type === 0 ? 1 :
     msg?.type === 1 ? 0 :
     msg?.type;
+  const attachment =
+    msg?.content?.attachment ??
+    (msg?.content?.attachmentUrl || msg?.attachmentUrl
+      ? {
+          url: msg?.content?.attachmentUrl ?? msg?.attachmentUrl ?? "",
+          name: msg?.content?.attachmentName ?? msg?.attachmentName ?? "Attachment",
+          mime: msg?.content?.attachmentMime ?? msg?.attachmentMime ?? "",
+          size: msg?.content?.attachmentSize ?? msg?.attachmentSize ?? null,
+          kind: msg?.content?.attachmentKind ?? msg?.attachmentKind ?? "file",
+        }
+      : null);
 
   return {
     msgId: messageId,
@@ -40,16 +82,14 @@ function normalizeMessage(messageId, msg) {
     dateTime,
     content: {
       message: msg?.content?.message ?? msg?.message ?? "",
-      attachmentUrl: msg?.content?.attachmentUrl ?? msg?.attachmentUrl ?? "",
+      attachment,
+      attachmentUrl: attachment?.url ?? msg?.content?.attachmentUrl ?? msg?.attachmentUrl ?? "",
     },
     status: msg?.status ?? 0,
     type: typeof type === "number" ? type : 0,
     contactId: msg?.contactId ?? msg?.userid ?? null,
     sendername: msg?.sendername ?? "Unknown",
     replyTo: msg?.replyTo ?? null,
-    seenByAdmin: msg?.seenByAdmin ?? false,
-    seenAt: msg?.seenAt ?? null,
-    seenBy: msg?.seenBy ?? null,
   };
 }
 
@@ -137,7 +177,7 @@ export function subscribeMessages(userid, onChange) {
   return unsubscribe;
 }
 
-export async function sendMessage(userid, text, adminUser = getAdminUser()) {
+export async function sendMessage(userid, text, adminUser = getAdminUser(), replyToMsgId = null) {
   const messageId = push(
     ref(database, `${ADMIN_MAINTENANCE_PATH}/${userid}`)
   ).key;
@@ -146,15 +186,32 @@ export async function sendMessage(userid, text, adminUser = getAdminUser()) {
     throw new Error("Unable to generate message id.");
   }
 
+  const contentPayload =
+    typeof text === "object" && text !== null
+      ? text
+      : { message: text != null ? String(text) : "", attachment: null };
+  const messageText =
+    typeof contentPayload.message === "string"
+      ? contentPayload.message
+      : contentPayload.message != null
+        ? String(contentPayload.message)
+        : "";
+  const attachment = contentPayload.attachment ?? null;
+  const replyTo = replyToMsgId != null && replyToMsgId !== "" ? replyToMsgId : null;
+
   const payload = {
     id: messageId,
     dateTime: new Date().toISOString(),
-    content: { message: text, attachmentUrl: "" },
+    content: {
+      message: messageText,
+      attachment,
+      attachmentUrl: attachment?.url ?? "",
+    },
     status: 0,
     type: 0,
     contactId: userid,
     sendername: adminUser?.userid || "Admin",
-    replyTo: null,
+    replyTo,
   };
 
   const userPayload = {
@@ -211,42 +268,9 @@ export async function deleteSpecificMessage(messageId, userid) {
 // Mark messages as seen/read for a specific user
 export async function markMessagesAsSeen(userid) {
   try {
-    const messagesRef = ref(database, `${ADMIN_MAINTENANCE_PATH}/${userid}`);
-    const snapshot = await get(messagesRef);
-    
-    if (!snapshot.exists()) {
-      return { success: true };
-    }
-
-    const messagesObject = snapshot.val();
-    const updateData = {};
-    const adminUser = getAdminUser();
-    const adminId = adminUser?.userid || "admin";
+    const adminId = getAdminId();
     const seenTimestamp = new Date().toISOString();
-
-    // Update all unread messages (type === 1, from user) to mark them as seen
-    Object.keys(messagesObject).forEach((messageId) => {
-      const msg = messagesObject[messageId];
-      // Only mark messages from user (type === 1) that haven't been seen
-      if (msg.type === 1 && !msg.seenByAdmin) {
-        const messagePath = `${ADMIN_MAINTENANCE_PATH}/${userid}/${messageId}`;
-        updateData[`${messagePath}/seenByAdmin`] = true;
-        updateData[`${messagePath}/seenAt`] = seenTimestamp;
-        updateData[`${messagePath}/seenBy`] = adminId;
-      }
-    });
-
-    if (Object.keys(updateData).length > 0) {
-      // Use update to batch update all fields at once
-      await update(ref(database), updateData);
-    }
-
-    // Store last seen timestamp for this user
-    const lastSeenRef = ref(database, `chat/admin/maintenance/lastSeen/${userid}`);
-    await set(lastSeenRef, {
-      timestamp: seenTimestamp,
-      adminId: adminId,
-    });
+    await setAdminLastRead(chatType, adminId, userid, seenTimestamp);
 
     return { success: true };
   } catch (error) {
@@ -256,7 +280,36 @@ export async function markMessagesAsSeen(userid) {
 }
 
 // Get unread message count for a user
-export async function getUnreadCount(userid) {
+function parseDateValue(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function isWithinRange(date, startDate, endDate) {
+  if (!date) return false;
+  if (startDate && date < startDate) return false;
+  if (endDate && date > endDate) return false;
+  return true;
+}
+
+function countUnreadMessages(messagesObject, lastReadAt, startDate, endDate) {
+  const lastReadDate = parseDateValue(lastReadAt);
+  let count = 0;
+
+  Object.values(messagesObject || {}).forEach((msg) => {
+    if (msg?.type !== 1) return;
+    const messageDate = parseDateValue(msg?.dateTime || msg?.datetime);
+    if (!messageDate) return;
+    if (lastReadDate && messageDate <= lastReadDate) return;
+    if (!isWithinRange(messageDate, startDate, endDate)) return;
+    count += 1;
+  });
+
+  return count;
+}
+
+export async function getUnreadCount(userid, options = {}) {
   try {
     const messagesRef = ref(database, `${ADMIN_MAINTENANCE_PATH}/${userid}`);
     const snapshot = await get(messagesRef);
@@ -266,16 +319,11 @@ export async function getUnreadCount(userid) {
     }
 
     const messagesObject = snapshot.val();
-    let unreadCount = 0;
-
-    Object.values(messagesObject).forEach((msg) => {
-      // Count messages from user (type === 1) that haven't been seen
-      if (msg.type === 1 && !msg.seenByAdmin) {
-        unreadCount++;
-      }
-    });
-
-    return unreadCount;
+    const adminId = options.adminId ?? getAdminId();
+    const startDate = parseDateValue(options.startDate);
+    const endDate = parseDateValue(options.endDate);
+    const lastReadAt = await fetchAdminLastRead(chatType, adminId, userid);
+    return countUnreadMessages(messagesObject, lastReadAt, startDate, endDate);
   } catch (error) {
     console.error("Error getting unread count:", error);
     return 0;
@@ -283,26 +331,39 @@ export async function getUnreadCount(userid) {
 }
 
 // Subscribe to unread count changes for a user
-export function subscribeUnreadCount(userid, onChange) {
+export function subscribeUnreadCount(userid, onChange, options = {}) {
   const messagesRef = ref(database, `${ADMIN_MAINTENANCE_PATH}/${userid}`);
-  
-  const unsubscribe = onValue(messagesRef, (snapshot) => {
-    if (!snapshot.exists()) {
+  const adminId = options.adminId ?? getAdminId();
+  const startDate = parseDateValue(options.startDate);
+  const endDate = parseDateValue(options.endDate);
+  const adminReadRef = ref(
+    database,
+    `${ADMIN_READS_BASE}/${chatType}/${adminId}/${userid}`
+  );
+
+  let messagesObject = {};
+  let lastReadAt = null;
+
+  const computeUnread = () => {
+    if (!messagesObject || !Object.keys(messagesObject).length) {
       onChange(0);
       return;
     }
+    onChange(countUnreadMessages(messagesObject, lastReadAt, startDate, endDate));
+  };
 
-    const messagesObject = snapshot.val();
-    let unreadCount = 0;
-
-    Object.values(messagesObject).forEach((msg) => {
-      if (msg.type === 1 && !msg.seenByAdmin) {
-        unreadCount++;
-      }
-    });
-
-    onChange(unreadCount);
+  const unsubscribeMessages = onValue(messagesRef, (snapshot) => {
+    messagesObject = snapshot.exists() ? snapshot.val() : {};
+    computeUnread();
   });
 
-  return unsubscribe;
+  const unsubscribeReads = onValue(adminReadRef, (snapshot) => {
+    lastReadAt = snapshot.exists() ? snapshot.val()?.lastReadAt ?? null : null;
+    computeUnread();
+  });
+
+  return () => {
+    unsubscribeMessages();
+    unsubscribeReads();
+  };
 }

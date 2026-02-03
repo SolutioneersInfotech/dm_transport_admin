@@ -15,15 +15,28 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   // console.log(users);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState([]); // Array of selected categories: ["F", "D", "C"]
+  const [seenFilter, setSeenFilter] = useState("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const observerTarget = useRef(null);
   const hasInitiallyFetched = useRef(false);
   const [isFetchingMessages, setIsFetchingMessages] = useState(false);
   const fetchedUsersRef = useRef(new Set());
   const [unreadCounts, setUnreadCounts] = useState({});
   const unsubscribeUnreadRefs = useRef({});
+  const lastReadAtMapRef = useRef(new Map());
   
   const fetchMessages = chatApi?.fetchMessages || defaultFetchMessages;
   const subscribeUnreadCount = chatApi?.subscribeUnreadCount;
+  const fetchAdminLastRead = chatApi?.fetchAdminLastRead;
+  const getAdminId = chatApi?.getAdminId;
+  const chatType = chatApi?.chatType ?? "general";
+
+  const dateRange = useMemo(() => {
+    const start = startDate ? new Date(`${startDate}T00:00:00`) : null;
+    const end = endDate ? new Date(`${endDate}T23:59:59.999`) : null;
+    return { start, end };
+  }, [startDate, endDate]);
 
   function getDriverId(driver) {
     const candidate =
@@ -159,9 +172,11 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
               
               // If message is empty but there's an attachment, show "Attachment"
               if (!lastMessageText || lastMessageText.trim() === "") {
-                const attachmentUrl = lastMessage?.content?.attachmentUrl || 
-                                     lastMessage?.attachmentUrl || 
-                                     "";
+                const attachmentUrl =
+                  lastMessage?.content?.attachment?.url ||
+                  lastMessage?.content?.attachmentUrl ||
+                  lastMessage?.attachmentUrl ||
+                  "";
                 if (attachmentUrl && attachmentUrl.trim() !== "") {
                   lastMessageText = "Attachment";
                 }
@@ -227,12 +242,21 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       if (unsubscribeUnreadRefs.current[userId]) return;
 
       // Subscribe to unread count changes
-      const unsubscribe = subscribeUnreadCount(userId, (count) => {
-        setUnreadCounts((prev) => ({
-          ...prev,
-          [userId]: count,
-        }));
-      });
+      const unsubscribe = subscribeUnreadCount(
+        userId,
+        (count) => {
+          setUnreadCounts((prev) => ({
+            ...prev,
+            [userId]: count,
+          }));
+        },
+        {
+          adminId: getAdminId?.(),
+          chatType,
+          startDate: dateRange.start,
+          endDate: dateRange.end,
+        }
+      );
 
       unsubscribeUnreadRefs.current[userId] = unsubscribe;
     });
@@ -256,7 +280,36 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         }
       });
     };
-  }, [users, subscribeUnreadCount]);
+  }, [users, subscribeUnreadCount, getAdminId, chatType, dateRange.start, dateRange.end]);
+
+  useEffect(() => {
+    if (!fetchAdminLastRead || !users?.length) return;
+    let isActive = true;
+    const adminId = getAdminId?.();
+
+    const updateLastReads = async () => {
+      const tasks = users.map(async (u) => {
+        const userId = getDriverId(u);
+        if (!userId) return;
+        if (lastReadAtMapRef.current.has(userId)) return;
+        try {
+          const lastReadAt = await fetchAdminLastRead(chatType, adminId, userId);
+          if (isActive) {
+            lastReadAtMapRef.current.set(userId, lastReadAt);
+          }
+        } catch (error) {
+          console.error("Failed to fetch admin last read:", error);
+        }
+      });
+      await Promise.all(tasks);
+    };
+
+    updateLastReads();
+
+    return () => {
+      isActive = false;
+    };
+  }, [users, fetchAdminLastRead, getAdminId, chatType]);
 
   // Transform users from Redux to drivers format
   // Redux already preserves all users, so we use it directly
@@ -278,6 +331,8 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
           driver_name: u.name || u.driver_name,
           driver_image: u.profilePic || u.image || null,
           lastSeen: u.lastSeen || null,
+          last_seen: u.last_seen || u.lastSeen || null,
+          status: u.status || null,
           last_message: u.last_message || "",
           last_chat_time: u.last_chat_time || null,
           unreadCount: unreadCounts[userId] || 0,
@@ -322,9 +377,27 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         return driverName.includes(searchTerm);
       });
     }
+
+    if (dateRange.start || dateRange.end) {
+      driversCopy = driversCopy.filter((driver) => {
+        if (!driver.last_chat_time) return false;
+        const lastChatDate = new Date(driver.last_chat_time);
+        if (Number.isNaN(lastChatDate.getTime())) return false;
+        if (dateRange.start && lastChatDate < dateRange.start) return false;
+        if (dateRange.end && lastChatDate > dateRange.end) return false;
+        return true;
+      });
+    }
+
+    if (seenFilter !== "all") {
+      driversCopy = driversCopy.filter((driver) => {
+        const count = driver.unreadCount || 0;
+        return seenFilter === "unseen" ? count > 0 : count === 0;
+      });
+    }
     
     return driversCopy;
-  }, [drivers, search, categoryFilter]);
+  }, [drivers, search, categoryFilter, seenFilter, dateRange.start, dateRange.end]);
   
   const selectedDriverId = getDriverId(selectedDriver);
 
@@ -369,6 +442,39 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
                 </Button>
               );
             })}
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-gray-300">
+          <div className="flex items-center gap-2">
+            <span>Seen</span>
+            <select
+              className="rounded border border-gray-700 bg-[#1f2937] px-2 py-1 text-xs text-gray-100"
+              value={seenFilter}
+              onChange={(e) => setSeenFilter(e.target.value)}
+            >
+              <option value="all">All</option>
+              <option value="unseen">Unseen</option>
+              <option value="seen">Seen</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span>From</span>
+            <Input
+              type="date"
+              className="h-8 w-[140px] bg-[#1f2937] text-xs"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span>To</span>
+            <Input
+              type="date"
+              className="h-8 w-[140px] bg-[#1f2937] text-xs"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
           </div>
         </div>
       </div>
