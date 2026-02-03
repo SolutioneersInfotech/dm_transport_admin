@@ -37,17 +37,17 @@ export default function DocumentTableSkeleton({
               <div className="h-5 w-5 sm:h-6 sm:w-6">
                 <Skeleton circle className="h-full w-full" />
               </div>
-              <Skeleton className="h-3 sm:h-3.5 w-full" />
+              <Skeleton className="h-3 sm:h-3.5 w-24 sm:w-32" />
             </div>
           </td>
           <td className={dateCellClass}>
-            <Skeleton className="h-3 sm:h-3.5 w-full" />
+            <Skeleton className="h-3 sm:h-3.5 w-1/2" />
           </td>
           <td className={typeCellClass}>
-            <Skeleton className="h-3 sm:h-3.5 w-full" />
+            <Skeleton className="h-3 sm:h-3.5 w-1/2" />
           </td>
           <td className={cellClass}>
-            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-4 w-[2ch]" />
           </td>
         </tr>
       ))}
