@@ -903,7 +903,7 @@ export default function Documents() {
               className="h-8 sm:h-9 border-gray-600/80 bg-[#0f172a]/70 text-slate-200 shadow-sm hover:bg-[#1f2937] hover:text-white hover:border-slate-400 hover:shadow-md active:shadow-sm"
             >
               <Download className="h-4 w-4 mr-1.5" />
-              {isBulkDownloading ? "Downloading..." : "Download"}
+              {isBulkDownloading ? "Downloading..." : "Download"}&nbsp;
             </Button>
             <Button
               type="button"
@@ -911,10 +911,10 @@ export default function Documents() {
               size="sm"
               onClick={handleBulkDelete}
               disabled={isBulkDeleting}
-              className="h-8 sm:h-9 border-red-500/60 bg-[#0f172a]/70 text-red-400 shadow-sm hover:bg-red-500/20 hover:text-red-100 hover:border-red-400 hover:shadow-md active:shadow-sm"
+              className="h-8 mr-0.5 sm:h-9 border-red-500/60 bg-[#0f172a]/70 text-red-400 shadow-sm hover:bg-red-500/20 hover:text-red-100 hover:border-red-400 hover:shadow-md active:shadow-sm"
             >
               <Trash2 className="h-4 w-4 mr-1.5" />
-              {isBulkDeleting ? "Deleting..." : "Delete"}
+              {isBulkDeleting ? "Deleting..." : "Delete"}&nbsp;
             </Button>
           </div>
         )}
