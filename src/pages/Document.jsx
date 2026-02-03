@@ -940,22 +940,17 @@ export default function Documents() {
             <TableHeader className="sticky top-0 bg-[#161b22] z-10 border-b border-gray-700">
               <TableRow className="hover:bg-transparent border-gray-700">
                 <TableHead className="w-10 sm:w-12 h-8 px-1 sm:px-2">
-                  {selectionMode ? (
-                    <div className="flex items-center gap-0.5 sm:gap-1">
-                      <Checkbox
-                        checked={isAllSelected || isIndeterminate}
-                        onCheckedChange={handleSelectAll}
-                        aria-label="Select all"
-                        className="h-3 w-3 sm:h-3.5 sm:w-3.5"
-                      />
-                      <span className="text-[9px] sm:text-[10px] font-medium text-gray-400 hidden sm:inline">Select All</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-0.5 sm:gap-1">
-                      <div className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                      <span className="text-[9px] sm:text-[10px] font-medium text-transparent hidden sm:inline">Select All</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-0.5 sm:gap-1">
+                    <Checkbox
+                      checked={isIndeterminate ? "indeterminate" : isAllSelected}
+                      onCheckedChange={handleSelectAll}
+                      aria-label="Select all"
+                      className="h-3 w-3 sm:h-3.5 sm:w-3.5"
+                    />
+                    <span className="text-[9px] sm:text-[10px] font-medium text-gray-400 hidden sm:inline">
+                      Select All
+                    </span>
+                  </div>
                 </TableHead>
                 <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   Status
@@ -1034,21 +1029,13 @@ export default function Documents() {
                         }}
                       >
                         <TableCell className="px-1 sm:px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
-                          <div
-                            className={`transition-opacity ${
-                              selectionMode
-                                ? "opacity-100 pointer-events-auto"
-                                : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto"
-                            }`}
-                          >
-                            <Checkbox
-                              checked={selectedDocIds.has(doc.id)}
-                              onCheckedChange={(checked) => handleSelectDoc(doc.id, checked)}
-                              onClick={(e) => e.stopPropagation()}
-                              aria-label={`Select ${doc.driver_name}`}
-                              className="h-3 w-3 sm:h-3.5 sm:w-3.5"
-                            />
-                          </div>
+                          <Checkbox
+                            checked={selectedDocIds.has(doc.id)}
+                            onCheckedChange={(checked) => handleSelectDoc(doc.id, checked)}
+                            onClick={(e) => e.stopPropagation()}
+                            aria-label={`Select ${doc.driver_name}`}
+                            className="h-3 w-3 sm:h-3.5 sm:w-3.5"
+                          />
                         </TableCell>
                         <TableCell className="px-1 sm:px-2 py-1.5">
                           <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
