@@ -87,6 +87,9 @@ export default function Documents() {
   const observerTarget = useRef(null);
   const isResizingRef = useRef(false);
   const layoutRef = useRef(null);
+  const tableScrollRef = useRef(null);
+  const [skeletonRows, setSkeletonRows] = useState(12);
+  const skeletonRowHeight = 36;
 
   const [searchParams] = useSearchParams();
 
@@ -120,6 +123,30 @@ export default function Documents() {
       setIsPreviewOpen(false);
     }
   }, [selectedDoc]);
+
+  useEffect(() => {
+    if (!tableScrollRef.current) return;
+
+    const container = tableScrollRef.current;
+    const updateRows = () => {
+      const header = container.querySelector("[data-slot='table-header']");
+      const headerHeight = header?.offsetHeight ?? 0;
+      const containerHeight = container.clientHeight ?? 0;
+      const availableHeight = Math.max(containerHeight - headerHeight, skeletonRowHeight);
+      const nextRows = Math.max(1, Math.ceil(availableHeight / skeletonRowHeight));
+      setSkeletonRows(nextRows);
+    };
+
+    updateRows();
+    const resizeObserver = new ResizeObserver(updateRows);
+    resizeObserver.observe(container);
+    const headerEl = container.querySelector("[data-slot='table-header']");
+    if (headerEl) {
+      resizeObserver.observe(headerEl);
+    }
+
+    return () => resizeObserver.disconnect();
+  }, [skeletonRowHeight]);
 
   useEffect(() => {
     const handleMouseMove = (event) => {
@@ -906,7 +933,7 @@ export default function Documents() {
                 isPreviewOpen ? "lg:border-r border-gray-700" : ""
               }`}
             >
-            <div className="flex-1 overflow-y-auto chat-list-scroll">
+            <div ref={tableScrollRef} className="flex-1 overflow-y-auto chat-list-scroll">
               <div className="overflow-x-auto">
               <Table>
             <TableHeader className="sticky top-0 bg-[#161b22] z-10 border-b border-gray-700">
@@ -951,7 +978,13 @@ export default function Documents() {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <DocumentTableSkeleton rows={12} showFlag compact responsive />
+                <DocumentTableSkeleton
+                  rows={skeletonRows}
+                  showFlag
+                  compact
+                  responsive
+                  rowHeightClass="h-9"
+                />
               ) : Object.keys(groupedDocuments).length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="h-64 text-center">
@@ -981,7 +1014,7 @@ export default function Documents() {
                     {groupedDocuments[group].map((doc) => (
                       <TableRow
                         key={doc.id}
-                        className={`group border-gray-800 hover:bg-[#1d232a]/50 cursor-pointer transition-colors ${
+                        className={`group h-9 border-gray-800 hover:bg-[#1d232a]/50 cursor-pointer transition-colors ${
                           selectedDoc?.id === doc.id ? "bg-[#1f6feb]/15 ring-1 ring-inset ring-[#1f6feb]/40" : ""
                         }`}
                         onClick={() => {
