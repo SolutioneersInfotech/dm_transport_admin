@@ -4,7 +4,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns";
 import { buildPresets } from "@/lib/dateRangePresets";
 
-export default function DateRangePicker({ value, onChange, showPresets = true }) {
+export default function DateRangePicker({
+  value,
+  onChange,
+  showPresets = true,
+  triggerWidthClassName = "w-fit",
+}) {
   const [open, setOpen] = useState(false);
   const presets = useMemo(() => buildPresets(new Date()), []);
   const today = useMemo(() => new Date(), []);
@@ -53,7 +58,9 @@ export default function DateRangePicker({ value, onChange, showPresets = true })
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger className="inline-flex w-fit items-center whitespace-nowrap bg-[#1d232a] border border-gray-700 rounded-md px-4 py-2 text-left text-gray-300 transition-colors hover:bg-[#20262e] hover:border-gray-600">
+      <PopoverTrigger
+        className={`inline-flex ${triggerWidthClassName} items-center whitespace-nowrap bg-[#1d232a] border border-gray-700 rounded-md px-4 py-2 text-left text-gray-300 transition-colors hover:bg-[#20262e] hover:border-gray-600`}
+      >
         {label}
       </PopoverTrigger>
 
