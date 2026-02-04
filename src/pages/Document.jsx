@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { format as formatDate } from "date-fns";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
-import { fetchDocuments, fetchMoreDocuments, resetPagination, updateDocument, deleteDocumentThunk, deleteDocumentsThunk } from "../store/slices/documentsSlice";
+import { fetchDocumentCount, fetchDocuments, fetchMoreDocuments, resetPagination, updateDocument, deleteDocumentThunk, deleteDocumentsThunk } from "../store/slices/documentsSlice";
 import DocumentPreviewContent from "../components/DocumentPreviewContent";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -72,6 +72,7 @@ export default function Documents() {
     totalDocuments,
     lastFetchParams,
     lastFetched,
+    countsTotal,
   } = useAppSelector((state) => state.documents);
   const { users } = useAppSelector((state) => state.users);
   const documentDropDownRef = useRef(null);
@@ -93,6 +94,7 @@ export default function Documents() {
   const [skeletonRows, setSkeletonRows] = useState(12);
   const skeletonRowHeight = 36;
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const previousCountRef = useRef(null);
 
   const [searchParams] = useSearchParams();
 
@@ -627,6 +629,38 @@ export default function Documents() {
       }
     };
   }, [handleLoadMore]);
+
+  useEffect(() => {
+    if (!startDate || !endDate) return;
+    const pollIntervalMs = 30 * 1000;
+
+    const pollCounts = () => {
+      if (document.visibilityState !== "visible") return;
+      if (loading || loadingMore) return;
+      dispatch(
+        fetchDocumentCount({
+          start_date: startDate,
+          end_date: endDate,
+          isSeen: isSeenParam,
+          isFlagged: isFlaggedParam,
+        })
+      );
+    };
+
+    pollCounts();
+    const intervalId = setInterval(pollCounts, pollIntervalMs);
+
+    return () => clearInterval(intervalId);
+  }, [dispatch, startDate, endDate, isSeenParam, isFlaggedParam, loading, loadingMore]);
+
+  useEffect(() => {
+    if (typeof countsTotal !== "number") return;
+    if (previousCountRef.current !== null && countsTotal > previousCountRef.current && !loading) {
+      dispatch(resetPagination());
+      dispatch(fetchDocuments(currentFetchArgs));
+    }
+    previousCountRef.current = countsTotal;
+  }, [countsTotal, dispatch, currentFetchArgs, loading]);
 
 
   return (
