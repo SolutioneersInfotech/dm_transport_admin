@@ -116,7 +116,7 @@ export default function Sidebar() {
   const unreadCount = useMemo(() => notifications.length, [notifications]);
 
   // Get global unread counts from Redux
-  const { totalUnreadCount, regularChatUnreadCount, maintenanceChatUnreadCount } = useAppSelector(
+  const { regularUnreadUsersCount, maintenanceUnreadUsersCount } = useAppSelector(
     (state) => state.chatUnread
   );
 
@@ -126,15 +126,21 @@ export default function Sidebar() {
       ...section,
       items: section.items.map((item) => {
         if (item.path === "/chat") {
-          return { ...item, badge: regularChatUnreadCount > 0 ? regularChatUnreadCount : null };
+          return {
+            ...item,
+            badge: regularUnreadUsersCount > 0 ? regularUnreadUsersCount : null,
+          };
         }
         if (item.path === "/maintenance-chat") {
-          return { ...item, badge: maintenanceChatUnreadCount > 0 ? maintenanceChatUnreadCount : null };
+          return {
+            ...item,
+            badge: maintenanceUnreadUsersCount > 0 ? maintenanceUnreadUsersCount : null,
+          };
         }
         return item;
       }),
     }));
-  }, [regularChatUnreadCount, maintenanceChatUnreadCount]);
+  }, [regularUnreadUsersCount, maintenanceUnreadUsersCount]);
 
   useEffect(() => {
     const savedUser = localStorage.getItem("adminUser");

@@ -35,6 +35,22 @@ const ChatListItem = ({ driver, onClick, isSelected }) => {
     : "";
 
   const unreadCount = driver.unreadCount || 0;
+  const lastSeenRaw =
+    driver?.last_seen ??
+    driver?.lastSeen ??
+    driver?.last_seen_at ??
+    driver?.lastSeenAt ??
+    null;
+  const lastSeenSeconds = lastSeenRaw?._seconds ?? lastSeenRaw?.seconds ?? null;
+  const lastSeenDate = lastSeenSeconds
+    ? new Date(lastSeenSeconds * 1000)
+    : lastSeenRaw
+      ? new Date(lastSeenRaw)
+      : null;
+  const isRecentlySeen = lastSeenDate
+    ? Date.now() - lastSeenDate.getTime() <= 3 * 60 * 1000
+    : false;
+  const isOnline = driver?.status === "active" || isRecentlySeen;
 
   return (
     <div
@@ -49,6 +65,9 @@ const ChatListItem = ({ driver, onClick, isSelected }) => {
         alt="profile"
         className="w-10 h-10 rounded-full"
       />
+        {isOnline && (
+          <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full border border-[#0d1117] bg-emerald-400"></span>
+        )}
         {unreadCount > 0 && (
           <span className="absolute -top-1 -right-1 bg-[#1f6feb] text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1.5 border-2 border-[#0d1117]">
             {unreadCount > 99 ? "99+" : unreadCount}
@@ -86,4 +105,3 @@ const ChatListItem = ({ driver, onClick, isSelected }) => {
 };
 
 export default ChatListItem;
-

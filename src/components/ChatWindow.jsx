@@ -185,8 +185,10 @@
 //   );
 // }
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { signInWithCustomToken } from "firebase/auth";
+import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import {
   subscribeMessages as defaultSubscribeMessages,
   sendMessage as defaultSendMessage,
@@ -200,6 +202,7 @@ import ChatWindowSkeleton from "./skeletons/ChatWindowSkeleton";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Checkbox } from "./ui/checkbox";
+import { auth, storage } from "../firebase/firebaseApp";
 
 /* ================= LAST SEEN FORMATTER ================= */
 function formatLastSeen(lastSeen) {
@@ -222,7 +225,9 @@ export default function ChatWindow({ driver, chatApi }) {
   const [contextMenu, setContextMenu] = useState(null);
   const [replyTo, setReplyTo] = useState(null);
   const [text, setText] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const driverId = (() => {
     const candidate =
@@ -258,6 +263,19 @@ export default function ChatWindow({ driver, chatApi }) {
     deleteSpecificMessage: defaultDeleteSpecificMessage,
     markMessagesAsSeen: async () => ({ success: true }),
   };
+  const chatType = chatApi?.chatType ?? "general";
+
+  const canDeleteAll = useMemo(() => {
+    try {
+      const adminUser = JSON.parse(localStorage.getItem("adminUser") || "{}");
+      return Array.isArray(adminUser?.permissions)
+        ? adminUser.permissions.includes("manage_chat_delete")
+        : false;
+    } catch (error) {
+      console.warn("Failed to parse admin permissions:", error);
+      return false;
+    }
+  }, []);
 
   /* ================= LOAD MESSAGES ================= */
   useEffect(() => {
@@ -422,6 +440,12 @@ export default function ChatWindow({ driver, chatApi }) {
     closeContextMenu();
   }
 
+  function handleContextCancelSelection() {
+    setSelectionMode(false);
+    setSelected([]);
+    closeContextMenu();
+  }
+
   useEffect(() => {
     if (!contextMenu) return;
     const onDocClick = () => closeContextMenu();
@@ -439,7 +463,7 @@ export default function ChatWindow({ driver, chatApi }) {
     const tempMsg = {
       msgId: Math.random().toString(),
       type: 1, // ADMIN
-      content: { message: text, attachmentUrl: "" },
+      content: { message: text, attachment: null, attachmentUrl: "" },
       dateTime: new Date().toISOString(),
       status: 0,
     };
@@ -454,8 +478,102 @@ export default function ChatWindow({ driver, chatApi }) {
     shouldScrollToBottomRef.current = true;
     scrollToBottom("smooth");
 
-    await sendMessage(driverId, text, undefined, replyTo?.msgId ?? null);
+    await sendMessage(
+      driverId,
+      { message: text, attachment: null },
+      undefined,
+      replyTo?.msgId ?? null
+    );
     setReplyTo(null);
+  }
+
+  function getAttachmentKind(mime) {
+    if (!mime) return "file";
+    if (mime.startsWith("image/")) return "image";
+    if (mime.startsWith("video/")) return "video";
+    if (mime.startsWith("audio/")) return "audio";
+    if (mime === "application/pdf") return "pdf";
+    return "file";
+  }
+
+  async function ensureFirebaseAuth() {
+    if (auth.currentUser) return;
+    const adminToken = localStorage.getItem("adminToken");
+    if (!adminToken) throw new Error("Missing admin token.");
+    const response = await fetch("/admin/firebase/token", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+      },
+    });
+    if (!response.ok) {
+      throw new Error("Failed to fetch firebase token.");
+    }
+    const data = await response.json();
+    if (!data?.token) {
+      throw new Error("Missing firebase token.");
+    }
+    await signInWithCustomToken(auth, data.token);
+  }
+
+  async function handleAttachmentChange(event) {
+    const file = event.target.files?.[0];
+    if (!file || !driverId) return;
+
+    setIsUploading(true);
+    try {
+      await ensureFirebaseAuth();
+
+      const timestamp = Date.now();
+      const safeName = file.name.replace(/\s+/g, "_");
+      const fileRef = storageRef(
+        storage,
+        `chat_attachments/${chatType}/${driverId}/${timestamp}_${safeName}`
+      );
+      await uploadBytes(fileRef, file);
+      const url = await getDownloadURL(fileRef);
+      const attachment = {
+        url,
+        name: file.name,
+        size: file.size,
+        mime: file.type,
+        kind: getAttachmentKind(file.type),
+      };
+
+      const messageText = text.trim();
+      const tempMsg = {
+        msgId: Math.random().toString(),
+        type: 1,
+        content: {
+          message: messageText,
+          attachment,
+          attachmentUrl: url,
+        },
+        dateTime: new Date().toISOString(),
+        status: 0,
+      };
+
+      setMessages((prev) => [...prev, tempMsg]);
+      setText("");
+
+      shouldScrollToBottomRef.current = true;
+      scrollToBottom("smooth");
+
+      await sendMessage(
+        driverId,
+        { message: messageText, attachment },
+        undefined,
+        replyTo?.msgId ?? null
+      );
+      setReplyTo(null);
+    } catch (error) {
+      console.error("Failed to upload attachment:", error);
+    } finally {
+      setIsUploading(false);
+      if (event.target) {
+        event.target.value = "";
+      }
+    }
   }
 
   /* ================= DELETE SELECTED ================= */
@@ -503,6 +621,16 @@ export default function ChatWindow({ driver, chatApi }) {
             <p className="text-gray-400 text-xs">
               Last seen: {formatLastSeen(driver.lastSeen)}
             </p>
+            {(driver?.driver_email || driver?.email || driver?.driver_phone || driver?.phone) && (
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-400">
+                {(driver?.driver_email || driver?.email) && (
+                  <span>Email: {driver?.driver_email || driver?.email}</span>
+                )}
+                {(driver?.driver_phone || driver?.phone) && (
+                  <span>Phone: {driver?.driver_phone || driver?.phone}</span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -540,9 +668,11 @@ export default function ChatWindow({ driver, chatApi }) {
               >
                 🗑
               </Button>
-              <Button onClick={handleDeleteAll} variant="destructive" size="sm">
-                Delete All
-              </Button>
+              {canDeleteAll && (
+                <Button onClick={handleDeleteAll} variant="destructive" size="sm">
+                  Delete All
+                </Button>
+              )}
             </>
           )}
         </div>
@@ -569,6 +699,13 @@ export default function ChatWindow({ driver, chatApi }) {
               onClick={handleContextSelect}
             >
               Select
+            </button>
+            <button
+              type="button"
+              className="w-full px-3 py-2 text-left text-sm text-gray-200 hover:bg-[#1d232a]"
+              onClick={handleContextCancelSelection}
+            >
+              Cancel Selection
             </button>
           </div>,
           document.body
@@ -663,7 +800,22 @@ export default function ChatWindow({ driver, chatApi }) {
 
       {/* ================= INPUT BAR ================= */}
       <div className="p-4 border-t border-gray-700 bg-[#111827] sticky bottom-0 flex gap-2">
-        <Button variant="ghost" size="icon" className="text-2xl text-gray-300 hover:text-white">📎</Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="text-2xl text-gray-300 hover:text-white"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isUploading || !driverId}
+        >
+          📎
+        </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={handleAttachmentChange}
+        />
 
         <Input
           className="flex-1 bg-[#1f2937]"
@@ -672,13 +824,15 @@ export default function ChatWindow({ driver, chatApi }) {
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
           ref={inputRef}
+          disabled={isUploading}
         />
 
         <Button
           onClick={handleSend}
           size="sm"
+          disabled={isUploading}
         >
-          Send
+          {isUploading ? "Uploading..." : "Send"}
         </Button>
       </div>
     </div>
