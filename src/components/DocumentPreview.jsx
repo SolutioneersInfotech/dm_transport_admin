@@ -129,13 +129,16 @@ export default function DocumentPreview({ selectedDoc }) {
 
         {/* PDF PREVIEW */}
         {isPDF && (
-          <iframe
-            src={`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(
-              url
-            )}`}
-            className="w-full h-full rounded"
-            title="PDF Preview"
-          ></iframe>
+          <div className="relative w-full h-full">
+            <iframe
+              src={`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(
+                url
+              )}`}
+              className="w-full h-full rounded"
+              title="PDF Preview"
+            ></iframe>
+            <div className="pointer-events-none absolute left-0 top-0 right-0 h-10 bg-[#1d232a] border-b border-gray-700 rounded-t" />
+          </div>
         )}
 
         {/* UNKNOWN FILE TYPE */}
