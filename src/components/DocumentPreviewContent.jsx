@@ -16,6 +16,7 @@ import {
   deleteAcknowledgement,
   sendAcknowledgement,
 } from "../services/acknowledgementAPI";
+import { buildDocumentDownloadName, getDocumentTypeLabel } from "../utils/documentDownloadName";
 
 // Document type mapping (same as in Document.jsx)
 const FILTER_MAP = {
@@ -632,7 +633,9 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       const ext = (doc.document_url?.split("?")[0]?.split(".").pop() || "file").toLowerCase();
-      a.download = `document-${doc.id || "download"}.${ext}`;
+      const typeLabel = getDocumentTypeLabel(doc.type, FILTER_MAP);
+      const fileName = buildDocumentDownloadName({ doc, driverName, typeLabel });
+      a.download = `${fileName}.${ext}`;
       a.click();
       URL.revokeObjectURL(a.href);
       toast.success("Download started");
