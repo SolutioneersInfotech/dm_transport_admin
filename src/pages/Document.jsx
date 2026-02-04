@@ -93,6 +93,7 @@ export default function Documents() {
   const [skeletonRows, setSkeletonRows] = useState(12);
   const skeletonRowHeight = 36;
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const [isFlagUpdating, setIsFlagUpdating] = useState(false);
 
   const [searchParams] = useSearchParams();
 
@@ -102,6 +103,30 @@ export default function Documents() {
   }));
 
   const [selectedFilters, setSelectedFilters] = useState([]); // Array of filter values
+
+  const handleToggleFlag = useCallback(async (doc) => {
+    if (!doc || isFlagUpdating) return;
+
+    const isFlagged = doc.flag?.flagged || doc.flagged || doc.isFlagged;
+    const reason = doc.flag?.reason ?? doc.flagged_reason ?? "";
+    const nextFlag = {
+      flagged: !isFlagged,
+      reason: !isFlagged ? reason : "",
+    };
+
+    try {
+      setIsFlagUpdating(true);
+      const result = await dispatch(updateDocument({ document: doc, flag: nextFlag }));
+      if (!updateDocument.fulfilled.match(result)) {
+        toast.error(result.payload || "Failed to update flag status");
+      }
+    } catch (error) {
+      console.error("Failed to update flag status:", error);
+      toast.error("Failed to update flag status");
+    } finally {
+      setIsFlagUpdating(false);
+    }
+  }, [dispatch, isFlagUpdating]);
 
   // Sync selectedDoc with Redux state when document is updated
   useEffect(() => {
@@ -1108,11 +1133,23 @@ export default function Documents() {
                           </div>
                         </TableCell>
                         <TableCell className="px-1 sm:px-2 py-1.5">
-                          {doc.flag?.flagged || doc.flagged || doc.isFlagged ? (
-                            <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-red-500" fill="#ef4444" />
-                          ) : (
-                            <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-gray-600" />
-                          )}
+                          <button
+                            type="button"
+                            className="group inline-flex items-center justify-center rounded-full transition-transform duration-200 ease-out hover:-translate-y-0.5 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:opacity-60 disabled:pointer-events-none"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleToggleFlag(doc);
+                            }}
+                            aria-label={doc.flag?.flagged || doc.flagged || doc.isFlagged ? "Unflag document" : "Flag document"}
+                            title={doc.flag?.flagged || doc.flagged || doc.isFlagged ? "Unflag document" : "Flag document"}
+                            disabled={isFlagUpdating}
+                          >
+                            {doc.flag?.flagged || doc.flagged || doc.isFlagged ? (
+                              <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-red-500 transition-colors duration-200 group-hover:animate-pulse" fill="#ef4444" />
+                            ) : (
+                              <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-gray-600 transition-colors duration-200 group-hover:text-red-400 group-hover:animate-pulse" />
+                            )}
+                          </button>
                         </TableCell>
                         <TableCell className="px-1 sm:px-2 py-1.5">
                           {(() => {
