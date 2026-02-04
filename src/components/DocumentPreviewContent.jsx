@@ -703,9 +703,9 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                 </div>
               )}
               <iframe
-                src={`https://docs.google.com/viewer?url=${encodeURIComponent(
+                src={`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(
                   url
-                )}&embedded=true`}
+                )}`}
                 className="w-full h-[600px] rounded"
                 title="PDF Preview"
                 onLoad={() => setIsPdfLoading(false)}

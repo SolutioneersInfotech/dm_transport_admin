@@ -127,12 +127,12 @@ export default function DocumentPreview({ selectedDoc }) {
           />
         )}
 
-        {/* PDF PREVIEW (Google Docs Viewer) */}
+        {/* PDF PREVIEW */}
         {isPDF && (
           <iframe
-            src={`https://docs.google.com/viewer?url=${encodeURIComponent(
+            src={`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(
               url
-            )}&embedded=true`}
+            )}`}
             className="w-full h-full rounded"
             title="PDF Preview"
           ></iframe>
