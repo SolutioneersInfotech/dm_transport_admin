@@ -31,6 +31,7 @@ import {
   PopoverTrigger,
 } from "../components/ui/popover";
 import { toast } from "sonner";
+import { buildDocumentDownloadName, getDocumentTypeLabel } from "../utils/documentDownloadName";
 
 const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
 
@@ -483,7 +484,10 @@ export default function Documents() {
           const a = document.createElement("a");
           a.href = URL.createObjectURL(blob);
           const ext = (docUrl.split("?")[0]?.split(".").pop() || "file").toLowerCase();
-          a.download = `document-${doc.id || "download"}.${ext}`;
+          const typeLabel = getDocumentTypeLabel(doc.type, FILTER_MAP);
+          const driverName = doc.driver_name || doc.driverName || doc.driver?.name || "Unknown Driver";
+          const fileName = buildDocumentDownloadName({ doc, driverName, typeLabel });
+          a.download = `${fileName}.${ext}`;
           a.click();
           URL.revokeObjectURL(a.href);
         } catch (error) {
