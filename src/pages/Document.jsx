@@ -893,17 +893,6 @@ export default function Documents() {
 
         {/* Date Range Picker */}
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:justify-end sm:ml-auto">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={handleManualRefresh}
-            disabled={isManualRefreshing}
-            title="Refresh"
-            className="h-8 w-8 text-gray-400 hover:text-gray-200 hover:bg-[#1d232a] disabled:opacity-60"
-          >
-            <RefreshCw className={`h-4 w-4 ${isManualRefreshing ? "animate-spin" : ""}`} />
-          </Button>
           <DateRangePicker
             value={dateRange}
             onChange={setDateRange}
@@ -1006,6 +995,20 @@ export default function Documents() {
                 <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   Category
                 </TableHead>
+                <TableHead className="h-8 px-1 sm:px-2 text-right">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleManualRefresh}
+                    disabled={isManualRefreshing}
+                    title="Refresh"
+                    aria-label="Refresh"
+                    className="h-7 w-7 text-gray-400 hover:text-gray-200 hover:bg-[#1d232a] disabled:opacity-60"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${isManualRefreshing ? "animate-spin" : ""}`} />
+                  </Button>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1016,10 +1019,11 @@ export default function Documents() {
                   compact
                   responsive
                   rowHeightClass="h-9"
+                  showActionColumn
                 />
               ) : Object.keys(groupedDocuments).length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-64 text-center">
+                  <TableCell colSpan={8} className="h-64 text-center">
                     <div className="flex flex-col items-center justify-center text-gray-400">
                       <p className="text-sm font-medium">No documents found</p>
                       <p className="text-xs mt-1">Try adjusting your filters</p>
@@ -1031,7 +1035,7 @@ export default function Documents() {
                   <>
                     {/* Group Header */}
                     <TableRow key={`group-${group}`} className="bg-[#0d1117] border-gray-800 hover:bg-[#0d1117]">
-                      <TableCell colSpan={7} className="px-2 py-1">
+                      <TableCell colSpan={8} className="px-2 py-1">
                         <div className="flex items-center gap-2">
                           <div className="h-px flex-1 bg-gradient-to-r from-transparent via-blue-500/30 to-transparent" />
                           <span className="text-xs font-semibold text-blue-400 px-2">
@@ -1216,6 +1220,7 @@ export default function Documents() {
                             {doc.category || "—"}
                           </span>
                         </TableCell>
+                        <TableCell className="px-1 sm:px-2 py-1.5" />
                       </TableRow>
                       );
                     })}
@@ -1226,7 +1231,7 @@ export default function Documents() {
               {/* Infinite Scroll Trigger */}
               {hasMore && !loading && (
                 <TableRow>
-                  <TableCell colSpan={7} ref={observerTarget} className="h-16">
+                  <TableCell colSpan={8} ref={observerTarget} className="h-16">
                     {loadingMore && (
                       <div className="flex items-center justify-center gap-2 text-gray-400">
                         <div className="w-4 h-4 border-2 border-gray-600 border-t-blue-500 rounded-full animate-spin" />
@@ -1240,7 +1245,7 @@ export default function Documents() {
               {/* End of Results */}
               {!hasMore && !loading && filteredDocuments?.length > 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-12 text-center">
+                  <TableCell colSpan={8} className="h-12 text-center">
                     <p className="text-xs text-gray-500">No more documents to load</p>
                   </TableCell>
                 </TableRow>

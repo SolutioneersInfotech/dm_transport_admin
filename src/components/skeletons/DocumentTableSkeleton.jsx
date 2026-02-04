@@ -6,6 +6,7 @@ export default function DocumentTableSkeleton({
   compact = false,
   responsive = false,
   rowHeightClass = "h-9",
+  showActionColumn = false,
 }) {
   const cellClass = compact ? "px-1 sm:px-2 py-1.5" : "p-3";
   const dateCellClass = `${cellClass}${responsive ? " hidden md:table-cell" : ""}`;
@@ -49,6 +50,7 @@ export default function DocumentTableSkeleton({
           <td className={cellClass}>
             <Skeleton height={16} width="2ch" />
           </td>
+          {showActionColumn && <td className={cellClass} />}
         </tr>
       ))}
     </>
