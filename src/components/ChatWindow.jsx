@@ -195,8 +195,10 @@ import {
 } from "../services/chatAPI";
 
 import ChatMessageBubble from "./ChatMessageBubble";
+import FilePreviewModal from "./FilePreviewModal";
 import { groupMessagesByDate } from "../utils/groupMessages";
 import ChatWindowSkeleton from "./skeletons/ChatWindowSkeleton";
+import { useAuth } from "../context/AuthContext";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Checkbox } from "./ui/checkbox";
@@ -216,6 +218,8 @@ function formatLastSeen(lastSeen) {
 }
 
 export default function ChatWindow({ driver, chatApi }) {
+  const { user } = useAuth();
+  const adminId = user?.userid || user?.userId || "admin";
   const [messages, setMessages] = useState([]);
   const [selected, setSelected] = useState([]);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -223,7 +227,12 @@ export default function ChatWindow({ driver, chatApi }) {
   const [replyTo, setReplyTo] = useState(null);
   const [text, setText] = useState("");
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [showFilePreview, setShowFilePreview] = useState(false);
+  const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
+  const [lightboxImageUrl, setLightboxImageUrl] = useState(null);
   const driverId = (() => {
     const candidate =
       driver?.userid ??
@@ -286,7 +295,6 @@ export default function ChatWindow({ driver, chatApi }) {
     shouldScrollToBottomRef.current = true;
 
     const unsubscribe = subscribeMessages(driverId, (nextMessages) => {
-      console.log(nextMessages);
       setMessages(nextMessages || []);
       setLoading(false);
       
@@ -432,6 +440,52 @@ export default function ChatWindow({ driver, chatApi }) {
     };
   }, [contextMenu]);
 
+  useEffect(() => {
+    if (!lightboxImageUrl) return;
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") setLightboxImageUrl(null);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [lightboxImageUrl]);
+
+  /* ================= FILE ATTACHMENT ================= */
+  function openFilePicker(accept) {
+    if (!fileInputRef.current) return;
+    fileInputRef.current.accept = accept;
+    fileInputRef.current.click();
+    setShowAttachmentOptions(false);
+  }
+
+  function handleFileSelect(e) {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      setShowFilePreview(true);
+    }
+    e.target.value = "";
+  }
+
+  function handleAttachmentSent(url) {
+    const tempMsg = {
+      msgId: Math.random().toString(),
+      type: 1,
+      content: { message: "", attachmentUrl: url },
+      dateTime: new Date().toISOString(),
+      status: 0,
+      sendername: user?.name || user?.userid || "Admin",
+    };
+    setMessages((prev) => [...prev, tempMsg]);
+    setSelectedFile(null);
+    setShowFilePreview(false);
+    setReplyTo(null);
+    shouldScrollToBottomRef.current = true;
+    scrollToBottom("smooth");
+    sendMessage(driverId, "", undefined, replyTo?.msgId ?? null, url).catch((err) => {
+      console.error("Failed to send attachment message:", err);
+    });
+  }
+
   /* ================= SEND MESSAGE ================= */
   async function handleSend() {
     if (!text.trim()) return;
@@ -481,7 +535,6 @@ export default function ChatWindow({ driver, chatApi }) {
 
   /* ================= GROUP MESSAGES ================= */
   const grouped = groupMessagesByDate(messages);
-  console.log(grouped);
 
   /* ================= LOADER ================= */
   if (loading) {
@@ -489,19 +542,19 @@ export default function ChatWindow({ driver, chatApi }) {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* ================= HEADER ================= */}
-      <div className="px-4 py-3 border-b border-gray-700 bg-[#111827] sticky top-0 z-40 flex justify-between items-center">
-        <div className="flex items-center gap-3">
+    <div className="flex flex-col h-full overflow-hidden bg-[#0b141a]">
+      {/* ================= HEADER (WhatsApp-like) ================= */}
+      <div className="px-4 py-3 border-b border-[#2a3942] bg-[#202c33] sticky top-0 z-40 flex justify-between items-center">
+        <div className="flex items-center gap-3 min-w-0">
           <img
             src={driver.driver_image || "/default-user.png"}
-            className="w-10 h-10 rounded-full"
+            alt=""
+            className="w-10 h-10 rounded-full object-cover flex-shrink-0"
           />
-
-          <div>
-            <p className="font-semibold">{driver.driver_name}</p>
-            <p className="text-gray-400 text-xs">
-              Last seen: {formatLastSeen(driver.lastSeen)}
+          <div className="min-w-0">
+            <p className="font-medium text-[#e9edef] truncate">{driver.driver_name}</p>
+            <p className="text-[#8696a0] text-xs">
+              {formatLastSeen(driver.lastSeen)}
             </p>
           </div>
         </div>
@@ -574,21 +627,20 @@ export default function ChatWindow({ driver, chatApi }) {
           document.body
         )}
 
-      {/* ================= MESSAGE AREA ================= */}
+      {/* ================= MESSAGE AREA (WhatsApp-like bg) ================= */}
       <div
         ref={messagesContainerRef}
-        className={`flex-1 overflow-y-auto chat-list-scroll space-y-6 bg-[#0d1117] ${selectionMode ? "pl-2 pr-4 pt-4 pb-4" : "p-4"}`}
+        className={`flex-1 overflow-y-auto chat-list-scroll space-y-6 bg-[#0b141a] chat-bg-pattern ${selectionMode ? "pl-2 pr-4 pt-4 pb-4" : "p-4"}`}
       >
         {Object.keys(grouped).length === 0 && (
-          <p className="text-center text-gray-500 text-sm mt-6">
+          <p className="text-center text-[#8696a0] text-sm mt-6">
             No messages yet
           </p>
         )}
 
         {Object.keys(grouped).map((date) => (
           <div key={date}>
-            <div className="text-center text-gray-400 text-xs my-2">{date}</div>
-            {console.log(grouped[date])}
+            <div className="text-center text-[#8696a0] text-xs my-2">{date}</div>
             {grouped[date].map((msg, idx) => {
               const senderName = msg.type === 1
                 ? (msg.sendername ?? "You")
@@ -627,6 +679,7 @@ export default function ChatWindow({ driver, chatApi }) {
                         el?.classList.add("ring-2", "ring-blue-500");
                         setTimeout(() => el?.classList.remove("ring-2", "ring-blue-500"), 1200);
                       }}
+                      onImageClick={(url) => setLightboxImageUrl(url)}
                     />
 
                   </div>
@@ -638,12 +691,12 @@ export default function ChatWindow({ driver, chatApi }) {
         <div ref={bottomRef} />
       </div>
       {replyTo && (
-  <div className="px-4 py-2 border-t border-gray-700 bg-[#0f172a] flex items-center justify-between">
-    <div className="border-l-4 border-blue-500 pl-3">
-      <p className="text-xs font-semibold text-blue-400">
+  <div className="px-4 py-2 border-t border-[#2a3942] bg-[#202c33] flex items-center justify-between">
+    <div className="border-l-4 border-[#00a884] pl-3">
+      <p className="text-xs font-semibold text-[#00a884]">
         Replying to {replyTo.senderName}
       </p>
-      <p className="text-xs text-gray-300 truncate max-w-[260px]">
+      <p className="text-xs text-[#8696a0] truncate max-w-[260px]">
         {typeof replyTo.message === "string"
           ? replyTo.message
           : replyTo.message != null
@@ -651,23 +704,77 @@ export default function ChatWindow({ driver, chatApi }) {
             : ""}
       </p>
     </div>
-
     <button
-      className="text-gray-400 hover:text-white"
+      className="text-[#8696a0] hover:text-[#e9edef] p-1"
       onClick={() => setReplyTo(null)}
+      aria-label="Cancel reply"
     >
       ✕
     </button>
   </div>
 )}
 
-      {/* ================= INPUT BAR ================= */}
-      <div className="p-4 border-t border-gray-700 bg-[#111827] sticky bottom-0 flex gap-2">
-        <Button variant="ghost" size="icon" className="text-2xl text-gray-300 hover:text-white">📎</Button>
+      {/* ================= INPUT BAR (WhatsApp-like) ================= */}
+      <div className="p-3 border-t border-[#2a3942] bg-[#202c33] sticky bottom-0 flex items-end gap-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,video/*"
+          onChange={handleFileSelect}
+          className="hidden"
+          aria-label="Attach file"
+        />
+        <div className="relative">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="rounded-full text-[#8696a0] hover:bg-[#2a3942] hover:text-[#e9edef]"
+            onClick={() => setShowAttachmentOptions((prev) => !prev)}
+            aria-label="Attach file"
+            aria-expanded={showAttachmentOptions}
+            aria-haspopup="true"
+          >
+            <span className="text-xl">📎</span>
+          </Button>
+          {showAttachmentOptions && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setShowAttachmentOptions(false)}
+                aria-hidden="true"
+              />
+              <div
+                className="absolute bottom-full left-0 z-50 mb-2 w-48 rounded-xl border border-[#2a3942] bg-[#202c33] py-2 shadow-xl"
+                role="menu"
+                aria-label="Choose attachment type"
+              >
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-[#e9edef] hover:bg-[#2a3942]"
+                  onClick={() => openFilePicker("image/*,video/*")}
+                  role="menuitem"
+                >
+                  <span className="text-2xl">📷</span>
+                  <span className="text-sm">Photo / Video</span>
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-[#e9edef] hover:bg-[#2a3942]"
+                  onClick={() => openFilePicker("application/pdf")}
+                  role="menuitem"
+                >
+                  <span className="text-2xl">📄</span>
+                  <span className="text-sm">PDF</span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
 
         <Input
-          className="flex-1 bg-[#1f2937]"
-          placeholder="Type a message..."
+          className="flex-1 rounded-full bg-[#2a3942] border-0 text-[#e9edef] placeholder:text-[#8696a0] py-5 px-4 focus-visible:ring-[#00a884]"
+          placeholder="Type a message"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
@@ -676,11 +783,54 @@ export default function ChatWindow({ driver, chatApi }) {
 
         <Button
           onClick={handleSend}
-          size="sm"
+          size="icon"
+          className="rounded-full bg-[#00a884] hover:bg-[#06cf9c] text-white h-11 w-11 flex-shrink-0"
+          aria-label="Send message"
         >
-          Send
+          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+          </svg>
         </Button>
       </div>
+
+      {showFilePreview && selectedFile && driverId && (
+        <FilePreviewModal
+          file={selectedFile}
+          adminId={adminId}
+          driverId={driverId}
+          onClose={() => {
+            setShowFilePreview(false);
+            setSelectedFile(null);
+          }}
+          onSent={handleAttachmentSent}
+        />
+      )}
+
+      {/* Image lightbox dialog */}
+      {lightboxImageUrl && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 p-4"
+          onClick={() => setLightboxImageUrl(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Image preview"
+        >
+          <button
+            type="button"
+            className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50"
+            onClick={() => setLightboxImageUrl(null)}
+            aria-label="Close"
+          >
+            ✕
+          </button>
+          <img
+            src={lightboxImageUrl}
+            alt="Full size"
+            className="max-h-[90vh] max-w-full rounded-lg object-contain shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

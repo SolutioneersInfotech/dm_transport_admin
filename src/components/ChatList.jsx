@@ -15,6 +15,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   // console.log(users);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState([]); // Array of selected categories: ["F", "D", "C"]
+  const [statusFilter, setStatusFilter] = useState("all"); // "all" | "seen" | "unseen"
   const observerTarget = useRef(null);
   const hasInitiallyFetched = useRef(false);
   const [isFetchingMessages, setIsFetchingMessages] = useState(false);
@@ -302,18 +303,25 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     return driversWithIds;
   }, [users, unreadCounts]);
 
-  // Client-side filtering - filter by search and category
+  // Client-side filtering - filter by search, category, and seen/unseen
   const filtered = useMemo(() => {
     // Create a copy of the drivers array to avoid mutating the original
     let driversCopy = [...drivers];
-    
-    // Filter by category first (multiple categories allowed)
+
+    // Filter by seen/unseen status
+    if (statusFilter === "seen") {
+      driversCopy = driversCopy.filter((driver) => (driver.unreadCount || 0) === 0);
+    } else if (statusFilter === "unseen") {
+      driversCopy = driversCopy.filter((driver) => (driver.unreadCount || 0) > 0);
+    }
+
+    // Filter by category (multiple categories allowed)
     if (categoryFilter.length > 0) {
       driversCopy = driversCopy.filter((driver) => {
         return categoryFilter.includes(driver.category);
       });
     }
-    
+
     // Then filter by search term (case-insensitive)
     if (search && search.trim()) {
       const searchTerm = search.toLowerCase().trim();
@@ -322,16 +330,16 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         return driverName.includes(searchTerm);
       });
     }
-    
+
     return driversCopy;
-  }, [drivers, search, categoryFilter]);
+  }, [drivers, search, categoryFilter, statusFilter]);
   
   const selectedDriverId = getDriverId(selectedDriver);
 
   return (
     <div className="h-full flex flex-col">
       {/* 🔍 SEARCH BAR (STICKY) */}
-      <div className="p-5 border-b border-gray-700 sticky top-0 bg-[#0d1117] z-20">
+      <div className="p-5 border-b border-gray-700 sticky top-0 bg-[#0d1117] z-20 space-y-3">
         <div className="flex items-center justify-center gap-3">
           <Input
             type="text"
@@ -340,7 +348,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          
+
           {/* Category Filters */}
           <div className="flex items-center gap-2">
             {["C", "D", "F"].map((cat) => {
@@ -370,6 +378,30 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
               );
             })}
           </div>
+        </div>
+
+        {/* Seen / Unseen filter */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-400 whitespace-nowrap">Status:</span>
+          {[
+            { value: "all", label: "All" },
+            { value: "seen", label: "Seen" },
+            { value: "unseen", label: "Unseen" },
+          ].map(({ value, label }) => (
+            <Button
+              key={value}
+              variant={statusFilter === value ? "default" : "outline"}
+              size="sm"
+              onClick={() => setStatusFilter(value)}
+              className={`min-w-[60px] h-7 text-xs ${
+                statusFilter === value
+                  ? "bg-[#1f6feb] text-white hover:bg-[#1a5fd4]"
+                  : "bg-[#161b22] text-gray-300 hover:bg-[#1d232a] border-gray-600"
+              }`}
+            >
+              {label}
+            </Button>
+          ))}
         </div>
       </div>
 
@@ -415,6 +447,13 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         {!loading && !isFetchingMessages && users.length === 0 && filtered.length === 0 && (
           <p className="text-center text-gray-500 text-sm mt-4">
             No drivers found
+          </p>
+        )}
+        {!loading && !isFetchingMessages && users.length > 0 && filtered.length === 0 && (
+          <p className="text-center text-gray-500 text-sm mt-4">
+            {statusFilter === "seen" && "No seen chats"}
+            {statusFilter === "unseen" && "No unseen chats"}
+            {statusFilter === "all" && "No matching chats"}
           </p>
         )}
 

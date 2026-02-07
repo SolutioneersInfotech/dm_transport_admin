@@ -50,6 +50,7 @@ function normalizeMessage(messageId, msg) {
     sendername: msg?.sendername ?? "Unknown",
     replyTo: msg?.replyTo ?? null,
     seenByAdmin: msg?.seenByAdmin ?? false,
+    seenByAdmins: msg?.seenByAdmins ?? null,
     seenAt: msg?.seenAt ?? null,
     seenBy: msg?.seenBy ?? null,
   };
@@ -152,9 +153,10 @@ export function subscribeMessages(userid, onChange) {
  * @param {string} text - Message text (must be a string)
  * @param {object} [adminUser] - Admin user object (optional, will fetch if not provided)
  * @param {string|null} [replyToMsgId] - Optional message ID this message is replying to
+ * @param {string} [attachmentUrl] - Optional attachment download URL (image/video/document)
  * @returns {Promise<{message: object}>}
  */
-export async function sendMessage(userid, text, adminUser = getAdminUser(), replyToMsgId = null) {
+export async function sendMessage(userid, text, adminUser = getAdminUser(), replyToMsgId = null, attachmentUrl = "") {
   const messageId = push(ref(database, `${ADMIN_GENERAL_PATH}/${userid}`)).key;
 
   if (!messageId) {
@@ -163,15 +165,16 @@ export async function sendMessage(userid, text, adminUser = getAdminUser(), repl
 
   const messageText = typeof text === "string" ? text : (text != null ? String(text) : "");
   const replyTo = replyToMsgId != null && replyToMsgId !== "" ? replyToMsgId : null;
+  const attachment = typeof attachmentUrl === "string" && attachmentUrl.trim() ? attachmentUrl.trim() : "";
 
   const payload = {
     id: messageId,
     dateTime: new Date().toISOString(),
-    content: { message: messageText, attachmentUrl: "" },
+    content: { message: messageText, attachmentUrl: attachment },
     status: 0,
     type: 0,
     contactId: userid,
-    sendername: adminUser?.userid || "Admin",
+    sendername: adminUser?.name || adminUser?.userid || "Admin",
     replyTo,
   };
 
@@ -217,8 +220,27 @@ export async function deleteChatHistory(userid) {
   return { success: true };
 }
 
+/** Current admin id for per-admin seen state */
+function getCurrentAdminId() {
+  const adminUser = getAdminUser();
+  return adminUser?.userid || adminUser?.userId || adminUser?.id || "admin";
+}
+
+/** True if this message is seen by the current admin (per-admin seen) */
+function isSeenByCurrentAdmin(msg) {
+  const adminId = getCurrentAdminId();
+  if (msg.seenByAdmins && typeof msg.seenByAdmins === "object" && msg.seenByAdmins[adminId]) {
+    return true;
+  }
+  // Legacy: message had global seenByAdmin only → treat as seen by all
+  if (msg.seenByAdmin === true && (!msg.seenByAdmins || Object.keys(msg.seenByAdmins || {}).length === 0)) {
+    return true;
+  }
+  return false;
+}
+
 /**
- * Mark messages as seen/read for a specific user
+ * Mark messages as seen/read for the current admin only (per-admin seen)
  * @param {string} userid - User ID
  * @returns {Promise<{success: boolean, error?: string}>}
  */
@@ -226,35 +248,31 @@ export async function markMessagesAsSeen(userid) {
   try {
     const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
     const snapshot = await get(messagesRef);
-    
+
     if (!snapshot.exists()) {
       return { success: true };
     }
 
     const messagesObject = snapshot.val();
     const updateData = {};
-    const adminUser = getAdminUser();
-    const adminId = adminUser?.userid || "admin";
+    const adminId = getCurrentAdminId();
     const seenTimestamp = new Date().toISOString();
 
-    // Update all unread messages (type === 1, from user) to mark them as seen
+    // Mark only for current admin: set seenByAdmins/<adminId> (and legacy fields for display)
     Object.keys(messagesObject).forEach((messageId) => {
       const msg = messagesObject[messageId];
-      // Only mark messages from user (type === 1) that haven't been seen
-      if (msg.type === 1 && !msg.seenByAdmin) {
-        const messagePath = `${ADMIN_GENERAL_PATH}/${userid}/${messageId}`;
-        updateData[`${messagePath}/seenByAdmin`] = true;
-        updateData[`${messagePath}/seenAt`] = seenTimestamp;
-        updateData[`${messagePath}/seenBy`] = adminId;
-      }
+      if (msg.type !== 1) return;
+      if (isSeenByCurrentAdmin(msg)) return;
+      const messagePath = `${ADMIN_GENERAL_PATH}/${userid}/${messageId}`;
+      updateData[`${messagePath}/seenByAdmins/${adminId}`] = seenTimestamp;
+      updateData[`${messagePath}/seenAt`] = seenTimestamp;
+      updateData[`${messagePath}/seenBy`] = adminId;
     });
 
     if (Object.keys(updateData).length > 0) {
-      // Use update to batch update all fields at once
       await update(ref(database), updateData);
     }
 
-    // Store last seen timestamp for this user
     const lastSeenRef = ref(database, `chat/admin/lastSeen/${userid}`);
     await set(lastSeenRef, {
       timestamp: seenTimestamp,
@@ -269,7 +287,7 @@ export async function markMessagesAsSeen(userid) {
 }
 
 /**
- * Get unread message count for a user
+ * Get unread message count for the current admin only (per-admin)
  * @param {string} userid - User ID
  * @returns {Promise<number>}
  */
@@ -277,7 +295,7 @@ export async function getUnreadCount(userid) {
   try {
     const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
     const snapshot = await get(messagesRef);
-    
+
     if (!snapshot.exists()) {
       return 0;
     }
@@ -286,8 +304,7 @@ export async function getUnreadCount(userid) {
     let unreadCount = 0;
 
     Object.values(messagesObject).forEach((msg) => {
-      // Count messages from user (type === 1) that haven't been seen
-      if (msg.type === 1 && !msg.seenByAdmin) {
+      if (msg.type === 1 && !isSeenByCurrentAdmin(msg)) {
         unreadCount++;
       }
     });
@@ -300,14 +317,14 @@ export async function getUnreadCount(userid) {
 }
 
 /**
- * Subscribe to unread count changes for a user
+ * Subscribe to unread count for the current admin only (per-admin)
  * @param {string} userid - User ID
  * @param {function} onChange - Callback function called when unread count changes
  * @returns {function} Unsubscribe function
  */
 export function subscribeUnreadCount(userid, onChange) {
   const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
-  
+
   const unsubscribe = onValue(messagesRef, (snapshot) => {
     if (!snapshot.exists()) {
       onChange(0);
@@ -318,7 +335,7 @@ export function subscribeUnreadCount(userid, onChange) {
     let unreadCount = 0;
 
     Object.values(messagesObject).forEach((msg) => {
-      if (msg.type === 1 && !msg.seenByAdmin) {
+      if (msg.type === 1 && !isSeenByCurrentAdmin(msg)) {
         unreadCount++;
       }
     });

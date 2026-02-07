@@ -305,6 +305,7 @@ export default function ChatMessageBubble({
   showSenderName = true,
   replyToMessage = null,
   onReplyClick,
+  onImageClick,
 }) {
   /* ================= DATA ================= */
   const isAdmin = msg?.type === 1;
@@ -336,7 +337,7 @@ export default function ChatMessageBubble({
 
   const statusIcon = statusMap[msg?.status] ?? "";
   const statusColor =
-    msg?.status === 2 ? "text-blue-400" : "text-gray-400";
+    msg?.status === 2 ? "text-[#53bdeb]" : "text-white/70";
 
   /* ================= ATTACHMENT TYPE ================= */
   const lowerUrl = attachment ? String(attachment).toLowerCase() : "";
@@ -345,13 +346,16 @@ export default function ChatMessageBubble({
   const isImage = /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(lowerUrl);
   const isPDF = /\.pdf(\?|$)/i.test(lowerUrl);
 
-  /* ================= STYLES ================= */
+  /* ================= STYLES (WhatsApp-like) ================= */
   const containerAlign = isAdmin ? "justify-end" : "justify-start";
   const bubbleAlign = isAdmin ? "items-end" : "items-start";
-
+  // Sent = green bubble (WhatsApp), Received = gray bubble
   const bubbleStyle = isAdmin
-    ? "bg-blue-600 text-white"
-    : "bg-[#1f2937] text-gray-200";
+    ? "bg-[#005c4b] text-white rounded-br-md"
+    : "bg-[#202c33] text-[#e9edef] rounded-bl-md";
+  const bubbleRounding = isAdmin
+    ? "rounded-2xl rounded-br-md"
+    : "rounded-2xl rounded-bl-md";
 
   const replyToPreview =
     replyToMessage != null
@@ -373,7 +377,7 @@ export default function ChatMessageBubble({
         {/* Sender name */}
         {showSenderName && (
           <span
-            className={`text-xs text-gray-400 mb-0.5 px-1 ${
+            className={`text-xs text-[#8696a0] mb-0.5 px-1 ${
               isAdmin ? "pr-2" : "pl-2"
             }`}
           >
@@ -383,7 +387,7 @@ export default function ChatMessageBubble({
 
         {/* Bubble */}
         <div
-          className={`px-3 py-2 rounded-lg shadow text-sm ${bubbleStyle}`}
+          className={`px-3 py-2 shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] text-sm ${bubbleStyle} ${bubbleRounding}`}
         >
           {/* Replying to */}
           {showReplyTo && (
@@ -392,7 +396,7 @@ export default function ChatMessageBubble({
               onClick={() => onReplyClick?.(msg.replyTo)}
               className={`mb-2 w-full text-left rounded border-l-2 pl-2 py-1 text-xs ${
                 isAdmin
-                  ? "border-blue-400 bg-blue-500/30 text-blue-100"
+                  ? "border-[#00a884] bg-white/10 text-white"
                   : "border-gray-500 bg-black/20 text-gray-300"
               } truncate`}
               title={replyToPreview}
@@ -407,8 +411,11 @@ export default function ChatMessageBubble({
             <img
               src={attachment}
               alt="attachment"
-              className="mb-2 max-h-64 rounded-lg object-cover cursor-pointer"
-              onClick={() => window.open(attachment, "_blank")}
+              className="mb-2 max-h-64 rounded-lg object-cover cursor-pointer hover:opacity-95"
+              onClick={() => (onImageClick ? onImageClick(attachment) : window.open(attachment, "_blank"))}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === "Enter" && (onImageClick ? onImageClick(attachment) : window.open(attachment, "_blank"))}
             />
           )}
 
@@ -445,7 +452,7 @@ export default function ChatMessageBubble({
 
           {/* Meta */}
           <div className="mt-1 flex items-center justify-end gap-1">
-            <span className="text-[10px] text-gray-300">
+            <span className={`text-[10px] ${isAdmin ? "text-white/80" : "text-gray-400"}`}>
               {time}
             </span>
             {statusIcon && (

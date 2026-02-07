@@ -115,26 +115,32 @@ export default function Sidebar() {
   ]);
   const unreadCount = useMemo(() => notifications.length, [notifications]);
 
-  // Get global unread counts from Redux
-  const { totalUnreadCount, regularChatUnreadCount, maintenanceChatUnreadCount } = useAppSelector(
-    (state) => state.chatUnread
-  );
+  // Get unread data from Redux - badge shows number of users with unseen messages, not total messages
+  const { unreadCountsByUser } = useAppSelector((state) => state.chatUnread);
 
-  // Create menu sections with dynamic badges
+  // Count how many users have at least one unread (regular vs maintenance)
+  const regularChatUnreadUserCount = useMemo(() => {
+    return Object.values(unreadCountsByUser || {}).filter((c) => (c?.regular || 0) > 0).length;
+  }, [unreadCountsByUser]);
+  const maintenanceChatUnreadUserCount = useMemo(() => {
+    return Object.values(unreadCountsByUser || {}).filter((c) => (c?.maintenance || 0) > 0).length;
+  }, [unreadCountsByUser]);
+
+  // Create menu sections with dynamic badges (number of users with unseen, not total unseen)
   const menuSectionsWithBadges = useMemo(() => {
     return menuSections.map((section) => ({
       ...section,
       items: section.items.map((item) => {
         if (item.path === "/chat") {
-          return { ...item, badge: regularChatUnreadCount > 0 ? regularChatUnreadCount : null };
+          return { ...item, badge: regularChatUnreadUserCount > 0 ? regularChatUnreadUserCount : null };
         }
         if (item.path === "/maintenance-chat") {
-          return { ...item, badge: maintenanceChatUnreadCount > 0 ? maintenanceChatUnreadCount : null };
+          return { ...item, badge: maintenanceChatUnreadUserCount > 0 ? maintenanceChatUnreadUserCount : null };
         }
         return item;
       }),
     }));
-  }, [regularChatUnreadCount, maintenanceChatUnreadCount]);
+  }, [regularChatUnreadUserCount, maintenanceChatUnreadUserCount]);
 
   useEffect(() => {
     const savedUser = localStorage.getItem("adminUser");

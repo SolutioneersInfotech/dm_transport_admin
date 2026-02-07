@@ -609,7 +609,7 @@ export default function Drivers() {
                     key={driver.id || driver.phone}
                     type="button"
                     onClick={() => setSelectedId(driver.id || driver.phone)}
-                    className={`grid w-full grid-cols-12 items-center gap-2 border-b border-slate-900 px-4 py-3 text-left text-sm transition hover:bg-slate-900/70 ${
+                    className={`grid w-full grid-cols-12 items-center gap-2 border-b border-slate-900 px-4 py-3 text-left text-sm text-slate-200 transition hover:bg-slate-900/70 ${
                       isSelected ? "bg-slate-900/80" : "bg-transparent"
                     }`}
                   >

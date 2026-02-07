@@ -48,9 +48,26 @@ function normalizeMessage(messageId, msg) {
     sendername: msg?.sendername ?? "Unknown",
     replyTo: msg?.replyTo ?? null,
     seenByAdmin: msg?.seenByAdmin ?? false,
+    seenByAdmins: msg?.seenByAdmins ?? null,
     seenAt: msg?.seenAt ?? null,
     seenBy: msg?.seenBy ?? null,
   };
+}
+
+function getCurrentAdminId() {
+  const adminUser = getAdminUser();
+  return adminUser?.userid || adminUser?.userId || adminUser?.id || "admin";
+}
+
+function isSeenByCurrentAdmin(msg) {
+  const adminId = getCurrentAdminId();
+  if (msg.seenByAdmins && typeof msg.seenByAdmins === "object" && msg.seenByAdmins[adminId]) {
+    return true;
+  }
+  if (msg.seenByAdmin === true && (!msg.seenByAdmins || Object.keys(msg.seenByAdmins || {}).length === 0)) {
+    return true;
+  }
+  return false;
 }
 
 function sortByDateTimeAsc(messages) {
@@ -208,40 +225,35 @@ export async function deleteSpecificMessage(messageId, userid) {
   return { success: true };
 }
 
-// Mark messages as seen/read for a specific user
+// Mark messages as seen/read for the current admin only (per-admin seen)
 export async function markMessagesAsSeen(userid) {
   try {
     const messagesRef = ref(database, `${ADMIN_MAINTENANCE_PATH}/${userid}`);
     const snapshot = await get(messagesRef);
-    
+
     if (!snapshot.exists()) {
       return { success: true };
     }
 
     const messagesObject = snapshot.val();
     const updateData = {};
-    const adminUser = getAdminUser();
-    const adminId = adminUser?.userid || "admin";
+    const adminId = getCurrentAdminId();
     const seenTimestamp = new Date().toISOString();
 
-    // Update all unread messages (type === 1, from user) to mark them as seen
     Object.keys(messagesObject).forEach((messageId) => {
       const msg = messagesObject[messageId];
-      // Only mark messages from user (type === 1) that haven't been seen
-      if (msg.type === 1 && !msg.seenByAdmin) {
-        const messagePath = `${ADMIN_MAINTENANCE_PATH}/${userid}/${messageId}`;
-        updateData[`${messagePath}/seenByAdmin`] = true;
-        updateData[`${messagePath}/seenAt`] = seenTimestamp;
-        updateData[`${messagePath}/seenBy`] = adminId;
-      }
+      if (msg.type !== 1) return;
+      if (isSeenByCurrentAdmin(msg)) return;
+      const messagePath = `${ADMIN_MAINTENANCE_PATH}/${userid}/${messageId}`;
+      updateData[`${messagePath}/seenByAdmins/${adminId}`] = seenTimestamp;
+      updateData[`${messagePath}/seenAt`] = seenTimestamp;
+      updateData[`${messagePath}/seenBy`] = adminId;
     });
 
     if (Object.keys(updateData).length > 0) {
-      // Use update to batch update all fields at once
       await update(ref(database), updateData);
     }
 
-    // Store last seen timestamp for this user
     const lastSeenRef = ref(database, `chat/admin/maintenance/lastSeen/${userid}`);
     await set(lastSeenRef, {
       timestamp: seenTimestamp,
@@ -255,12 +267,12 @@ export async function markMessagesAsSeen(userid) {
   }
 }
 
-// Get unread message count for a user
+// Get unread message count for the current admin only (per-admin)
 export async function getUnreadCount(userid) {
   try {
     const messagesRef = ref(database, `${ADMIN_MAINTENANCE_PATH}/${userid}`);
     const snapshot = await get(messagesRef);
-    
+
     if (!snapshot.exists()) {
       return 0;
     }
@@ -269,8 +281,7 @@ export async function getUnreadCount(userid) {
     let unreadCount = 0;
 
     Object.values(messagesObject).forEach((msg) => {
-      // Count messages from user (type === 1) that haven't been seen
-      if (msg.type === 1 && !msg.seenByAdmin) {
+      if (msg.type === 1 && !isSeenByCurrentAdmin(msg)) {
         unreadCount++;
       }
     });
@@ -282,10 +293,10 @@ export async function getUnreadCount(userid) {
   }
 }
 
-// Subscribe to unread count changes for a user
+// Subscribe to unread count for the current admin only (per-admin)
 export function subscribeUnreadCount(userid, onChange) {
   const messagesRef = ref(database, `${ADMIN_MAINTENANCE_PATH}/${userid}`);
-  
+
   const unsubscribe = onValue(messagesRef, (snapshot) => {
     if (!snapshot.exists()) {
       onChange(0);
@@ -296,7 +307,7 @@ export function subscribeUnreadCount(userid, onChange) {
     let unreadCount = 0;
 
     Object.values(messagesObject).forEach((msg) => {
-      if (msg.type === 1 && !msg.seenByAdmin) {
+      if (msg.type === 1 && !isSeenByCurrentAdmin(msg)) {
         unreadCount++;
       }
     });
