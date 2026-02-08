@@ -4,11 +4,27 @@ import { auth, storage } from "../firebase/firebaseApp";
 import { getAdminFirebaseCustomToken } from "./adminFirebaseToken";
 
 async function ensureAdminFirebaseAuth() {
-  if (auth.currentUser) {
+  const existingUser = auth.currentUser;
+  if (existingUser && existingUser.uid?.startsWith("admin_")) {
+    const tokenResult = await existingUser.getIdTokenResult(true);
+    console.debug("[chat upload] firebase auth uid/claims:", {
+      uid: existingUser.uid,
+      claims: tokenResult?.claims,
+    });
     return;
   }
   const token = await getAdminFirebaseCustomToken();
   await signInWithCustomToken(auth, token);
+  const signedInUser = auth.currentUser;
+  if (signedInUser) {
+    const tokenResult = await signedInUser.getIdTokenResult(true);
+    console.debug("[chat upload] firebase auth uid/claims:", {
+      uid: signedInUser.uid,
+      claims: tokenResult?.claims,
+    });
+  } else {
+    console.debug("[chat upload] firebase auth failed: no currentUser after sign-in");
+  }
 }
 
 /**
@@ -64,12 +80,32 @@ export async function uploadChatFile(file, adminId, driverId, onProgress, onErro
       const progress = snapshot.totalBytes ? snapshot.bytesTransferred / snapshot.totalBytes : 0;
       onProgress?.(progress);
     },
-    (err) => {
+    async (err) => {
       const msg = err?.message || "Upload failed";
+      const code = err?.code;
+      const currentUid = auth.currentUser?.uid;
+      let claims;
+      if (auth.currentUser) {
+        try {
+          const tokenResult = await auth.currentUser.getIdTokenResult(true);
+          claims = tokenResult?.claims;
+        } catch (claimErr) {
+          console.debug("[chat upload] failed to read idToken claims:", claimErr);
+        }
+      }
+      console.error("[chat upload] upload failed:", {
+        code,
+        message: msg,
+        uid: currentUid,
+        path,
+        claims,
+      });
       const isAccessError = /access|permission|unauthorized|forbidden|denied|storage/i.test(msg);
       onError?.(
         isAccessError
-          ? "Upload denied: you don't have permission, or Storage rules may block chat uploads. Contact your administrator."
+          ? `Upload denied (${code || "unknown"}): you don't have permission, or Storage rules may block chat uploads. Contact your administrator.`
+          : code
+          ? `${msg} (${code})`
           : msg
       );
     },
