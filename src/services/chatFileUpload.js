@@ -1,7 +1,30 @@
-import { signInWithCustomToken } from "firebase/auth";
+import { onAuthStateChanged, signInWithCustomToken } from "firebase/auth";
 import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
 import { auth, storage } from "../firebase/firebaseApp";
 import { getAdminFirebaseCustomToken } from "./adminFirebaseToken";
+
+async function waitForAuthUser(expectedUid, timeoutMs = 5000) {
+  return new Promise((resolve) => {
+    let timeoutId = null;
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (!currentUser) {
+        return;
+      }
+      if (!expectedUid || currentUser.uid === expectedUid) {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        unsubscribe();
+        resolve(currentUser);
+      }
+    });
+
+    timeoutId = setTimeout(() => {
+      unsubscribe();
+      resolve(auth.currentUser || null);
+    }, timeoutMs);
+  });
+}
 
 async function ensureAdminFirebaseAuth() {
   const existingUser = auth.currentUser;
@@ -12,6 +35,7 @@ async function ensureAdminFirebaseAuth() {
     const token = await getAdminFirebaseCustomToken();
     const credential = await signInWithCustomToken(auth, token);
     user = credential.user;
+    user = await waitForAuthUser(user?.uid);
   }
 
   if (!user) {
@@ -61,7 +85,13 @@ export async function uploadChatFile(file, adminId, driverId, onProgress, onErro
   const fallbackAdminId = adminId
     ? `admin_${String(adminId).replace(/[^a-zA-Z0-9._-]/g, "_")}`
     : "admin_unknown";
-  const uploaderUid = auth.currentUser?.uid || authContext?.user?.uid || fallbackAdminId;
+  const uploaderUid = authContext?.user?.uid || auth.currentUser?.uid || fallbackAdminId;
+  if (auth.currentUser?.uid && authContext?.user?.uid && auth.currentUser.uid !== authContext.user.uid) {
+    console.warn("[chat upload] auth uid mismatch:", {
+      authUid: auth.currentUser.uid,
+      contextUid: authContext.user.uid,
+    });
+  }
   console.debug("[chat upload] firebase uid:", uploaderUid);
   const path = `chat/uploads/${uploaderUid}/${driverId || "unknown"}/${Date.now()}_${safeName}`;
   if (authContext?.tokenResult) {
@@ -91,8 +121,8 @@ export async function uploadChatFile(file, adminId, driverId, onProgress, onErro
       const msg = err?.message || "Upload failed";
       const code = err?.code;
       const currentUid = auth.currentUser?.uid;
-      let claims;
-      if (auth.currentUser) {
+      let claims = authContext?.tokenResult?.claims;
+      if (auth.currentUser && !claims) {
         try {
           const tokenResult = await auth.currentUser.getIdTokenResult(true);
           claims = tokenResult?.claims;
