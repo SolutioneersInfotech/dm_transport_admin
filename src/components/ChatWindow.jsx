@@ -187,6 +187,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { Paperclip, Trash2 } from "lucide-react";
 import {
   subscribeMessages as defaultSubscribeMessages,
   sendMessage as defaultSendMessage,
@@ -579,7 +580,7 @@ export default function ChatWindow({ driver, chatApi }) {
                 size="icon"
                 className={selected.length ? "text-red-500 hover:text-red-600" : "text-gray-600"}
               >
-                🗑
+                <Trash2 className="h-5 w-5" strokeWidth={1.8} />
               </Button>
             </>
           ) : (
@@ -591,7 +592,7 @@ export default function ChatWindow({ driver, chatApi }) {
                 size="icon"
                 className={selected.length ? "text-red-500 hover:text-red-600" : "text-gray-600"}
               >
-                🗑
+                <Trash2 className="h-5 w-5" strokeWidth={1.8} />
               </Button>
               <Button onClick={handleDeleteAll} variant="destructive" size="sm">
                 Delete All
@@ -735,7 +736,7 @@ export default function ChatWindow({ driver, chatApi }) {
             aria-expanded={showAttachmentOptions}
             aria-haspopup="true"
           >
-            <span className="text-xl">📎</span>
+            <Paperclip className="h-5 w-5" strokeWidth={1.8} />
           </Button>
           {showAttachmentOptions && (
             <>
