@@ -40,8 +40,13 @@ export async function uploadChatFile(file, adminId, driverId, onProgress, onErro
     return;
   }
 
-  const safeName = (file.name || `file_${Date.now()}`).replace(/[^a-zA-Z0.9._-]/g, "_");
-  const path = `chat/uploads/${adminId || "admin"}/${driverId || "unknown"}/${Date.now()}_${safeName}`;
+  const safeName = (file.name || `file_${Date.now()}`).replace(/[^a-zA-Z0-9._-]/g, "_");
+  const fallbackAdminId = adminId
+    ? `admin_${String(adminId).replace(/[^a-zA-Z0-9._-]/g, "_")}`
+    : "admin_unknown";
+  const uploaderUid = auth.currentUser?.uid || fallbackAdminId;
+  console.debug("[chat upload] firebase uid:", uploaderUid);
+  const path = `chat/uploads/${uploaderUid}/${driverId || "unknown"}/${Date.now()}_${safeName}`;
   const storageRef = ref(storage, path);
   const metadata = {
     contentType: file.type || "application/octet-stream",
