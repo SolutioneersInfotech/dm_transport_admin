@@ -1,0 +1,18 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Deploy with: firebase deploy --only storage
+    function isAdmin() {
+      return request.auth != null && request.auth.token.role == "admin";
+    }
+
+    match /chat/uploads/{uploaderUid}/{driverId}/{fileName} {
+      allow write: if isAdmin();
+      allow read: if request.auth != null;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

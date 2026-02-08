@@ -4,11 +4,29 @@ import { auth, storage } from "../firebase/firebaseApp";
 import { getAdminFirebaseCustomToken } from "./adminFirebaseToken";
 
 async function ensureAdminFirebaseAuth() {
-  if (auth.currentUser) {
+  const cu = auth.currentUser;
+  if (cu?.uid?.startsWith("admin_")) {
+    try {
+      const tokenRes = await cu.getIdTokenResult(true);
+      console.debug("[ChatUpload] existing admin uid:", cu.uid, "claims:", tokenRes?.claims || {});
+    } catch (error) {
+      console.debug("[ChatUpload] failed to read existing token claims", error);
+    }
     return;
   }
+
   const token = await getAdminFirebaseCustomToken();
   await signInWithCustomToken(auth, token);
+
+  const uid = auth.currentUser?.uid;
+  let claims = {};
+  try {
+    const tokenRes = await auth.currentUser?.getIdTokenResult(true);
+    claims = tokenRes?.claims || {};
+  } catch (error) {
+    console.debug("[ChatUpload] failed to read token claims", error);
+  }
+  console.debug("[ChatUpload] signed in uid:", uid, "claims:", claims);
 }
 
 /**
@@ -41,12 +59,11 @@ export async function uploadChatFile(file, adminId, driverId, onProgress, onErro
   }
 
   const safeName = (file.name || `file_${Date.now()}`).replace(/[^a-zA-Z0-9._-]/g, "_");
-  const fallbackAdminId = adminId
-    ? `admin_${String(adminId).replace(/[^a-zA-Z0-9._-]/g, "_")}`
-    : "admin_unknown";
-  const uploaderUid = auth.currentUser?.uid || fallbackAdminId;
-  console.debug("[chat upload] firebase uid:", uploaderUid);
+  const uploaderUid =
+    auth.currentUser?.uid ||
+    (adminId ? `admin_${String(adminId).replace(/\s+/g, "_")}` : "admin_unknown");
   const path = `chat/uploads/${uploaderUid}/${driverId || "unknown"}/${Date.now()}_${safeName}`;
+  console.debug("[ChatUpload] uploading path:", path, "uid:", auth.currentUser?.uid);
   const storageRef = ref(storage, path);
   const metadata = {
     contentType: file.type || "application/octet-stream",
@@ -64,12 +81,32 @@ export async function uploadChatFile(file, adminId, driverId, onProgress, onErro
       const progress = snapshot.totalBytes ? snapshot.bytesTransferred / snapshot.totalBytes : 0;
       onProgress?.(progress);
     },
-    (err) => {
+    async (err) => {
       const msg = err?.message || "Upload failed";
+      const code = err?.code;
+      const currentUid = auth.currentUser?.uid;
+      let claims;
+      if (auth.currentUser) {
+        try {
+          const tokenResult = await auth.currentUser.getIdTokenResult(false);
+          claims = tokenResult?.claims;
+        } catch (claimErr) {
+          console.debug("[chat upload] failed to read idToken claims:", claimErr);
+        }
+      }
+      console.error("[chat upload] upload failed:", {
+        code,
+        message: msg,
+        uid: currentUid,
+        path,
+        claims,
+      });
       const isAccessError = /access|permission|unauthorized|forbidden|denied|storage/i.test(msg);
       onError?.(
         isAccessError
-          ? "Upload denied: you don't have permission, or Storage rules may block chat uploads. Contact your administrator."
+          ? `Upload denied${code ? ` (${code})` : ""}: you don't have permission, or Storage rules may block chat uploads. Contact your administrator.`
+          : code
+          ? `${msg} (${code})`
           : msg
       );
     },
