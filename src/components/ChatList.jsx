@@ -6,6 +6,21 @@ import SkeletonLoader from "./skeletons/Skeleton";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { fetchMessages as defaultFetchMessages } from "../services/chatAPI";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { Eye } from "lucide-react";
+
+const STATUS_OPTIONS = [
+  { value: "all", label: "All" },
+  { value: "seen", label: "Seen" },
+  { value: "unseen", label: "Unseen" },
+];
+
+const statusColorClass = {
+  all: "text-muted-foreground",
+  seen: "text-emerald-400",
+  unseen: "text-amber-400",
+};
 
 const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const dispatch = useAppDispatch();
@@ -16,6 +31,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState([]); // Array of selected categories: ["F", "D", "C"]
   const [statusFilter, setStatusFilter] = useState("all"); // "all" | "seen" | "unseen"
+  const [isStatusPopoverOpen, setIsStatusPopoverOpen] = useState(false);
   const observerTarget = useRef(null);
   const hasInitiallyFetched = useRef(false);
   const [isFetchingMessages, setIsFetchingMessages] = useState(false);
@@ -377,31 +393,73 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
                 </Button>
               );
             })}
-          </div>
-        </div>
 
-        {/* Seen / Unseen filter */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400 whitespace-nowrap">Status:</span>
-          {[
-            { value: "all", label: "All" },
-            { value: "seen", label: "Seen" },
-            { value: "unseen", label: "Unseen" },
-          ].map(({ value, label }) => (
-            <Button
-              key={value}
-              variant={statusFilter === value ? "default" : "outline"}
-              size="sm"
-              onClick={() => setStatusFilter(value)}
-              className={`min-w-[60px] h-7 text-xs ${
-                statusFilter === value
-                  ? "bg-[#1f6feb] text-white hover:bg-[#1a5fd4]"
-                  : "bg-[#161b22] text-gray-300 hover:bg-[#1d232a] border-gray-600"
-              }`}
-            >
-              {label}
-            </Button>
-          ))}
+            <Popover open={isStatusPopoverOpen} onOpenChange={setIsStatusPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-8 w-8 rounded-full border border-transparent hover:border-white/10 hover:bg-white/5",
+                    statusColorClass[statusFilter]
+                  )}
+                  aria-label={`Status filter: ${statusFilter}`}
+                  title={`Status: ${statusFilter}`}
+                >
+                  <span className="relative">
+                    <Eye className="h-4 w-4" />
+                    {statusFilter !== "all" && (
+                      <span
+                        className={cn(
+                          "absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full",
+                          statusFilter === "seen" ? "bg-emerald-400" : "bg-amber-400"
+                        )}
+                      />
+                    )}
+                  </span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                side="bottom"
+                className="w-36 p-1 bg-[#0b1220] border border-white/10 text-white shadow-xl"
+              >
+                {STATUS_OPTIONS.map((opt) => {
+                  const isActive = statusFilter === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        setStatusFilter(opt.value);
+                        setIsStatusPopoverOpen(false);
+                      }}
+                      className={cn(
+                        "w-full text-left px-2 py-2 rounded-md text-sm flex items-center justify-between",
+                        "hover:bg-white/5",
+                        isActive && "bg-white/10"
+                      )}
+                    >
+                      <span>{opt.label}</span>
+                      {isActive && (
+                        <span
+                          className={cn(
+                            "h-2 w-2 rounded-full",
+                            opt.value === "all"
+                              ? "bg-slate-400"
+                              : opt.value === "seen"
+                              ? "bg-emerald-400"
+                              : "bg-amber-400"
+                          )}
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </PopoverContent>
+            </Popover>
+          </div>
         </div>
       </div>
 
