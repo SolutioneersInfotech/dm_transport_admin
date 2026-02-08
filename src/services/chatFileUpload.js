@@ -5,26 +5,26 @@ import { getAdminFirebaseCustomToken } from "./adminFirebaseToken";
 
 async function ensureAdminFirebaseAuth() {
   const existingUser = auth.currentUser;
-  if (existingUser && existingUser.uid?.startsWith("admin_")) {
-    const tokenResult = await existingUser.getIdTokenResult(true);
-    console.debug("[chat upload] firebase auth uid/claims:", {
-      uid: existingUser.uid,
-      claims: tokenResult?.claims,
-    });
-    return;
+  const needsAdminSignIn = !existingUser || !existingUser.uid?.startsWith("admin_");
+  let user = existingUser;
+  let tokenResult;
+  if (needsAdminSignIn) {
+    const token = await getAdminFirebaseCustomToken();
+    const credential = await signInWithCustomToken(auth, token);
+    user = credential.user;
   }
-  const token = await getAdminFirebaseCustomToken();
-  await signInWithCustomToken(auth, token);
-  const signedInUser = auth.currentUser;
-  if (signedInUser) {
-    const tokenResult = await signedInUser.getIdTokenResult(true);
-    console.debug("[chat upload] firebase auth uid/claims:", {
-      uid: signedInUser.uid,
-      claims: tokenResult?.claims,
-    });
-  } else {
+
+  if (!user) {
     console.debug("[chat upload] firebase auth failed: no currentUser after sign-in");
+    throw new Error("Firebase admin authentication failed");
   }
+
+  tokenResult = await user.getIdTokenResult(true);
+  console.debug("[chat upload] firebase auth uid/claims:", {
+    uid: user.uid,
+    claims: tokenResult?.claims,
+  });
+  return { user, tokenResult };
 }
 
 /**
@@ -42,8 +42,9 @@ export async function uploadChatFile(file, adminId, driverId, onProgress, onErro
     return;
   }
 
+  let authContext;
   try {
-    await ensureAdminFirebaseAuth();
+    authContext = await ensureAdminFirebaseAuth();
   } catch (err) {
     const msg = err?.message || "Authentication failed";
     // Backend may return "You don't have access" when admin isn't allowed to get Firebase token
@@ -60,9 +61,15 @@ export async function uploadChatFile(file, adminId, driverId, onProgress, onErro
   const fallbackAdminId = adminId
     ? `admin_${String(adminId).replace(/[^a-zA-Z0-9._-]/g, "_")}`
     : "admin_unknown";
-  const uploaderUid = auth.currentUser?.uid || fallbackAdminId;
+  const uploaderUid = auth.currentUser?.uid || authContext?.user?.uid || fallbackAdminId;
   console.debug("[chat upload] firebase uid:", uploaderUid);
   const path = `chat/uploads/${uploaderUid}/${driverId || "unknown"}/${Date.now()}_${safeName}`;
+  if (authContext?.tokenResult) {
+    console.debug("[chat upload] upload path/claims:", {
+      path,
+      claims: authContext.tokenResult.claims,
+    });
+  }
   const storageRef = ref(storage, path);
   const metadata = {
     contentType: file.type || "application/octet-stream",
