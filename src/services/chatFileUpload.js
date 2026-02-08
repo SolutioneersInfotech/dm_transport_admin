@@ -5,7 +5,15 @@ import { getAdminFirebaseCustomToken } from "./adminFirebaseToken";
 
 async function ensureAdminFirebaseAuth() {
   const cu = auth.currentUser;
-  if (cu?.uid?.startsWith("admin_")) return;
+  if (cu?.uid?.startsWith("admin_")) {
+    try {
+      const tokenRes = await cu.getIdTokenResult(true);
+      console.debug("[ChatUpload] existing admin uid:", cu.uid, "claims:", tokenRes?.claims || {});
+    } catch (error) {
+      console.debug("[ChatUpload] failed to read existing token claims", error);
+    }
+    return;
+  }
 
   const token = await getAdminFirebaseCustomToken();
   await signInWithCustomToken(auth, token);
