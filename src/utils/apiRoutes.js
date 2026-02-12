@@ -37,6 +37,7 @@ export const fetchDocumentsRoute = (startDate, endDate, options = {}) => {
   if (startDate && endDate) {
     params.append("start_date", startDate);
     params.append("end_date", endDate);
+    params.append("tz_offset", String(new Date().getTimezoneOffset()));
   }
 
   // Pagination
@@ -91,6 +92,7 @@ export const fetchDocumentCountRoute = (startDate, endDate, options = {}) => {
   if (startDate && endDate) {
     params.append("start_date", startDate);
     params.append("end_date", endDate);
+    params.append("tz_offset", String(new Date().getTimezoneOffset()));
   }
 
   // Status filters
