@@ -643,6 +643,7 @@ export default function ChatWindow({ driver, chatApi }) {
           <div key={date}>
             <div className="text-center text-[#8696a0] text-xs my-2">{date}</div>
             {grouped[date].map((msg, idx) => {
+              const isSelected = selected.includes(msg.msgId);
               const senderName = msg.type === 1
                 ? (msg.sendername ?? "You")
                 : (driver?.driver_name ?? msg.sendername ?? "Driver");
@@ -655,7 +656,18 @@ export default function ChatWindow({ driver, chatApi }) {
                 <div
                   key={msg.msgId}
                   id={`msg-${msg.msgId}`}
-                  className={`flex items-start gap-2 ${selectionMode ? "" : "relative"}`}
+                  className={`flex items-start gap-2 rounded-lg transition-colors ${
+                    selectionMode
+                      ? isSelected
+                        ? "bg-[#233138]"
+                        : "hover:bg-[#172128]"
+                      : "relative"
+                  }`}
+                  onClick={() => {
+                    if (selectionMode) {
+                      toggleSelect(msg.msgId);
+                    }
+                  }}
                   onContextMenu={(e) => openContextMenu(e, msg)}
                 >
                   {selectionMode && (
