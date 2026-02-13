@@ -237,7 +237,7 @@ export default function Admins() {
     (admin) => admin.name === selectedAdmin
   );
 
-  const adminListSkeletonRows = Array.from({ length: 12 }, (_, index) => index);
+  const adminListSkeletonRows = Array.from({ length: 21 }, (_, index) => index);
 
   const handleAddAdmin = async (event) => {
     event.preventDefault();
