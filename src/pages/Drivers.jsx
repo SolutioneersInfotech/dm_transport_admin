@@ -15,7 +15,7 @@ import {
   UploadCloud,
   KeyRound,
   Pencil,
-  Eye,
+  Circle,
 } from "lucide-react";
 import { useDriverCountQuery, useDriversQuery } from "../services/driverQueries";
 import { fetchAllDrivers } from "../services/driverAPI";
@@ -637,16 +637,15 @@ export default function Drivers() {
                     aria-label={`Status filter: ${statusFilter}`}
                     title={`Status: ${statusFilter}`}
                   >
-                    <span className="relative">
-                      <Eye className="h-4 w-4" />
-                      {statusFilter !== "all" && (
-                        <span
-                          className={`absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full ${
-                            statusFilter === "active" ? "bg-emerald-400" : "bg-rose-400"
-                          }`}
-                        />
-                      )}
-                    </span>
+                    <Circle
+                      className={`h-4 w-4 ${
+                        statusFilter === "all"
+                          ? "fill-none"
+                          : statusFilter === "active"
+                            ? "fill-emerald-400"
+                            : "fill-rose-400"
+                      }`}
+                    />
                   </button>
                 </PopoverTrigger>
                 <PopoverContent
