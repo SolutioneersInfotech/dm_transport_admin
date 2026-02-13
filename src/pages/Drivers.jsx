@@ -17,6 +17,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { useDriversQuery } from "../services/driverQueries";
+import { fetchAllDrivers } from "../services/driverAPI";
 import { createDriver } from "../services/driverCreateAPI";
 import { uploadDriverProfilePhoto } from "../services/driverPhotoUpload";
 import { Button } from "../components/ui/button";
@@ -65,6 +66,30 @@ function getInitials(name) {
     .toUpperCase();
 }
 
+function normalizeSearchText(value = "") {
+  return String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function driverMatchesSearch(driver, searchTerm) {
+  const normalizedTerm = normalizeSearchText(searchTerm);
+  if (!normalizedTerm) return true;
+
+  const terms = normalizedTerm.split(" ").filter(Boolean);
+  if (!terms.length) return true;
+
+  const searchFields = [driver.name, driver.phone, driver.id, driver.location]
+    .map(normalizeSearchText)
+    .filter(Boolean);
+
+  return terms.every((term) =>
+    searchFields.some((field) => field.includes(term) || field.startsWith(term))
+  );
+}
+
 const initialFormState = {
   name: "",
   email: "",
@@ -100,6 +125,8 @@ export default function Drivers() {
   const [detailsWidth, setDetailsWidth] = useState(360);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [isSearchLoading, setIsSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
   const isResizingRef = useRef(false);
   const sectionRef = useRef(null);
   const {
@@ -125,7 +152,54 @@ export default function Drivers() {
   }, [debouncedSearch]);
 
   useEffect(() => {
-    if (!driverData) return;
+    const activeSearch = debouncedSearch.trim();
+    if (!activeSearch) {
+      setIsSearchLoading(false);
+      setSearchError("");
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadAllDriversForSearch = async () => {
+      try {
+        setIsSearchLoading(true);
+        setSearchError("");
+        const allDrivers = await fetchAllDrivers({ limit: 100 });
+        if (cancelled) return;
+
+        const formatted = allDrivers.map((driver) => ({
+          ...driver,
+          phone: formatPhone(driver.phone || driver.id),
+          lastSeenLabel: formatRelativeTime(driver.lastSeen),
+        }));
+
+        const filtered = formatted.filter((driver) =>
+          driverMatchesSearch(driver, activeSearch)
+        );
+
+        setDrivers(filtered);
+        setHasMore(false);
+        setPage(1);
+      } catch {
+        if (cancelled) return;
+        setSearchError("Unable to load complete search results.");
+      } finally {
+        if (!cancelled) {
+          setIsSearchLoading(false);
+        }
+      }
+    };
+
+    loadAllDriversForSearch();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedSearch]);
+
+  useEffect(() => {
+    if (!driverData || debouncedSearch.trim()) return;
     const incoming = driverData.users.map((driver) => ({
       ...driver,
       phone: formatPhone(driver.phone || driver.id),
@@ -163,7 +237,7 @@ export default function Drivers() {
 
       return merged;
     });
-  }, [driverData, page, limit]);
+  }, [driverData, page, limit, debouncedSearch]);
 
   useEffect(() => {
     if (drivers.length === 0) return;
@@ -215,15 +289,7 @@ export default function Drivers() {
 
   const filteredDrivers = useMemo(() => {
     return drivers.filter((driver) => {
-      const matchesSearch = [
-        driver.name,
-        driver.phone,
-        driver.id,
-        driver.location,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(search.toLowerCase());
+      const matchesSearch = driverMatchesSearch(driver, search);
 
       const matchesStatus =
         statusFilter === "all" || driver.status === statusFilter;
@@ -237,23 +303,8 @@ export default function Drivers() {
   const selectedDriver =
     drivers.find((driver) => driver.id === selectedId) ?? drivers[0];
   const totalDrivers = drivers.length || 0;
-  const activeDrivers = drivers.filter(
-    (driver) => driver.status === "active"
-  ).length;
-  const complianceAlerts = drivers.filter(
-    (driver) => driver.complianceScore !== null && driver.complianceScore < 80
-  ).length;
-  const averageRating = useMemo(() => {
-    const ratings = drivers
-      .map((driver) => driver.rating)
-      .filter((rating) => typeof rating === "number");
-    if (!ratings.length) return "—";
-    const avg =
-      ratings.reduce((total, rating) => total + rating, 0) / ratings.length;
-    return avg.toFixed(1);
-  }, [drivers]);
 
-  const isInitialLoading = isLoading && drivers.length === 0;
+  const isInitialLoading = (isLoading || isSearchLoading) && drivers.length === 0;
   const isLoadingMore = isFetching && page > 1;
 
   const handleLoadMore = useCallback(() => {
@@ -594,6 +645,9 @@ export default function Drivers() {
                   Retry
                 </Button>
               </div>
+            )}
+            {searchError && !isInitialLoading && !isError && (
+              <div className="px-4 py-3 text-xs text-amber-300">{searchError}</div>
             )}
             {!isInitialLoading && !isError && filteredDrivers.length === 0 && (
               <div className="px-4 py-6 text-sm text-slate-400">
