@@ -44,7 +44,7 @@
 //   );
 // }
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAppSelector } from "../store/hooks";
 import {
@@ -92,6 +92,7 @@ export default function Sidebar() {
   const [open, setOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showMenuIcon, setShowMenuIcon] = useState(false);
+  const userMenuRef = useRef(null);
   const [user, setUser] = useState(null);
   const [notifications, setNotifications] = useState([
     {
@@ -161,6 +162,30 @@ export default function Sidebar() {
 
     return () => clearInterval(interval);
   }, [isCollapsed]);
+
+  useEffect(() => {
+    if (isCollapsed) {
+      setOpen(false);
+    }
+  }, [isCollapsed]);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const handleOutsideClick = (event) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, [open]);
 
   function handleLogout() {
     localStorage.removeItem("adminToken");
@@ -325,6 +350,7 @@ export default function Sidebar() {
 
       <div className="border-t border-slate-800 px-4 py-4">
         <div
+          ref={userMenuRef}
           className={`relative flex items-center rounded-lg bg-slate-900 px-3 py-3 ${
             isCollapsed ? "justify-center" : "gap-3"
           }`}
