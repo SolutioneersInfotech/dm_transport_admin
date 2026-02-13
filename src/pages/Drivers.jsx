@@ -620,7 +620,7 @@ export default function Drivers() {
                       : "border-slate-800 text-slate-400 hover:border-slate-600"
                   }`}
                 >
-                  {category === "all" ? "All categories" : `Category ${category}`}
+                  {category === "all" ? "All" : `${category}`}
                 </button>
               ))}
               <Popover open={isStatusPopoverOpen} onOpenChange={setIsStatusPopoverOpen}>
