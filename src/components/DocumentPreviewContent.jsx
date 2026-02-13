@@ -655,7 +655,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     <button
       type="button"
       onClick={() => handleCopy(value)}
-      className="inline-flex items-center justify-center pt-0.5 text-gray-500 hover:text-gray-200 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+      className="inline-flex items-center justify-center -ml-1 pt-0.5 text-gray-500 hover:text-gray-200 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
       aria-label={`Copy ${label}`}
       title={`Copy ${label}`}
       disabled={!value || value === "—"}
@@ -741,7 +741,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
         <div className="flex flex-wrap items-center gap-y-2 px-4 py-2 border-t border-gray-700 bg-black/30">
           {(showInTime || showOutTime) && (
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               {showInTime && (
                 <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
                   <span className="font-medium text-gray-400 uppercase tracking-wide">In:</span>
@@ -757,7 +757,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
               {renderCopyButton(inOutTimeCopyValue, "in and out time")}
             </div>
           )}
-          <div className="flex items-center gap-x-3 sm:ml-auto">
+          <div className="flex items-center gap-x-2 sm:ml-auto">
             <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
               <span className="font-medium text-gray-400 uppercase tracking-wide">Size:</span>
               <span className="text-white">{docSizeMb != null ? `${docSizeMb} MB` : "—"}</span>
@@ -769,11 +769,11 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                     type="button"
                     variant="outline"
                     size="icon"
-                    className="h-7 w-7 border-gray-600 bg-transparent text-gray-400 hover:bg-[#1d232a] hover:text-white"
+                    className="h-5.5 w-5.5 border-gray-600 bg-transparent text-gray-400 hover:bg-[#1d232a] hover:text-white"
                     onClick={handleDownload}
                     disabled={isDownloading || !doc.document_url}
                   >
-                    <Download className="h-3.5 w-3.5" />
+                    <Download className="h-2 w-2" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
