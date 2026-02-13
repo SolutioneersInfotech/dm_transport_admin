@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "../components/ui/table";
 import { Checkbox } from "../components/ui/checkbox";
-import { X, Search, Flag, ChevronDown, Check, Copy, Download, Trash2, Redo2, RefreshCw } from "lucide-react";
+import { X, Search, Flag, ChevronDown, Check, Copy, Download, Trash2, Redo2, RefreshCw, Loader2 } from "lucide-react";
 import DocumentTableSkeleton from "../components/skeletons/DocumentTableSkeleton";
 import {
   Drawer,
@@ -221,6 +221,8 @@ export default function Documents() {
 
   const [search, setSearch] = useState("");
   const [searchDebounced, setSearchDebounced] = useState("");
+  const [pendingSearchTerm, setPendingSearchTerm] = useState(null);
+  const hasInitializedSearch = useRef(false);
 
   const [statusFilter, setStatusFilter] = useState("all"); // all | seen | unseen
   const [categoryFilter, setCategoryFilter] = useState([]); // C D F
@@ -240,6 +242,27 @@ export default function Documents() {
 
     return () => clearTimeout(timer);
   }, [search]);
+
+  useEffect(() => {
+    if (!hasInitializedSearch.current) {
+      hasInitializedSearch.current = true;
+      return;
+    }
+
+    setPendingSearchTerm(searchDebounced);
+  }, [searchDebounced]);
+
+  useEffect(() => {
+    if (
+      !loading &&
+      pendingSearchTerm !== null &&
+      lastFetchParams?.search === pendingSearchTerm
+    ) {
+      setPendingSearchTerm(null);
+    }
+  }, [loading, pendingSearchTerm, lastFetchParams]);
+
+  const isSearchLoading = search !== searchDebounced || pendingSearchTerm !== null;
 
   const handleCopy = async (value, label) => {
     if (!value) return;
@@ -806,7 +829,11 @@ export default function Documents() {
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-2">
         {/* Search Bar */}
         <div className="relative w-full sm:flex-1 sm:min-w-0">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          {isSearchLoading ? (
+            <Loader2 className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 animate-spin" />
+          ) : (
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          )}
           <Input
             type="text"
             placeholder="Search by driver name"
