@@ -344,6 +344,7 @@ export default function ChatMessageBubble({
 
   // Match extension at end or before query string (?token=...), e.g. Firebase Storage URLs
   const isImage = /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(lowerUrl);
+  const isVideo = /\.(mp4|mov|m4v|webm|ogv|ogg)(\?|$)/i.test(lowerUrl);
   const isPDF = /\.pdf(\?|$)/i.test(lowerUrl);
 
   /* ================= STYLES (WhatsApp-like) ================= */
@@ -431,8 +432,18 @@ export default function ChatMessageBubble({
             </a>
           )}
 
+          {/* 🎥 Video */}
+          {attachment && isVideo && (
+            <video
+              src={attachment}
+              controls
+              preload="metadata"
+              className="mb-2 max-h-72 w-full rounded-lg bg-black"
+            />
+          )}
+
           {/* 📎 Other file */}
-          {attachment && !isImage && !isPDF && (
+          {attachment && !isImage && !isPDF && !isVideo && (
             <a
               href={attachment}
               target="_blank"
@@ -466,4 +477,3 @@ export default function ChatMessageBubble({
     </div>
   );
 }
-
