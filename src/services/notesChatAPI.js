@@ -55,6 +55,7 @@ async function ensureAdminUploadServices() {
       notesUploadServices = {
         auth: uploadAuth,
         storage: getStorage(uploadApp),
+        firestore: getFirestore(uploadApp),
       };
 
       return notesUploadServices;
@@ -73,6 +74,24 @@ function getAdminUser() {
   } catch {
     return null;
   }
+}
+
+function normalizeContent(content) {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (content && typeof content === "object") {
+    if (typeof content.attachmentUrl === "string" && content.attachmentUrl.trim()) {
+      return content.attachmentUrl;
+    }
+
+    if (typeof content.message === "string") {
+      return content.message;
+    }
+  }
+
+  return "";
 }
 
 
@@ -118,7 +137,7 @@ export const subscribeNotesMessages = ({
             senderId: data.senderId ?? "",
             senderAdminId: data.senderAdminId ?? "",
             senderName: data.senderName ?? "",
-            content: data.content ?? "",
+            content: normalizeContent(data.content),
             type: data.type ?? "text",
             priority: typeof data.priority === "number" ? data.priority : 0,
             timestamp,
@@ -144,8 +163,6 @@ export const sendNotesMessage = async ({
   contentOverride,
   adminUser,
 }) => {
-  const { firestore: adminFirestore } = await ensureAdminUploadServices();
-
   const resolvedAdmin = adminUser || getAdminUser() || {};
   const senderAdminId = resolvedAdmin?.userid || "";
   const senderName = resolvedAdmin?.name || senderAdminId || "Admin";
