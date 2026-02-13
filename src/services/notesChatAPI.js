@@ -11,9 +11,9 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { getApp, getApps, initializeApp } from "firebase/app";
-import { getAuth, signInWithCustomToken } from "firebase/auth";
+import { getAuth, signInAnonymously, signInWithCustomToken } from "firebase/auth";
 import { getDownloadURL, getStorage, ref, uploadBytesResumable } from "firebase/storage";
-import { app, firestore } from "../firebase/firebaseApp";
+import { app, auth, firestore } from "../firebase/firebaseApp";
 import { getAdminFirebaseCustomToken } from "./adminFirebaseToken";
 
 const PRIORITY_FILTERS = {
@@ -60,6 +60,16 @@ async function ensureAdminFirebaseStorage() {
   }
 
   return authPromise;
+}
+
+
+async function ensureNotesFirestoreAuth() {
+  if (auth.currentUser) {
+    return auth.currentUser;
+  }
+
+  const credential = await signInAnonymously(auth);
+  return credential.user;
 }
 
 function getAdminUser() {
@@ -123,6 +133,8 @@ export const sendNotesMessage = async ({
   contentOverride,
   adminUser,
 }) => {
+  await ensureNotesFirestoreAuth();
+
   const resolvedAdmin = adminUser || getAdminUser() || {};
   const senderId = resolvedAdmin?.userid || "admin";
   const senderName = resolvedAdmin?.name || senderId || "Admin";
