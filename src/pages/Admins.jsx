@@ -114,7 +114,6 @@ const normalizeAdmins = (payload) => {
 };
 
 const ADMIN_CACHE_KEY = "dm_admins_cache_v1";
-const ADMIN_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export default function Admins() {
   const [query, setQuery] = useState("");
@@ -145,27 +144,30 @@ export default function Admins() {
   useEffect(() => {
     let isMounted = true;
     async function loadAdmins() {
+      let hasHydratedFromCache = false;
       try {
         const cached = localStorage.getItem(ADMIN_CACHE_KEY);
         if (cached) {
           const parsed = JSON.parse(cached);
-          if (Date.now() - parsed.timestamp < ADMIN_CACHE_TTL_MS) {
-            const cachedAdmins = normalizeAdmins(parsed.data);
-            if (cachedAdmins.length > 0) {
-              setAdmins(cachedAdmins);
-              setSelectedAdmin(cachedAdmins[0]?.name || "");
-              setAdminPermissions(
-                cachedAdmins.reduce((acc, admin) => {
-                  acc[admin.name] = buildPermissionsForAdmin(admin.name);
-                  return acc;
-                }, {})
-              );
-              setIsLoading(false);
-            }
+          const cachedAdmins = normalizeAdmins(parsed.data);
+          if (cachedAdmins.length > 0) {
+            hasHydratedFromCache = true;
+            setAdmins(cachedAdmins);
+            setSelectedAdmin(cachedAdmins[0]?.name || "");
+            setAdminPermissions(
+              cachedAdmins.reduce((acc, admin) => {
+                acc[admin.name] = buildPermissionsForAdmin(admin.name);
+                return acc;
+              }, {})
+            );
+            setIsLoading(false);
           }
         }
 
-        setIsLoading(true);
+        if (!hasHydratedFromCache) {
+          setIsLoading(true);
+        }
+
         const response = await fetchAdmins();
         if (!isMounted) return;
         const normalized = normalizeAdmins(response);
@@ -184,9 +186,11 @@ export default function Admins() {
         setError("");
       } catch (err) {
         if (!isMounted) return;
-        setError(err?.message || "Unable to fetch admins right now.");
-        setAdmins([]);
-        setSelectedAdmin("");
+        if (!hasHydratedFromCache) {
+          setError(err?.message || "Unable to fetch admins right now.");
+          setAdmins([]);
+          setSelectedAdmin("");
+        }
       } finally {
         if (isMounted) {
           setIsLoading(false);
