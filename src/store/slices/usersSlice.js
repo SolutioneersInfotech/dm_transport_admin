@@ -1,6 +1,72 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { fetchUsersRoute } from "../../utils/apiRoutes";
 
+const USERS_CACHE_KEY = "chat_users_cache_v1";
+
+const defaultState = {
+  users: [],
+  loading: false,
+  loadingMore: false,
+  error: null,
+  lastFetched: null,
+  hasMore: false,
+  page: 1,
+  limit: 10,
+  totalDocuments: 0,
+  totalPages: 0,
+  lastSearch: undefined,
+  hasLoaded: false,
+};
+
+const readUsersCache = () => {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(USERS_CACHE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed?.users)) return null;
+
+    return {
+      users: parsed.users,
+      hasMore: Boolean(parsed.hasMore),
+      page: Number.isFinite(parsed.page) ? parsed.page : 1,
+      limit: Number.isFinite(parsed.limit) ? parsed.limit : 10,
+      totalDocuments: Number.isFinite(parsed.totalDocuments) ? parsed.totalDocuments : 0,
+      totalPages: Number.isFinite(parsed.totalPages) ? parsed.totalPages : 0,
+      lastSearch: parsed.lastSearch,
+      lastFetched: Number.isFinite(parsed.lastFetched) ? parsed.lastFetched : null,
+      hasLoaded: parsed.users.length > 0,
+    };
+  } catch (error) {
+    console.error("Failed to read chat users cache:", error);
+    return null;
+  }
+};
+
+const writeUsersCache = (state) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    const payload = {
+      users: state.users,
+      hasMore: state.hasMore,
+      page: state.page,
+      limit: state.limit,
+      totalDocuments: state.totalDocuments,
+      totalPages: state.totalPages,
+      lastSearch: state.lastSearch,
+      lastFetched: state.lastFetched,
+    };
+    window.localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(payload));
+  } catch (error) {
+    console.error("Failed to write chat users cache:", error);
+  }
+};
+
+const cachedState = readUsersCache();
+
 // Async thunk for fetching initial users
 export const fetchUsers = createAsyncThunk(
   "users/fetchUsers",
@@ -82,26 +148,17 @@ export const fetchMoreUsers = createAsyncThunk(
 
 const usersSlice = createSlice({
   name: "users",
-  initialState: {
-    users: [],
-    loading: false,
-    loadingMore: false,
-    error: null,
-    lastFetched: null,
-    hasMore: false,
-    page: 1,
-    limit: 10,
-    totalDocuments: 0,
-    totalPages: 0,
-    lastSearch: undefined,
-    hasLoaded: false,
-  },
+  initialState: cachedState ? { ...defaultState, ...cachedState } : defaultState,
   reducers: {
     clearUsers: (state) => {
       state.users = [];
       state.error = null;
       state.hasMore = false;
       state.page = 1;
+      state.totalDocuments = 0;
+      state.totalPages = 0;
+      state.hasLoaded = false;
+      writeUsersCache(state);
     },
     updateUserLastMessage: (state, action) => {
       const { userid, lastMessage, lastChatTime } = action.payload;
@@ -119,6 +176,8 @@ const usersSlice = createSlice({
       if (user) {
         user.last_message = lastMessage;
         user.last_chat_time = lastChatTime;
+        state.lastFetched = Date.now();
+        writeUsersCache(state);
       }
     },
   },
@@ -142,6 +201,7 @@ const usersSlice = createSlice({
         state.error = null;
         state.lastFetched = Date.now();
         state.hasLoaded = true;
+        writeUsersCache(state);
       })
       .addCase(fetchUsers.rejected, (state, action) => {
         state.loading = false;
@@ -163,6 +223,8 @@ const usersSlice = createSlice({
         state.totalPages = action.payload.totalPages;
         state.loadingMore = false;
         state.error = null;
+        state.lastFetched = Date.now();
+        writeUsersCache(state);
       })
       .addCase(fetchMoreUsers.rejected, (state, action) => {
         state.loadingMore = false;
