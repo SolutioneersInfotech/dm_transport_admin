@@ -352,6 +352,7 @@ export default function ChatMessageBubble({
 
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
+  const [copyLabel, setCopyLabel] = useState("Copy");
 
   useEffect(() => {
     setImageLoaded(false);
@@ -381,6 +382,47 @@ export default function ChatMessageBubble({
       : "Message";
 
   const showReplyTo = msg?.replyTo;
+
+  const copyMessageContent = async () => {
+    const setTempLabel = (value) => {
+      setCopyLabel(value);
+      setTimeout(() => setCopyLabel("Copy"), 1400);
+    };
+
+    try {
+      if (attachment) {
+        if (typeof ClipboardItem !== "undefined") {
+          const response = await fetch(attachment);
+          if (!response.ok) {
+            throw new Error("Failed to fetch media");
+          }
+          const blob = await response.blob();
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              [blob.type || "application/octet-stream"]: blob,
+            }),
+          ]);
+          setTempLabel("Copied");
+          return;
+        }
+
+        await navigator.clipboard.writeText(attachment);
+        setTempLabel("Link copied");
+        return;
+      }
+
+      if (!text) {
+        setTempLabel("No content");
+        return;
+      }
+
+      await navigator.clipboard.writeText(text);
+      setTempLabel("Copied");
+    } catch (error) {
+      console.error("Failed to copy content", error);
+      setTempLabel("Copy failed");
+    }
+  };
 
   /* ================= RENDER ================= */
   return (
@@ -518,8 +560,21 @@ export default function ChatMessageBubble({
             </p>
           )}
 
-          {/* Meta */}
-          <div className="mt-1 flex items-center justify-end gap-1">
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={copyMessageContent}
+              className={`rounded px-2 py-1 text-[11px] transition-colors ${
+                isAdmin
+                  ? "bg-white/15 text-white hover:bg-white/25"
+                  : "bg-black/20 text-gray-200 hover:bg-black/30"
+              }`}
+            >
+              {copyLabel}
+            </button>
+
+            {/* Meta */}
+            <div className="flex items-center justify-end gap-1">
             <span className={`text-[10px] ${isAdmin ? "text-white/80" : "text-gray-400"}`}>
               {time}
             </span>
@@ -528,6 +583,7 @@ export default function ChatMessageBubble({
                 {statusIcon}
               </span>
             )}
+            </div>
           </div>
         </div>
       </div>
