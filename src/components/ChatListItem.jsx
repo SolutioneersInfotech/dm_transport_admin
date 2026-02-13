@@ -35,13 +35,16 @@ const ChatListItem = ({ driver, onClick, isSelected }) => {
     : "";
 
   const unreadCount = driver.unreadCount || 0;
+  const itemStateClass = isSelected
+    ? "bg-[#253243] ring-1 ring-inset ring-[#4c8dff]"
+    : unreadCount > 0
+    ? "bg-[#1d232a]"
+    : "";
 
   return (
     <div
       onClick={onClick}
-      className={`flex items-center gap-3 p-3 cursor-pointer hover:bg-[#1b222c] ${
-        isSelected ? "bg-[#1b222c]" : ""
-      } ${unreadCount > 0 ? "bg-[#1d232a]" : ""}`}
+      className={`flex items-center gap-3 p-3 cursor-pointer transition-colors hover:bg-[#1b222c] ${itemStateClass}`}
     >
       <div className="relative">
       <img
@@ -86,4 +89,3 @@ const ChatListItem = ({ driver, onClick, isSelected }) => {
 };
 
 export default ChatListItem;
-
