@@ -237,6 +237,8 @@ export default function Admins() {
     (admin) => admin.name === selectedAdmin
   );
 
+  const adminListSkeletonRows = Array.from({ length: 12 }, (_, index) => index);
+
   const handleAddAdmin = async (event) => {
     event.preventDefault();
     const trimmedName = newAdminName.trim();
@@ -554,8 +556,16 @@ export default function Admins() {
             <p className="text-sm text-slate-400">Admins</p>
             <div className="admin-scroll mt-3 flex-1 space-y-1 overflow-y-auto pr-1">
               {isLoading ? (
-                <div className="rounded-lg border border-dashed border-slate-700 px-4 py-6 text-center text-sm text-slate-500">
-                  Loading admins...
+                <div className="space-y-2">
+                  {adminListSkeletonRows.map((row) => (
+                    <div
+                      key={`admin-skeleton-${row}`}
+                      className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/30 px-3 py-2"
+                    >
+                      <div className="h-4 w-32 animate-pulse rounded-full bg-slate-800" />
+                      <div className="h-4 w-4 animate-pulse rounded-full bg-slate-800" />
+                    </div>
+                  ))}
                 </div>
               ) : error ? (
                 <div className="rounded-lg border border-dashed border-rose-500/50 bg-rose-500/10 px-4 py-6 text-center text-sm text-rose-200">
@@ -627,7 +637,6 @@ export default function Admins() {
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="h-9 w-9 animate-pulse rounded-lg bg-slate-800" />
-                  <div className="h-8 w-28 animate-pulse rounded-full bg-slate-800" />
                   <div className="h-9 w-9 animate-pulse rounded-lg bg-slate-800" />
                 </div>
               </div>
@@ -638,12 +647,12 @@ export default function Admins() {
               </div>
 
               <div className="admin-scroll flex-1 space-y-4 overflow-y-auto pr-1">
-                {["CTPAT", "Operational Forms", "Admin Tools"].map((title) => (
-                  <div key={title} className="space-y-3">
+                {permissionSections.map((section) => (
+                  <div key={section.title} className="space-y-3">
                     <div className="h-3 w-24 animate-pulse rounded-full bg-slate-800" />
-                    {[0, 1, 2].map((item) => (
+                    {section.items.map((permission) => (
                       <div
-                        key={`${title}-${item}`}
+                        key={`${section.title}-${permission}`}
                         className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3"
                       >
                         <div className="h-4 w-40 animate-pulse rounded-full bg-slate-800" />
