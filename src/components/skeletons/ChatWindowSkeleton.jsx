@@ -1,36 +1,80 @@
 import Skeleton from "react-loading-skeleton";
 
+const skeletonBase = "#243644";
+const skeletonHighlight = "#2f4557";
+
+function BubbleSkeleton({ align = "left", width = "40%", height = 58 }) {
+  const isRight = align === "right";
+
+  return (
+    <div className={`flex ${isRight ? "justify-end" : "justify-start"}`}>
+      <div className={`max-w-[78%] ${isRight ? "items-end" : "items-start"} flex flex-col gap-2`}>
+        <Skeleton
+          width={width}
+          height={height}
+          borderRadius={18}
+          baseColor={skeletonBase}
+          highlightColor={skeletonHighlight}
+        />
+        <Skeleton
+          width={64}
+          height={10}
+          borderRadius={999}
+          baseColor={skeletonBase}
+          highlightColor={skeletonHighlight}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function ChatWindowSkeleton() {
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* ================= HEADER ================= */}
-      <div className="px-4 py-3 border-b border-gray-700 bg-[#111827] flex items-center gap-3">
-        <Skeleton circle width={40} height={40} />
-        <div>
-          <Skeleton width={120} height={14} />
-          <Skeleton width={80} height={10} style={{ marginTop: 4 }} />
+    <div className="relative flex flex-col h-full overflow-hidden bg-[#0b141a]">
+      <div className="px-4 py-3 border-b border-[#2a3942] bg-[#202c33] flex justify-between items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <Skeleton
+            circle
+            width={40}
+            height={40}
+            baseColor={skeletonBase}
+            highlightColor={skeletonHighlight}
+          />
+          <div className="min-w-0 flex-1 space-y-2">
+            <Skeleton width="62%" height={14} baseColor={skeletonBase} highlightColor={skeletonHighlight} />
+            <Skeleton width="46%" height={11} baseColor={skeletonBase} highlightColor={skeletonHighlight} />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Skeleton circle width={18} height={18} baseColor={skeletonBase} highlightColor={skeletonHighlight} />
+          <Skeleton circle width={18} height={18} baseColor={skeletonBase} highlightColor={skeletonHighlight} />
+          <Skeleton width={92} height={36} borderRadius={10} baseColor={skeletonBase} highlightColor={skeletonHighlight} />
         </div>
       </div>
 
-      {/* ================= MESSAGE AREA ================= */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#0d1117]">
-        {[1, 2, 3, 4, 5, 6].map((i) => (
-          <div
-            key={i}
-            className={`flex ${i % 2 === 0 ? "justify-end" : "justify-start"}`}
-          >
-            <div className="max-w-[70%]">
-              <Skeleton height={40} width={200 + (i % 3) * 40} />
-            </div>
-          </div>
-        ))}
+      <div className="flex-1 overflow-y-auto chat-list-scroll bg-[#0b141a] chat-bg-pattern p-4 space-y-6">
+        <div className="flex justify-center">
+          <Skeleton width={96} height={20} borderRadius={999} baseColor={skeletonBase} highlightColor={skeletonHighlight} />
+        </div>
+
+        <BubbleSkeleton align="left" width={180} height={50} />
+        <BubbleSkeleton align="right" width={300} height={66} />
+        <BubbleSkeleton align="right" width={350} height={280} />
+        <BubbleSkeleton align="right" width={140} height={56} />
+        <BubbleSkeleton align="left" width={230} height={60} />
       </div>
 
-      {/* ================= INPUT BAR ================= */}
-      <div className="p-4 border-t border-gray-700 bg-[#111827] flex gap-2">
-        <Skeleton width={32} height={32} />
-        <Skeleton height={40} className="flex-1" />
-        <Skeleton width={70} height={40} />
+      <div className="p-3 border-t border-[#2a3942] bg-[#202c33] flex items-end gap-2">
+        <Skeleton circle width={28} height={28} baseColor={skeletonBase} highlightColor={skeletonHighlight} />
+        <Skeleton
+          className="flex-1"
+          height={48}
+          borderRadius={999}
+          baseColor={skeletonBase}
+          highlightColor={skeletonHighlight}
+        />
+        <Skeleton circle width={44} height={44} baseColor={skeletonBase} highlightColor={skeletonHighlight} />
       </div>
     </div>
   );
