@@ -855,8 +855,18 @@ export default function Documents() {
             placeholder="Search by driver name"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#1d232a] pl-9 border-gray-700 text-gray-300 placeholder:text-gray-500 text-sm sm:text-base"
+            className="w-full bg-[#1d232a] pl-9 pr-9 border-gray-700 text-gray-300 placeholder:text-gray-500 text-sm sm:text-base"
           />
+          {search ? (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 transition-colors"
+              aria-label="Clear search"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
         </div>
 
         {/* Category Filters (C, D, E, F) - multi-select, sent as category=C&category=D */}
