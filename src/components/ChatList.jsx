@@ -22,9 +22,11 @@ const statusColorClass = {
   unseen: "text-amber-400",
 };
 
+const fetchedUsersCache = new Set();
+
 const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const dispatch = useAppDispatch();
-  const { users, loading, loadingMore, hasMore, page, limit } = useAppSelector(
+  const { users, loading, loadingMore, hasMore, page, limit, hasLoaded } = useAppSelector(
     (state) => state.users
   );
   // console.log(users);
@@ -33,9 +35,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const [statusFilter, setStatusFilter] = useState("all"); // "all" | "seen" | "unseen"
   const [isStatusPopoverOpen, setIsStatusPopoverOpen] = useState(false);
   const observerTarget = useRef(null);
-  const hasInitiallyFetched = useRef(false);
   const [isFetchingMessages, setIsFetchingMessages] = useState(false);
-  const fetchedUsersRef = useRef(new Set());
   const [unreadCounts, setUnreadCounts] = useState({});
   const unsubscribeUnreadRefs = useRef({});
   
@@ -59,18 +59,12 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     return candidate;
   }
 
-  // Clear cache on mount
+  // Initial fetch on mount - only when the list has never been loaded.
   useEffect(() => {
-    fetchedUsersRef.current.clear();
-  }, []);
-
-  // Initial fetch on mount - fetch all users with limit=-1
-  useEffect(() => {
-    if (!hasInitiallyFetched.current && !loading) {
-      hasInitiallyFetched.current = true;
+    if (!hasLoaded && !loading) {
       dispatch(fetchUsers({ page: 1, limit: -1 }));
     }
-  }, [dispatch, loading]);
+  }, [dispatch, hasLoaded, loading]);
 
   // Infinite scroll observer - prevent duplicate calls
   const isLoadingRef = useRef(false);
@@ -129,22 +123,18 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       const usersToFetch = users.filter((u) => {
         const userId = getDriverId(u);
         if (!userId) return false;
-        
-        // FIX: Always fetch if message text is missing, even if we've fetched before
-        // This handles the case where backend has timestamp but not message text
-        const hasMessageText = u.last_message !== undefined && 
-                              u.last_message !== null && 
-                              u.last_message.trim() !== "";
-        
-        // If we've already fetched AND have message text, skip
-        if (fetchedUsersRef.current.has(userId) && hasMessageText) {
+
+        const hasMessageText =
+          typeof u.last_message === "string" && u.last_message.trim() !== "";
+        const hasLastChatTime = Boolean(u.last_chat_time);
+
+        // Avoid rehydrating users that are already resolved in prior mounts.
+        if (fetchedUsersCache.has(userId)) {
           return false;
         }
-        
-        // Fetch if:
-        // 1. We haven't fetched yet, OR
-        // 2. We've fetched but message text is missing (need to get it from Firebase)
-        return true;
+
+        // If backend already sent enough preview metadata, keep the UI stable.
+        return !(hasMessageText || hasLastChatTime);
       });
 
       if (usersToFetch.length === 0) {
@@ -152,8 +142,11 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         return;
       }
 
-      // Set loading state - this will hide the list until sorting is complete
-      setIsFetchingMessages(true);
+      // Only block list rendering when we truly have no usable preview metadata.
+      const hasAnyPreviewData = users.some(
+        (u) => Boolean(u?.last_chat_time) || (u?.last_message || "").trim() !== ""
+      );
+      setIsFetchingMessages(!hasAnyPreviewData);
 
       try {
         // Fetch messages for ALL users in parallel - only fetch 1 message to get lastMessageTime
@@ -204,11 +197,11 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
                 })
               );
             }
-            fetchedUsersRef.current.add(userId);
+            fetchedUsersCache.add(userId);
           } catch (error) {
             console.error(`Failed to fetch messages for user ${userId}:`, error);
             // On error, still mark as fetched to avoid infinite retries
-            fetchedUsersRef.current.add(userId);
+            fetchedUsersCache.add(userId);
             // Set empty values on error
             dispatch(
               updateUserLastMessage({
@@ -230,6 +223,8 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
 
     fetchAllLastMessages();
   }, [users, fetchMessages, dispatch, loading, isFetchingMessages]);
+
+  const showInitialLoader = loading && !hasLoaded && users.length === 0;
 
   // Subscribe to unread counts for all users
   useEffect(() => {
@@ -466,12 +461,12 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       {/* 📜 DRIVER LIST (ONLY THIS SCROLLS) */}
       <div className="flex-1 overflow-y-auto chat-list-scroll">
         {/* Show loading skeleton while fetching users OR fetching messages for sorting */}
-        {(loading || isFetchingMessages) && (
+        {(showInitialLoader || isFetchingMessages) && (
           <SkeletonLoader count={10} />
         )}
 
         {/* Show sorted list ONLY after messages are fetched and sorted (prevents reordering UX issue) */}
-        {!loading && !isFetchingMessages && filtered.length > 0 && (
+        {!showInitialLoader && !isFetchingMessages && filtered.length > 0 && (
           <>
             {filtered.map((driver) => (
               <ChatListItem
@@ -485,7 +480,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         )}
 
         {/* Infinite scroll trigger - only show when hasMore (disabled since we fetch all) */}
-        {hasMore && !loading && !isFetchingMessages && (
+        {hasMore && !showInitialLoader && !isFetchingMessages && (
           <div 
             ref={observerTarget} 
             className="h-16 flex items-center justify-center py-2"
@@ -502,12 +497,12 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         )}
 
         {/* Empty state */}
-        {!loading && !isFetchingMessages && users.length === 0 && filtered.length === 0 && (
+        {!showInitialLoader && !isFetchingMessages && users.length === 0 && filtered.length === 0 && (
           <p className="text-center text-gray-500 text-sm mt-4">
             No drivers found
           </p>
         )}
-        {!loading && !isFetchingMessages && users.length > 0 && filtered.length === 0 && (
+        {!showInitialLoader && !isFetchingMessages && users.length > 0 && filtered.length === 0 && (
           <p className="text-center text-gray-500 text-sm mt-4">
             {statusFilter === "seen" && "No seen chats"}
             {statusFilter === "unseen" && "No unseen chats"}
@@ -516,7 +511,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         )}
 
         {/* No more to load */}
-        {!hasMore && !loading && !loadingMore && !isFetchingMessages && filtered.length > 0 && (
+        {!hasMore && !showInitialLoader && !loadingMore && !isFetchingMessages && filtered.length > 0 && (
           <p className="text-center text-gray-500 text-xs mt-2 py-2">
             All drivers loaded
           </p>
