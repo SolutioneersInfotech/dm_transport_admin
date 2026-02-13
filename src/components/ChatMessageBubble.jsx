@@ -462,14 +462,23 @@ export default function ChatMessageBubble({
 
           {/* 📄 PDF */}
           {attachment && isPDF && (
-            <a
-              href={attachment}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mb-2 flex items-center gap-2 rounded bg-black/30 px-3 py-2 text-sm hover:bg-black/40"
-            >
-              📄 <span className="underline">Open PDF</span>
-            </a>
+            <div className="mb-2 space-y-2">
+              <div className="overflow-hidden rounded-lg bg-black/30">
+                <iframe
+                  title="PDF preview"
+                  src={`${attachment}#toolbar=0&navpanes=0&scrollbar=1`}
+                  className="h-56 w-[280px] max-w-full border-0 bg-white"
+                />
+              </div>
+              <a
+                href={attachment}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded bg-black/30 px-3 py-1.5 text-xs hover:bg-black/40"
+              >
+                📄 <span className="underline">Open PDF</span>
+              </a>
+            </div>
           )}
 
           {/* 🎥 Video */}
