@@ -97,6 +97,8 @@ export default function Documents() {
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const previousCountRef = useRef(null);
   const [isFlagUpdating, setIsFlagUpdating] = useState(false);
+  const [isFlagFilterLoading, setIsFlagFilterLoading] = useState(false);
+  const hasFlagFilterRequestStartedRef = useRef(false);
 
   const [searchParams] = useSearchParams();
 
@@ -412,6 +414,20 @@ export default function Documents() {
       setStatusFilter("all");
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!isFlagFilterLoading) return;
+
+    if (loading) {
+      hasFlagFilterRequestStartedRef.current = true;
+      return;
+    }
+
+    if (hasFlagFilterRequestStartedRef.current) {
+      setIsFlagFilterLoading(false);
+      hasFlagFilterRequestStartedRef.current = false;
+    }
+  }, [isFlagFilterLoading, loading]);
 
   // Toggle filter selection
   const toggleFilter = (filterValue) => {
@@ -941,18 +957,29 @@ export default function Documents() {
         {/* Flag Filter */}
         <Button
           onClick={() => {
-            setFlagFilter(flagFilter === null ? true : null);
+            const nextFlagFilter = flagFilter === null ? true : null;
+            setFlagFilter(nextFlagFilter);
+            if (nextFlagFilter === true) {
+              setIsFlagFilterLoading(true);
+            }
           }}
           variant="outline"
           size="sm"
           className={`h-8 sm:h-9 px-2 sm:px-3 ${
             flagFilter === true
-              ? "bg-[#1f6feb] text-white border-[#1f6feb] hover:bg-[#1a5fd4]"
+              ? "bg-[#2a1114] text-red-500 border-red-500/60 hover:bg-[#3a161a]"
               : "bg-[#161b22] border-gray-700 text-gray-400 hover:bg-[#1d232a] hover:border-gray-600 hover:text-gray-300"
           }`}
           title={flagFilter === true ? "Show flagged only" : "Show all documents"}
         >
-          <Flag className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${flagFilter === true ? "text-white" : "text-gray-400"}`} />
+          {isFlagFilterLoading ? (
+            <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin text-red-500" />
+          ) : (
+            <Flag
+              className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${flagFilter === true ? "text-red-500" : "text-gray-400"}`}
+              fill={flagFilter === true ? "#ef4444" : "none"}
+            />
+          )}
         </Button>
 
         {/* Date Range Picker */}
