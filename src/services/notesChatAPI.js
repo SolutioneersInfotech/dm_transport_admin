@@ -53,10 +53,8 @@ async function ensureAdminUploadServices() {
       }
 
       notesUploadServices = {
-        app: uploadApp,
         auth: uploadAuth,
         storage: getStorage(uploadApp),
-        firestore: getFirestore(uploadApp),
       };
 
       return notesUploadServices;
