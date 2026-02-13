@@ -31,7 +31,7 @@ function BubbleSkeleton({ align = "left", width = "40%", height = 58 }) {
 export default function ChatWindowSkeleton() {
   return (
     <div className="relative flex flex-col h-full overflow-hidden bg-[#0b141a]">
-      <div className="px-4 py-3 border-b border-[#2a3942] bg-[#202c33] flex justify-between items-center gap-3">
+      <div className="px-4 py-3 border-b border-[#2c3e52] bg-[#1c2530] flex justify-between items-center gap-3">
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <Skeleton
             circle
@@ -65,7 +65,7 @@ export default function ChatWindowSkeleton() {
         <BubbleSkeleton align="left" width={230} height={60} />
       </div>
 
-      <div className="p-3 border-t border-[#2a3942] bg-[#202c33] flex items-end gap-2">
+      <div className="p-3 border-t border-[#2c3e52] bg-[#1c2530] flex items-end gap-2">
         <Skeleton circle width={28} height={28} baseColor={skeletonBase} highlightColor={skeletonHighlight} />
         <Skeleton
           className="flex-1"

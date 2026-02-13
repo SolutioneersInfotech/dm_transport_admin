@@ -629,7 +629,7 @@ export default function ChatWindow({ driver, chatApi }) {
   return (
     <div className="relative flex flex-col h-full overflow-hidden bg-[#0b141a]">
       {/* ================= HEADER (WhatsApp-like) ================= */}
-      <div className="px-4 py-3 border-b border-[#2a3942] bg-[#202c33] sticky top-0 z-40 flex justify-between items-center">
+      <div className="px-4 py-3 border-b border-[#2c3e52] bg-[#1c2530] sticky top-0 z-40 flex justify-between items-center">
         <div className="flex items-center gap-3 min-w-0">
           <img
             src={driver.driver_image || "/default-user.png"}
@@ -763,8 +763,8 @@ export default function ChatWindow({ driver, chatApi }) {
                   className={`flex items-start gap-2 rounded-lg transition-colors ${
                     selectionMode
                       ? isSelected
-                        ? "bg-[#233138]"
-                        : "hover:bg-[#172128]"
+                        ? "bg-[#1f3146]"
+                        : "hover:bg-[#162436]"
                       : "relative"
                   }`}
                   onClick={() => {
@@ -817,9 +817,9 @@ export default function ChatWindow({ driver, chatApi }) {
         <div ref={bottomRef} />
       </div>
       {replyTo && (
-  <div className="px-4 py-2 border-t border-[#2a3942] bg-[#202c33] flex items-center justify-between">
-    <div className="border-l-4 border-[#00a884] pl-3">
-      <p className="text-xs font-semibold text-[#00a884]">
+  <div className="px-4 py-2 border-t border-[#2c3e52] bg-[#1c2530] flex items-center justify-between">
+    <div className="border-l-4 border-[#1f6feb] pl-3">
+      <p className="text-xs font-semibold text-[#1f6feb]">
         Replying to {replyTo.senderName}
       </p>
       <p className="text-xs text-[#8696a0] truncate max-w-[260px]">
@@ -841,7 +841,7 @@ export default function ChatWindow({ driver, chatApi }) {
 )}
 
       {/* ================= INPUT BAR (WhatsApp-like) ================= */}
-      <div className="p-3 border-t border-[#2a3942] bg-[#202c33] sticky bottom-0 flex items-end gap-2">
+      <div className="p-3 border-t border-[#2c3e52] bg-[#1c2530] sticky bottom-0 flex items-end gap-2">
         <input
           ref={fileInputRef}
           type="file"
@@ -855,7 +855,7 @@ export default function ChatWindow({ driver, chatApi }) {
             type="button"
             variant="ghost"
             size="icon"
-            className="rounded-full text-[#8696a0] hover:bg-[#2a3942] hover:text-[#e9edef]"
+            className="rounded-full text-[#8696a0] hover:bg-[#2c3e52] hover:text-[#e9edef]"
             onClick={() => setShowAttachmentOptions((prev) => !prev)}
             aria-label="Attach file"
             aria-expanded={showAttachmentOptions}
@@ -871,13 +871,13 @@ export default function ChatWindow({ driver, chatApi }) {
                 aria-hidden="true"
               />
               <div
-                className="absolute bottom-full left-0 z-50 mb-2 w-48 rounded-xl border border-[#2a3942] bg-[#202c33] py-2 shadow-xl"
+                className="absolute bottom-full left-0 z-50 mb-2 w-48 rounded-xl border border-[#2c3e52] bg-[#1c2530] py-2 shadow-xl"
                 role="menu"
                 aria-label="Choose attachment type"
               >
                 <button
                   type="button"
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-[#e9edef] hover:bg-[#2a3942]"
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-[#e9edef] hover:bg-[#2c3e52]"
                   onClick={() => openFilePicker("image/*,video/*")}
                   role="menuitem"
                 >
@@ -886,7 +886,7 @@ export default function ChatWindow({ driver, chatApi }) {
                 </button>
                 <button
                   type="button"
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-[#e9edef] hover:bg-[#2a3942]"
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-[#e9edef] hover:bg-[#2c3e52]"
                   onClick={() => openFilePicker("application/pdf")}
                   role="menuitem"
                 >
@@ -899,7 +899,7 @@ export default function ChatWindow({ driver, chatApi }) {
         </div>
 
         <Input
-          className="flex-1 rounded-full bg-[#2a3942] border-0 text-[#e9edef] placeholder:text-[#8696a0] py-5 px-4 focus-visible:ring-[#00a884]"
+          className="flex-1 rounded-full bg-[#2c3e52] border-0 text-[#e9edef] placeholder:text-[#8696a0] py-5 px-4 focus-visible:ring-[#1f6feb]"
           placeholder="Type a message"
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -910,7 +910,7 @@ export default function ChatWindow({ driver, chatApi }) {
         <Button
           onClick={handleSend}
           size="icon"
-          className="rounded-full bg-[#00a884] hover:bg-[#06cf9c] text-white h-11 w-11 flex-shrink-0"
+          className="rounded-full bg-[#1f6feb] hover:bg-[#1a5fd4] text-white h-11 w-11 flex-shrink-0"
           aria-label="Send message"
         >
           <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
