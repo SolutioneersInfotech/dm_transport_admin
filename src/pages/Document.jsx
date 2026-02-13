@@ -221,7 +221,7 @@ export default function Documents() {
 
   const [search, setSearch] = useState("");
   const [searchDebounced, setSearchDebounced] = useState("");
-  const [isSearchInProgress, setIsSearchInProgress] = useState(false);
+  const [pendingSearchTerm, setPendingSearchTerm] = useState(null);
   const hasInitializedSearch = useRef(false);
 
   const [statusFilter, setStatusFilter] = useState("all"); // all | seen | unseen
@@ -249,16 +249,20 @@ export default function Documents() {
       return;
     }
 
-    setIsSearchInProgress(true);
+    setPendingSearchTerm(searchDebounced);
   }, [searchDebounced]);
 
   useEffect(() => {
-    if (isSearchInProgress && !loading) {
-      setIsSearchInProgress(false);
+    if (
+      !loading &&
+      pendingSearchTerm !== null &&
+      lastFetchParams?.search === pendingSearchTerm
+    ) {
+      setPendingSearchTerm(null);
     }
-  }, [loading, isSearchInProgress]);
+  }, [loading, pendingSearchTerm, lastFetchParams]);
 
-  const isSearchLoading = search !== searchDebounced || isSearchInProgress;
+  const isSearchLoading = search !== searchDebounced || pendingSearchTerm !== null;
 
   const handleCopy = async (value, label) => {
     if (!value) return;
