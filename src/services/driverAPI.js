@@ -83,3 +83,34 @@ export async function fetchDrivers({ page = 1, limit = 20, search = "" } = {}) {
     pagination: pagination || {},
   };
 }
+
+export async function fetchAllDrivers({ limit = 100 } = {}) {
+  const allDrivers = [];
+  let page = 1;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { users, pagination } = await fetchDrivers({ page, limit, search: "" });
+    allDrivers.push(...users);
+
+    const currentPage = Number(pagination?.currentPage ?? page);
+    const totalPages = Number(pagination?.totalPages ?? currentPage);
+    const apiHasMore = pagination?.hasMore;
+
+    if (typeof apiHasMore === "boolean") {
+      hasMore = apiHasMore;
+    } else if (Number.isFinite(totalPages)) {
+      hasMore = currentPage < totalPages;
+    } else {
+      hasMore = users.length === limit;
+    }
+
+    page += 1;
+
+    if (page > 200) {
+      hasMore = false;
+    }
+  }
+
+  return allDrivers;
+}
