@@ -179,7 +179,10 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
   if (!selectedDoc) return null;
 
-  const doc = fullDoc || selectedDoc;
+  const doc = {
+    ...(fullDoc || {}),
+    ...(selectedDoc || {}),
+  };
   const inVal = doc.in_date_time ?? doc.inTime ?? doc.in_time ?? doc.inDateTime;
   const outVal = doc.out_date_time ?? doc.outTime ?? doc.out_time ?? doc.outDateTime;
   const inFormatted = formatDateTime(inVal);
