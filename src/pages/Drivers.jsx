@@ -127,6 +127,7 @@ export default function Drivers() {
   const [submitError, setSubmitError] = useState("");
   const [isSearchLoading, setIsSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
+  const [skeletonRows, setSkeletonRows] = useState(8);
   const isResizingRef = useRef(false);
   const sectionRef = useRef(null);
   const {
@@ -305,6 +306,34 @@ export default function Drivers() {
   const totalDrivers = drivers.length || 0;
 
   const isInitialLoading = (isLoading || isSearchLoading) && drivers.length === 0;
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return undefined;
+
+    const minimumRows = 6;
+    const rowHeight = 68;
+
+    const updateSkeletonRows = () => {
+      const availableHeight = container.clientHeight || 0;
+      const nextRows = Math.max(
+        minimumRows,
+        Math.ceil(availableHeight / rowHeight) + 1
+      );
+      setSkeletonRows(nextRows);
+    };
+
+    updateSkeletonRows();
+
+    const resizeObserver = new ResizeObserver(updateSkeletonRows);
+    resizeObserver.observe(container);
+    window.addEventListener("resize", updateSkeletonRows);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateSkeletonRows);
+    };
+  }, []);
   const isLoadingMore = isFetching && page > 1;
 
   const handleLoadMore = useCallback(() => {
@@ -624,12 +653,24 @@ export default function Drivers() {
             className="drivers-scroll flex-1 overflow-y-auto"
           >
             {isInitialLoading && (
-              <div className="space-y-3 px-4 py-6">
-                {Array.from({ length: 6 }).map((_, index) => (
+              <div className="space-y-3 px-4 py-4">
+                {Array.from({ length: skeletonRows }).map((_, index) => (
                   <div
                     key={`skeleton-${index}`}
-                    className="h-10 w-full animate-pulse rounded-xl bg-slate-900/70"
-                  />
+                    className="grid w-full grid-cols-12 items-center gap-2 rounded-xl border border-slate-900 px-3 py-3"
+                  >
+                    <div className="col-span-4 flex items-center gap-3">
+                      <span className="h-10 w-10 animate-pulse rounded-full bg-slate-900/70" />
+                      <span className="space-y-2">
+                        <span className="block h-3 w-28 animate-pulse rounded-full bg-slate-900/70" />
+                        <span className="block h-2.5 w-20 animate-pulse rounded-full bg-slate-900/60" />
+                      </span>
+                    </div>
+                    <span className="col-span-3 h-3 w-28 animate-pulse rounded-full bg-slate-900/70" />
+                    <span className="col-span-2 h-3 w-20 animate-pulse rounded-full bg-slate-900/70" />
+                    <span className="col-span-1 h-6 w-12 animate-pulse rounded-full bg-slate-900/70" />
+                    <span className="col-span-2 ml-auto h-3 w-16 animate-pulse rounded-full bg-slate-900/70" />
+                  </div>
                 ))}
               </div>
             )}
