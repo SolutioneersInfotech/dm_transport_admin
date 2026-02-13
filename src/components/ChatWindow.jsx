@@ -637,20 +637,20 @@ export default function ChatWindow({ driver, chatApi }) {
             className="w-10 h-10 rounded-full object-cover flex-shrink-0"
           />
           <div className="min-w-0">
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="pt-1 flex items-center gap-2 min-w-0">
               <span className="font-semibold text-white truncate max-w-[260px]">
                 {driver?.driver_name || "Unknown"}
               </span>
-              <div className="flex items-center gap-1 text-xs text-gray-300 min-w-0 max-w-[320px]">
-                <Mail className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+              <div className="flex items-center gap-1.5 text-xs text-gray-300 min-w-0 max-w-[320px]">
+                <Mail className="w-3 h-3 text-gray-400 flex-shrink-0" />
                 <span className="truncate">{emailText}</span>
               </div>
-              <div className="flex items-center gap-1 text-xs text-gray-300 min-w-0 max-w-[220px]">
-                <Phone className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+              <div className="flex items-center gap-1.5 text-xs text-gray-300 min-w-0 max-w-[220px]">
+                <Phone className="w-3 h-3 text-gray-400 flex-shrink-0" />
                 <span className="truncate">{phoneText}</span>
               </div>
             </div>
-            <div className="text-xs text-gray-400">{formatLastSeen(driver?.lastSeen)}</div>
+            <div className="pt-1 text-xs text-gray-400">{formatLastSeen(driver?.lastSeen)}</div>
           </div>
         </div>
 
