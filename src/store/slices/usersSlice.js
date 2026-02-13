@@ -94,6 +94,7 @@ const usersSlice = createSlice({
     totalDocuments: 0,
     totalPages: 0,
     lastSearch: undefined,
+    hasLoaded: false,
   },
   reducers: {
     clearUsers: (state) => {
@@ -140,11 +141,13 @@ const usersSlice = createSlice({
         state.loading = false;
         state.error = null;
         state.lastFetched = Date.now();
+        state.hasLoaded = true;
       })
       .addCase(fetchUsers.rejected, (state, action) => {
         state.loading = false;
         state.loadingMore = false;
         state.error = action.payload;
+        state.hasLoaded = true;
       })
       // Load more users
       .addCase(fetchMoreUsers.pending, (state) => {
@@ -170,4 +173,3 @@ const usersSlice = createSlice({
 
 export const { clearUsers, updateUserLastMessage } = usersSlice.actions;
 export default usersSlice.reducer;
-
