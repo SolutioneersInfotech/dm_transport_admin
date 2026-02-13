@@ -2,13 +2,13 @@ import {
   get,
   onValue,
   push,
-  query,
   ref,
   remove,
   set,
   update,
 } from "firebase/database";
 import { database } from "../firebase/firebaseApp";
+import { fetchUsersRoute } from "../utils/apiRoutes";
 
 const ADMIN_MAINTENANCE_PATH = "chat/users/admin/maintenance";
 const USER_MAINTENANCE_PATH = "chat/users";
@@ -80,19 +80,53 @@ function sortByDateTimeAsc(messages) {
 
 export async function fetchUsersForChat() {
   const token = getToken();
-  const response = await fetch(FETCH_CHAT_THREADS_URL, {
+
+  try {
+    const response = await fetch(FETCH_CHAT_THREADS_URL, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const users = Array.isArray(data?.users) ? data.users : [];
+      return { users };
+    }
+
+    // Older/local backends may not expose fetchchatthreads.
+    if (response.status !== 404) {
+      throw new Error(`Failed to fetch maintenance chat threads (${response.status}).`);
+    }
+  } catch (error) {
+    // If primary endpoint fails for any reason, fall back to fetchusers below.
+    console.warn("Maintenance chat threads endpoint unavailable, using fetchusers fallback:", error);
+  }
+
+  const fallbackResponse = await fetch(fetchUsersRoute(1, -1), {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
     },
   });
 
-  if (!response.ok) {
-    throw new Error("Failed to fetch chat threads.");
+  if (!fallbackResponse.ok) {
+    throw new Error("Failed to fetch maintenance chat users.");
   }
 
-  const data = await response.json();
-  const users = Array.isArray(data?.users) ? data.users : [];
+  const fallbackData = await fallbackResponse.json();
+  const fallbackUsers = Array.isArray(fallbackData?.users) ? fallbackData.users : [];
+
+  const users = fallbackUsers.filter((user) => {
+    return Boolean(
+      user?.maintenanceChat ??
+      user?.maintenance_chat ??
+      user?.maintenanceEnabled ??
+      user?.maintenance_enabled
+    );
+  });
+
   return { users };
 }
 
