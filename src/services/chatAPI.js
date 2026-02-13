@@ -2,7 +2,6 @@ import {
   get,
   limitToLast,
   onValue,
-  orderByChild,
   push,
   query,
   ref,
@@ -96,8 +95,6 @@ export async function fetchMessages(userid, messageLimit = 10) {
   // FIX: Fetch more messages and sort by timestamp to get the actual most recent
   // limitToLast() uses Firebase key order, not timestamp order, so we need to sort
   // Fetch more messages (20) to ensure we get the most recent even if keys are out of order
-  const fetchLimit = messageLimit === 1 ? 20 : messageLimit; // Fetch more if we only need 1
-  
   const messagesRef = query(
     ref(database, `${ADMIN_GENERAL_PATH}/${userid}`)
   );
@@ -142,6 +139,37 @@ export function subscribeMessages(userid, onChange) {
     );
 
     onChange(messages);
+  });
+
+  return unsubscribe;
+}
+
+/**
+ * Subscribe to the latest message for a specific user.
+ * Uses a bounded window, then sorts by dateTime to avoid Firebase key-order issues.
+ * @param {string} userid
+ * @param {(message: object|null) => void} onChange
+ * @returns {function} Unsubscribe function
+ */
+export function subscribeLastMessage(userid, onChange) {
+  const messagesRef = query(
+    ref(database, `${ADMIN_GENERAL_PATH}/${userid}`),
+    limitToLast(30)
+  );
+
+  const unsubscribe = onValue(messagesRef, (snapshot) => {
+    if (!snapshot.exists()) {
+      onChange(null);
+      return;
+    }
+
+    const messages = sortByDateTimeAsc(
+      Object.entries(snapshot.val() || {}).map(([id, msg]) =>
+        normalizeMessage(id, msg)
+      )
+    );
+
+    onChange(messages.length ? messages[messages.length - 1] : null);
   });
 
   return unsubscribe;
