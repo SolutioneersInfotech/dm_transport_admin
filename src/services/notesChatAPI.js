@@ -10,9 +10,10 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
-import { signInAnonymously } from "firebase/auth";
+import { signInWithCustomToken } from "firebase/auth";
 import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
 import { auth, firestore, storage } from "../firebase/firebaseApp";
+import { getAdminFirebaseCustomToken } from "./adminFirebaseToken";
 
 const PRIORITY_FILTERS = {
   all: () => true,
@@ -23,20 +24,24 @@ const PRIORITY_FILTERS = {
 
 let authPromise = null;
 
-async function ensureAnonymousAuth() {
-  if (auth.currentUser) {
-    return auth.currentUser;
+async function ensureAdminFirebaseAuth() {
+  const currentUser = auth.currentUser;
+
+  if (currentUser?.uid?.startsWith("admin_")) {
+    return currentUser;
   }
 
   if (!authPromise) {
-    authPromise = signInAnonymously(auth).catch((error) => {
-      authPromise = null;
-      throw error;
-    });
+    authPromise = getAdminFirebaseCustomToken()
+      .then((token) => signInWithCustomToken(auth, token))
+      .then((credential) => credential.user)
+      .catch((error) => {
+        authPromise = null;
+        throw error;
+      });
   }
 
-  const credential = await authPromise;
-  return credential.user;
+  return authPromise;
 }
 
 function getAdminUser() {
@@ -176,27 +181,21 @@ export const addReaction = async ({ messageId, emoji, userId }) => {
 };
 
 export const uploadNotesAttachment = async (file, type) => {
-  void type;
-  try {
-    await ensureAnonymousAuth();
-  } catch (error) {
-    const errorCode = error?.code || "";
-    const errorMessage = error?.message || "";
-    const isAdminOnly =
-      errorCode === "auth/admin-restricted-operation" ||
-      errorMessage.includes("ADMIN_ONLY_OPERATION");
-
-    if (!isAdminOnly) {
-      throw error;
-    }
-
-    console.warn(
-      "[Notes] Anonymous auth disabled; continuing without sign-in.",
-      error
-    );
+  if (!(file instanceof File)) {
+    throw new Error("Invalid file");
   }
-  const safeName = file?.name || "file";
-  const storageRef = ref(storage, `uploads/${Date.now()}_${safeName}`);
+
+  await ensureAdminFirebaseAuth();
+
+  const safeName = (file.name || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
+  const normalizedType = ["image", "video", "document"].includes(type)
+    ? type
+    : "document";
+  const uploaderUid = auth.currentUser?.uid || "admin_unknown";
+  const storageRef = ref(
+    storage,
+    `chat/uploads/${uploaderUid}/notes/${normalizedType}_${Date.now()}_${safeName}`
+  );
   const uploadTask = uploadBytesResumable(storageRef, file);
 
   return new Promise((resolve, reject) => {
