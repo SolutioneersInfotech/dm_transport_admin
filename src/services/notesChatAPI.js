@@ -3,6 +3,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getFirestore,
   onSnapshot,
   orderBy,
   query,
@@ -10,10 +11,10 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
-import { getApp, getApps, initializeApp } from "firebase/app";
-import { getAuth, signInAnonymously, signInWithCustomToken } from "firebase/auth";
+import { getApps, initializeApp } from "firebase/app";
+import { getAuth, signInWithCustomToken } from "firebase/auth";
 import { getDownloadURL, getStorage, ref, uploadBytesResumable } from "firebase/storage";
-import { app, auth, firestore } from "../firebase/firebaseApp";
+import { app, firestore } from "../firebase/firebaseApp";
 import { getAdminFirebaseCustomToken } from "./adminFirebaseToken";
 
 const PRIORITY_FILTERS = {
@@ -24,7 +25,7 @@ const PRIORITY_FILTERS = {
 };
 
 let authPromise = null;
-let notesUploadStorage = null;
+let notesUploadServices = null;
 
 function getOrCreateNotesUploadApp() {
   const appName = "notes-upload";
@@ -36,9 +37,9 @@ function getOrCreateNotesUploadApp() {
   return initializeApp(app.options, appName);
 }
 
-async function ensureAdminFirebaseStorage() {
-  if (notesUploadStorage) {
-    return notesUploadStorage;
+async function ensureAdminUploadServices() {
+  if (notesUploadServices) {
+    return notesUploadServices;
   }
 
   if (!authPromise) {
@@ -51,8 +52,14 @@ async function ensureAdminFirebaseStorage() {
         await signInWithCustomToken(uploadAuth, token);
       }
 
-      notesUploadStorage = getStorage(uploadApp);
-      return notesUploadStorage;
+      notesUploadServices = {
+        app: uploadApp,
+        auth: uploadAuth,
+        storage: getStorage(uploadApp),
+        firestore: getFirestore(uploadApp),
+      };
+
+      return notesUploadServices;
     })().catch((error) => {
       authPromise = null;
       throw error;
@@ -60,16 +67,6 @@ async function ensureAdminFirebaseStorage() {
   }
 
   return authPromise;
-}
-
-
-async function ensureNotesFirestoreAuth() {
-  if (auth.currentUser) {
-    return auth.currentUser;
-  }
-
-  const credential = await signInAnonymously(auth);
-  return credential.user;
 }
 
 function getAdminUser() {
@@ -133,14 +130,14 @@ export const sendNotesMessage = async ({
   contentOverride,
   adminUser,
 }) => {
-  await ensureNotesFirestoreAuth();
+  const { firestore: adminFirestore } = await ensureAdminUploadServices();
 
   const resolvedAdmin = adminUser || getAdminUser() || {};
   const senderId = resolvedAdmin?.userid || "admin";
   const senderName = resolvedAdmin?.name || senderId || "Admin";
   const contentValue = contentOverride ?? text ?? "";
 
-  await addDoc(collection(firestore, "messages"), {
+  await addDoc(collection(adminFirestore, "messages"), {
     senderId,
     senderName,
     content: contentValue,
@@ -159,7 +156,7 @@ export const sendNotesMessage = async ({
     notificationMessage = `${senderName} shared a document`;
   }
 
-  await addDoc(collection(firestore, "Notes_notifications"), {
+  await addDoc(collection(adminFirestore, "Notes_notifications"), {
     message: notificationMessage,
     type,
     timestamp: serverTimestamp(),
@@ -215,14 +212,14 @@ export const uploadNotesAttachment = async (file, type) => {
     throw new Error("Invalid file");
   }
 
-  const uploadStorage = await ensureAdminFirebaseStorage();
+  const { auth: uploadAuth, storage: uploadStorage } =
+    await ensureAdminUploadServices();
 
   const safeName = (file.name || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
   const normalizedType = ["image", "video", "document"].includes(type)
     ? type
     : "document";
-  const uploadApp = getApp("notes-upload");
-  const uploaderUid = getAuth(uploadApp).currentUser?.uid || "admin_unknown";
+  const uploaderUid = uploadAuth.currentUser?.uid || "admin_unknown";
   const storageRef = ref(
     uploadStorage,
     `chat/uploads/${uploaderUid}/notes/${normalizedType}_${Date.now()}_${safeName}`
