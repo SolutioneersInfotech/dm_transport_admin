@@ -299,6 +299,8 @@
 // }
 
 
+import { useEffect, useState } from "react";
+
 export default function ChatMessageBubble({
   msg,
   senderName,
@@ -346,6 +348,14 @@ export default function ChatMessageBubble({
   const isImage = /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(lowerUrl);
   const isVideo = /\.(mp4|mov|m4v|webm|ogv|ogg)(\?|$)/i.test(lowerUrl);
   const isPDF = /\.pdf(\?|$)/i.test(lowerUrl);
+
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageLoadFailed, setImageLoadFailed] = useState(false);
+
+  useEffect(() => {
+    setImageLoaded(false);
+    setImageLoadFailed(false);
+  }, [attachment]);
 
   /* ================= STYLES (WhatsApp-like) ================= */
   const containerAlign = isAdmin ? "justify-end" : "justify-start";
@@ -409,15 +419,44 @@ export default function ChatMessageBubble({
 
           {/* 🖼 Image */}
           {attachment && isImage && (
-            <img
-              src={attachment}
-              alt="attachment"
-              className="mb-2 max-h-64 rounded-lg object-cover cursor-pointer hover:opacity-95"
-              onClick={() => (onImageClick ? onImageClick(attachment) : window.open(attachment, "_blank"))}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === "Enter" && (onImageClick ? onImageClick(attachment) : window.open(attachment, "_blank"))}
-            />
+            <div className="relative mb-2 w-[280px] max-w-full overflow-hidden rounded-lg bg-black/20">
+              {!imageLoaded && !imageLoadFailed && (
+                <div className="h-64 w-full animate-pulse bg-white/20" />
+              )}
+              {imageLoadFailed ? (
+                <a
+                  href={attachment}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block px-3 py-2 text-sm text-blue-300 underline"
+                >
+                  Open image
+                </a>
+              ) : (
+                <img
+                  src={attachment}
+                  alt="attachment"
+                  className={`w-full rounded-lg object-cover cursor-pointer hover:opacity-95 ${
+                    imageLoaded ? "relative" : "absolute inset-0 h-64 opacity-0"
+                  }`}
+                  onLoad={() => setImageLoaded(true)}
+                  onError={() => setImageLoadFailed(true)}
+                  onClick={() =>
+                    onImageClick
+                      ? onImageClick(attachment)
+                      : window.open(attachment, "_blank")
+                  }
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) =>
+                    e.key === "Enter" &&
+                    (onImageClick
+                      ? onImageClick(attachment)
+                      : window.open(attachment, "_blank"))
+                  }
+                />
+              )}
+            </div>
           )}
 
           {/* 📄 PDF */}
