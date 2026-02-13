@@ -38,10 +38,11 @@ const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
 // Last 60 Days
 function getDefaultDates() {
   const today = new Date();
-  const past = new Date();
-  past.setDate(today.getDate() - 60);
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const past = new Date(start);
+  past.setDate(past.getDate() - 60);
 
-  return { start: formatLocalDate(past), end: formatLocalDate(today) };
+  return { from: past, to: start };
 }
 
 const FILTER_MAP = {
@@ -100,8 +101,8 @@ export default function Documents() {
   const [searchParams] = useSearchParams();
 
   const [dateRange, setDateRange] = useState(() => ({
-    from: new Date(defaultDates.start),
-    to: new Date(defaultDates.end),
+    from: defaultDates.from,
+    to: defaultDates.to,
   }));
 
   const [selectedFilters, setSelectedFilters] = useState([]); // Array of filter values
