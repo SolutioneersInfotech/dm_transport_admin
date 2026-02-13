@@ -5,7 +5,10 @@ import ChatListItem from "./ChatListItem";
 import SkeletonLoader from "./skeletons/Skeleton";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { fetchMessages as defaultFetchMessages } from "../services/chatAPI";
+import {
+  fetchMessages as defaultFetchMessages,
+  subscribeLastMessage as defaultSubscribeLastMessage,
+} from "../services/chatAPI";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { Eye } from "lucide-react";
@@ -38,9 +41,12 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const [isFetchingMessages, setIsFetchingMessages] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState({});
   const unsubscribeUnreadRefs = useRef({});
-  
+  const unsubscribeLastMessageRefs = useRef({});
+
   const fetchMessages = chatApi?.fetchMessages || defaultFetchMessages;
   const subscribeUnreadCount = chatApi?.subscribeUnreadCount;
+  const subscribeLastMessage =
+    chatApi?.subscribeLastMessage || defaultSubscribeLastMessage;
 
   function getDriverId(driver) {
     const candidate =
@@ -224,6 +230,61 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     fetchAllLastMessages();
   }, [users, fetchMessages, dispatch, loading, isFetchingMessages]);
 
+
+
+  // Subscribe to latest-message updates so ordering refreshes for both driver and admin sends
+  useEffect(() => {
+    if (!subscribeLastMessage || !users?.length) return;
+
+    users.forEach((u) => {
+      const userId = getDriverId(u);
+      if (!userId) return;
+      if (unsubscribeLastMessageRefs.current[userId]) return;
+
+      const unsubscribe = subscribeLastMessage(userId, (lastMessage) => {
+        let lastMessageText =
+          lastMessage?.content?.message ||
+          lastMessage?.message ||
+          (lastMessage?.content ? "" : "");
+
+        if (!lastMessageText || lastMessageText.trim() === "") {
+          const attachmentUrl =
+            lastMessage?.content?.attachmentUrl ||
+            lastMessage?.attachmentUrl ||
+            "";
+          if (attachmentUrl && attachmentUrl.trim() !== "") {
+            lastMessageText = "Attachment";
+          }
+        }
+
+        dispatch(
+          updateUserLastMessage({
+            userid: userId,
+            lastMessage: lastMessageText || "",
+            lastChatTime: lastMessage?.dateTime || null,
+          })
+        );
+      });
+
+      unsubscribeLastMessageRefs.current[userId] = unsubscribe;
+    });
+
+    const subscriptionsRef = unsubscribeLastMessageRefs.current;
+
+    return () => {
+      const currentUserIds = new Set(users.map((u) => getDriverId(u)).filter(Boolean));
+      Object.keys(subscriptionsRef).forEach((userId) => {
+        if (!currentUserIds.has(userId)) {
+          const unsubscribe = subscriptionsRef[userId];
+          if (unsubscribe) {
+            unsubscribe();
+            delete subscriptionsRef[userId];
+          }
+        }
+      });
+    };
+  }, [users, subscribeLastMessage, dispatch]);
+
   const showInitialLoader = loading && !hasLoaded && users.length === 0;
 
   // Subscribe to unread counts for all users
@@ -250,14 +311,16 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     });
 
     // Cleanup: unsubscribe from users that are no longer in the list
+    const subscriptionsRef = unsubscribeUnreadRefs.current;
+
     return () => {
       const currentUserIds = new Set(users.map((u) => getDriverId(u)).filter(Boolean));
-      Object.keys(unsubscribeUnreadRefs.current).forEach((userId) => {
+      Object.keys(subscriptionsRef).forEach((userId) => {
         if (!currentUserIds.has(userId)) {
-          const unsubscribe = unsubscribeUnreadRefs.current[userId];
+          const unsubscribe = subscriptionsRef[userId];
           if (unsubscribe) {
             unsubscribe();
-            delete unsubscribeUnreadRefs.current[userId];
+            delete subscriptionsRef[userId];
           }
           // Remove from unread counts
           setUnreadCounts((prev) => {
@@ -269,6 +332,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       });
     };
   }, [users, subscribeUnreadCount]);
+
 
   // Transform users from Redux to drivers format
   // Redux already preserves all users, so we use it directly
