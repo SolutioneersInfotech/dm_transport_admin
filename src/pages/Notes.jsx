@@ -330,9 +330,9 @@ export default function Notes() {
                   <div className="flex flex-col gap-4">
                     {group.items.map((message) => {
                       const isMine =
-                        message.senderId &&
                         adminUser?.userid &&
-                        message.senderId === adminUser.userid;
+                        (message.senderAdminId === adminUser.userid ||
+                          message.senderId === adminUser.userid);
                       const priorityClass =
                         PRIORITY_COLORS[message.priority] ||
                         PRIORITY_COLORS[0];
