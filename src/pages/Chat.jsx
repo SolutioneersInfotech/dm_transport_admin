@@ -88,6 +88,7 @@ const Chat = () => {
           onSelectDriver={handleSelectDriver}
           selectedDriver={selectedDriver}
           chatApi={chatAPI}
+          chatType="general"
         />
       </div>
 

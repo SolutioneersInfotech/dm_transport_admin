@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
-import { fetchUsers, fetchMoreUsers, updateUserLastMessage } from "../store/slices/usersSlice";
+import { fetchUsers, fetchMoreUsers, setUsersFromChatApi, updateUserLastMessage } from "../store/slices/usersSlice";
 import ChatListItem from "./ChatListItem";
 import SkeletonLoader from "./skeletons/Skeleton";
 import { Input } from "./ui/input";
@@ -27,9 +27,9 @@ const statusColorClass = {
 
 const fetchedUsersCache = new Set();
 
-const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
+const ChatList = ({ onSelectDriver, selectedDriver, chatApi, chatType = "general" }) => {
   const dispatch = useAppDispatch();
-  const { users, loading, loadingMore, hasMore, page, limit, hasLoaded } = useAppSelector(
+  const { users, loading, loadingMore, hasMore, page, limit, hasLoaded, source } = useAppSelector(
     (state) => state.users
   );
   // console.log(users);
@@ -65,12 +65,39 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     return candidate;
   }
 
-  // Initial fetch on mount - only when the list has never been loaded.
+  // Initial fetch on mount and when switching chat types.
   useEffect(() => {
+    const shouldFetchFromApi = typeof chatApi?.fetchUsersForChat === "function";
+
+    if (source === chatType && hasLoaded) {
+      return;
+    }
+
+    if (shouldFetchFromApi) {
+      let isMounted = true;
+
+      (async () => {
+        try {
+          const response = await chatApi.fetchUsersForChat();
+          if (!isMounted) return;
+          dispatch(setUsersFromChatApi({
+            users: Array.isArray(response?.users) ? response.users : [],
+            source: chatType,
+          }));
+        } catch (error) {
+          console.error("Failed to fetch users for chat:", error);
+        }
+      })();
+
+      return () => {
+        isMounted = false;
+      };
+    }
+
     if (!hasLoaded && !loading) {
       dispatch(fetchUsers({ page: 1, limit: -1 }));
     }
-  }, [dispatch, hasLoaded, loading]);
+  }, [chatApi, chatType, dispatch, hasLoaded, loading, source]);
 
   // Infinite scroll observer - prevent duplicate calls
   const isLoadingRef = useRef(false);
