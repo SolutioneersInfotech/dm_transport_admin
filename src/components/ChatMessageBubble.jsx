@@ -340,7 +340,7 @@ export default function ChatMessageBubble({
 
   const statusIcon = statusMap[msg?.status] ?? "";
   const statusColor =
-    msg?.status === 2 ? "text-[#53bdeb]" : "text-white/70";
+    msg?.status === 2 ? "text-[#7fb3ff]" : "text-white/70";
 
   /* ================= ATTACHMENT TYPE ================= */
   const lowerUrl = attachment ? String(attachment).toLowerCase() : "";
@@ -361,10 +361,10 @@ export default function ChatMessageBubble({
   /* ================= STYLES (WhatsApp-like) ================= */
   const containerAlign = isAdmin ? "justify-end" : "justify-start";
   const bubbleAlign = isAdmin ? "items-end" : "items-start";
-  // Sent = green bubble (WhatsApp), Received = gray bubble
+  // Sent = blue bubble (admin theme), Received = blue-gray bubble
   const bubbleStyle = isAdmin
-    ? "bg-[#005c4b] text-white rounded-br-md"
-    : "bg-[#202c33] text-[#e9edef] rounded-bl-md";
+    ? "bg-[#1f6feb] text-white rounded-br-md"
+    : "bg-[#1c2530] text-[#e9edef] rounded-bl-md";
   const bubbleRounding = isAdmin
     ? "rounded-2xl rounded-br-md"
     : "rounded-2xl rounded-bl-md";
@@ -408,7 +408,7 @@ export default function ChatMessageBubble({
               onClick={() => onReplyClick?.(msg.replyTo)}
               className={`mb-2 w-full text-left rounded border-l-2 pl-2 py-1 text-xs ${
                 isAdmin
-                  ? "border-[#00a884] bg-white/10 text-white"
+                  ? "border-[#1f6feb] bg-white/10 text-white"
                   : "border-gray-500 bg-black/20 text-gray-300"
               } truncate`}
               title={replyToPreview}
