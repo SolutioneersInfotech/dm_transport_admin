@@ -233,7 +233,61 @@ export default function ChatWindow({ driver, chatApi }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [showFilePreview, setShowFilePreview] = useState(false);
   const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
-  const [lightboxImageUrl, setLightboxImageUrl] = useState(null);
+  const [lightboxMedia, setLightboxMedia] = useState(null);
+  const buildChatMediaFileName = useCallback((url, sender, dateTime) => {
+    const safeSender = String(sender || "unknown_sender")
+      .trim()
+      .replace(/\s+/g, "_")
+      .replace(/[^a-zA-Z0-9_-]/g, "") || "unknown_sender";
+
+    const dt = dateTime ? new Date(dateTime) : new Date();
+    const safeDateTime = Number.isNaN(dt.getTime())
+      ? new Date().toISOString().replace(/[:.]/g, "-")
+      : dt.toISOString().replace(/[:.]/g, "-");
+
+    let extension = "jpg";
+    try {
+      const pathName = new URL(url).pathname || "";
+      const fileName = pathName.split("/").pop() || "";
+      const fromPath = fileName.includes(".") ? fileName.split(".").pop() : "";
+      if (fromPath) {
+        extension = fromPath.toLowerCase();
+      }
+    } catch {
+      const directMatch = String(url || "").match(/\.([a-zA-Z0-9]+)(?:\?|$)/);
+      if (directMatch?.[1]) {
+        extension = directMatch[1].toLowerCase();
+      }
+    }
+
+    return `chat_media_${safeSender}_${safeDateTime}.${extension}`;
+  }, []);
+
+  const handleLightboxDownload = useCallback(async () => {
+    if (!lightboxMedia?.url) return;
+
+    try {
+      const response = await fetch(lightboxMedia.url, { mode: "cors" });
+      if (!response.ok) {
+        throw new Error(`Download failed with status ${response.status}`);
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = buildChatMediaFileName(
+        lightboxMedia.url,
+        lightboxMedia.senderName,
+        lightboxMedia.dateTime
+      );
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (error) {
+      console.error("Failed to download chat media:", error);
+    }
+  }, [buildChatMediaFileName, lightboxMedia]);
   const driverId = (() => {
     const candidate =
       driver?.userid ??
@@ -442,13 +496,13 @@ export default function ChatWindow({ driver, chatApi }) {
   }, [contextMenu]);
 
   useEffect(() => {
-    if (!lightboxImageUrl) return;
+    if (!lightboxMedia?.url) return;
     const onKeyDown = (e) => {
-      if (e.key === "Escape") setLightboxImageUrl(null);
+      if (e.key === "Escape") setLightboxMedia(null);
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [lightboxImageUrl]);
+  }, [lightboxMedia]);
 
   /* ================= FILE ATTACHMENT ================= */
   function openFilePicker(accept) {
@@ -692,7 +746,13 @@ export default function ChatWindow({ driver, chatApi }) {
                         el?.classList.add("ring-2", "ring-blue-500");
                         setTimeout(() => el?.classList.remove("ring-2", "ring-blue-500"), 1200);
                       }}
-                      onImageClick={(url) => setLightboxImageUrl(url)}
+                      onImageClick={(url) =>
+                        setLightboxMedia({
+                          url,
+                          senderName,
+                          dateTime: msg?.dateTime,
+                        })
+                      }
                     />
 
                   </div>
@@ -820,37 +880,38 @@ export default function ChatWindow({ driver, chatApi }) {
       )}
 
       {/* Image lightbox dialog */}
-      {lightboxImageUrl && (
+      {lightboxMedia?.url && (
         <div
           className="absolute inset-0 z-[200] flex items-center justify-center bg-black/90 p-4"
-          onClick={() => setLightboxImageUrl(null)}
+          onClick={() => setLightboxMedia(null)}
           role="dialog"
           aria-modal="true"
           aria-label="Image preview"
         >
           <div className="absolute right-4 top-4 flex items-center gap-2">
             <a
-              href={lightboxImageUrl}
-              download
-              target="_blank"
-              rel="noopener noreferrer"
+              href="#"
               className="rounded-full bg-white/10 p-2 text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50"
               aria-label="Download image"
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleLightboxDownload();
+              }}
             >
               <Download className="h-4 w-4" />
             </a>
             <button
               type="button"
               className="rounded-full bg-white/10 p-2 text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50"
-              onClick={() => setLightboxImageUrl(null)}
+              onClick={() => setLightboxMedia(null)}
               aria-label="Close"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
           <img
-            src={lightboxImageUrl}
+            src={lightboxMedia.url}
             alt="Full size"
             className="max-h-[90vh] max-w-full rounded-lg object-contain shadow-2xl"
             onClick={(e) => e.stopPropagation()}
