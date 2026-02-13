@@ -10,9 +10,10 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
-import { signInWithCustomToken } from "firebase/auth";
-import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
-import { auth, firestore, storage } from "../firebase/firebaseApp";
+import { getApp, getApps, initializeApp } from "firebase/app";
+import { getAuth, signInWithCustomToken } from "firebase/auth";
+import { getDownloadURL, getStorage, ref, uploadBytesResumable } from "firebase/storage";
+import { app, firestore } from "../firebase/firebaseApp";
 import { getAdminFirebaseCustomToken } from "./adminFirebaseToken";
 
 const PRIORITY_FILTERS = {
@@ -23,22 +24,39 @@ const PRIORITY_FILTERS = {
 };
 
 let authPromise = null;
+let notesUploadStorage = null;
 
-async function ensureAdminFirebaseAuth() {
-  const currentUser = auth.currentUser;
+function getOrCreateNotesUploadApp() {
+  const appName = "notes-upload";
+  const existing = getApps().find((entry) => entry.name === appName);
+  if (existing) {
+    return existing;
+  }
 
-  if (currentUser?.uid?.startsWith("admin_")) {
-    return currentUser;
+  return initializeApp(app.options, appName);
+}
+
+async function ensureAdminFirebaseStorage() {
+  if (notesUploadStorage) {
+    return notesUploadStorage;
   }
 
   if (!authPromise) {
-    authPromise = getAdminFirebaseCustomToken()
-      .then((token) => signInWithCustomToken(auth, token))
-      .then((credential) => credential.user)
-      .catch((error) => {
-        authPromise = null;
-        throw error;
-      });
+    authPromise = (async () => {
+      const uploadApp = getOrCreateNotesUploadApp();
+      const uploadAuth = getAuth(uploadApp);
+
+      if (!uploadAuth.currentUser?.uid?.startsWith("admin_")) {
+        const token = await getAdminFirebaseCustomToken();
+        await signInWithCustomToken(uploadAuth, token);
+      }
+
+      notesUploadStorage = getStorage(uploadApp);
+      return notesUploadStorage;
+    })().catch((error) => {
+      authPromise = null;
+      throw error;
+    });
   }
 
   return authPromise;
@@ -185,15 +203,16 @@ export const uploadNotesAttachment = async (file, type) => {
     throw new Error("Invalid file");
   }
 
-  await ensureAdminFirebaseAuth();
+  const uploadStorage = await ensureAdminFirebaseStorage();
 
   const safeName = (file.name || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
   const normalizedType = ["image", "video", "document"].includes(type)
     ? type
     : "document";
-  const uploaderUid = auth.currentUser?.uid || "admin_unknown";
+  const uploadApp = getApp("notes-upload");
+  const uploaderUid = getAuth(uploadApp).currentUser?.uid || "admin_unknown";
   const storageRef = ref(
-    storage,
+    uploadStorage,
     `chat/uploads/${uploaderUid}/notes/${normalizedType}_${Date.now()}_${safeName}`
   );
   const uploadTask = uploadBytesResumable(storageRef, file);
