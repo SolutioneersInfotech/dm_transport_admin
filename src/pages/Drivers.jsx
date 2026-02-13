@@ -16,7 +16,7 @@ import {
   KeyRound,
   Pencil,
 } from "lucide-react";
-import { useDriversQuery } from "../services/driverQueries";
+import { useDriverCountQuery, useDriversQuery } from "../services/driverQueries";
 import { fetchAllDrivers } from "../services/driverAPI";
 import { createDriver } from "../services/driverCreateAPI";
 import { uploadDriverProfilePhoto } from "../services/driverPhotoUpload";
@@ -137,6 +137,11 @@ export default function Drivers() {
     isFetching,
     refetch,
   } = useDriversQuery({ page, limit, search: debouncedSearch });
+  const { data: driverCountData } = useDriverCountQuery({
+    search: debouncedSearch,
+    status: statusFilter,
+    category: categoryFilter,
+  });
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -303,7 +308,7 @@ export default function Drivers() {
 
   const selectedDriver =
     drivers.find((driver) => driver.id === selectedId) ?? drivers[0];
-  const totalDrivers = drivers.length || 0;
+  const totalDrivers = driverCountData?.totalDrivers ?? null;
 
   const isInitialLoading = (isLoading || isSearchLoading) && drivers.length === 0;
 
@@ -760,7 +765,7 @@ export default function Drivers() {
           </div>
 
           <div className="sticky bottom-0 flex items-center justify-between border-t border-slate-800 bg-slate-950/95 px-4 py-3 text-sm text-slate-400 backdrop-blur">
-            <span>Total drivers: {totalDrivers}</span>
+            <span>Total drivers: {totalDrivers ?? "-"}</span>
             <button
               type="button"
               onClick={() => openModal("add")}

@@ -142,3 +142,24 @@ export const maintenanceFetchChatHistoryRoute = (userid) => `${baseBackendUrl}/f
 export const maintenanceSendChatMessageRoute = `${baseBackendUrl}/sendchatmessage`;
 export const maintenanceDeleteChatHistoryRoute = `${baseBackendUrl}/deletechathistory`;
 export const maintenanceDeleteSpecificChatRoute = `${baseBackendUrl}/deletespecificchats`;
+
+// Driver routes
+export const fetchDriverCountRoute = (options = {}) => {
+  const baseUrl = `${baseBackendUrl}/drivers/count`;
+  const params = new URLSearchParams();
+
+  if (options.search !== undefined) {
+    params.append("search", options.search);
+  }
+
+  if (options.status && options.status !== "all") {
+    params.append("status", options.status);
+  }
+
+  if (options.category && options.category !== "all") {
+    params.append("category", options.category);
+  }
+
+  const queryString = params.toString();
+  return queryString ? `${baseUrl}?${queryString}` : baseUrl;
+};

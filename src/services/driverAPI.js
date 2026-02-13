@@ -1,3 +1,5 @@
+import { fetchDriverCountRoute } from "../utils/apiRoutes";
+
 const rawBase =
   import.meta.env.VITE_API_BASE_URL ??
   "https://northamerica-northeast1-dmtransport-1.cloudfunctions.net/api/";
@@ -113,4 +115,27 @@ export async function fetchAllDrivers({ limit = 100 } = {}) {
   }
 
   return allDrivers;
+}
+
+export async function fetchDriverCount({ search = "", status = "all", category = "all" } = {}) {
+  const token = localStorage.getItem("adminToken");
+  const response = await fetch(
+    fetchDriverCountRoute({ search, status, category }),
+    {
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch driver count");
+  }
+
+  const data = await response.json();
+
+  return {
+    totalDrivers: Number(data?.total_drivers ?? data?.totalDrivers ?? 0),
+  };
 }
