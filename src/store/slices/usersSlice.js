@@ -5,6 +5,7 @@ const USERS_CACHE_KEY = "chat_users_cache_v1";
 
 const defaultState = {
   users: [],
+  sourceKey: null,
   loading: false,
   loadingMore: false,
   error: null,
@@ -30,6 +31,7 @@ const readUsersCache = () => {
 
     return {
       users: parsed.users,
+      sourceKey: parsed.sourceKey || "general",
       hasMore: Boolean(parsed.hasMore),
       page: Number.isFinite(parsed.page) ? parsed.page : 1,
       limit: Number.isFinite(parsed.limit) ? parsed.limit : 10,
@@ -51,6 +53,7 @@ const writeUsersCache = (state) => {
   try {
     const payload = {
       users: state.users,
+      sourceKey: state.sourceKey,
       hasMore: state.hasMore,
       page: state.page,
       limit: state.limit,
@@ -70,7 +73,7 @@ const cachedState = readUsersCache();
 // Async thunk for fetching initial users
 export const fetchUsers = createAsyncThunk(
   "users/fetchUsers",
-  async ({ page = 1, limit = -1, search = undefined } = {}, { rejectWithValue }) => {
+  async ({ page = 1, limit = -1, search = undefined, sourceKey = "general" } = {}, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem("adminToken");
       const url = fetchUsersRoute(page, limit, search);
@@ -94,6 +97,7 @@ export const fetchUsers = createAsyncThunk(
 
       return {
         users: data.users || [],
+        sourceKey,
         hasMore: pagination.hasMore !== undefined ? pagination.hasMore : false,
         page: pagination.page || page,
         limit: pagination.limit || limit,
@@ -110,7 +114,7 @@ export const fetchUsers = createAsyncThunk(
 // Async thunk for loading more users (pagination)
 export const fetchMoreUsers = createAsyncThunk(
   "users/fetchMoreUsers",
-  async ({ page, limit = 10, search = undefined }, { rejectWithValue }) => {
+  async ({ page, limit = 10, search = undefined, sourceKey = "general" }, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem("adminToken");
       const url = fetchUsersRoute(page, limit, search);
@@ -134,6 +138,7 @@ export const fetchMoreUsers = createAsyncThunk(
 
       return {
         users: data.users || [],
+        sourceKey,
         hasMore: pagination.hasMore !== undefined ? pagination.hasMore : false,
         page: pagination.page || page,
         limit: pagination.limit || limit,
@@ -152,12 +157,40 @@ const usersSlice = createSlice({
   reducers: {
     clearUsers: (state) => {
       state.users = [];
+      state.sourceKey = null;
       state.error = null;
       state.hasMore = false;
       state.page = 1;
       state.totalDocuments = 0;
       state.totalPages = 0;
       state.hasLoaded = false;
+      writeUsersCache(state);
+    },
+    setUsersForSource: (state, action) => {
+      const {
+        users = [],
+        sourceKey = "general",
+        page = 1,
+        limit = -1,
+        hasMore = false,
+        totalDocuments = 0,
+        totalPages = 0,
+        search = undefined,
+      } = action.payload || {};
+
+      state.users = users;
+      state.sourceKey = sourceKey;
+      state.page = page;
+      state.limit = limit;
+      state.hasMore = hasMore;
+      state.totalDocuments = totalDocuments;
+      state.totalPages = totalPages;
+      state.lastSearch = search;
+      state.loading = false;
+      state.loadingMore = false;
+      state.error = null;
+      state.hasLoaded = true;
+      state.lastFetched = Date.now();
       writeUsersCache(state);
     },
     updateUserLastMessage: (state, action) => {
@@ -191,6 +224,7 @@ const usersSlice = createSlice({
       .addCase(fetchUsers.fulfilled, (state, action) => {
         // Replace users for initial load
         state.users = action.payload.users;
+        state.sourceKey = action.payload.sourceKey || "general";
         state.hasMore = action.payload.hasMore;
         state.page = action.payload.page;
         state.limit = action.payload.limit;
@@ -216,6 +250,7 @@ const usersSlice = createSlice({
       })
       .addCase(fetchMoreUsers.fulfilled, (state, action) => {
         state.users = [...state.users, ...action.payload.users];
+        state.sourceKey = action.payload.sourceKey || state.sourceKey || "general";
         state.hasMore = action.payload.hasMore;
         state.page = action.payload.page;
         state.limit = action.payload.limit;
@@ -233,5 +268,5 @@ const usersSlice = createSlice({
   },
 });
 
-export const { clearUsers, updateUserLastMessage } = usersSlice.actions;
+export const { clearUsers, setUsersForSource, updateUserLastMessage } = usersSlice.actions;
 export default usersSlice.reducer;

@@ -7,6 +7,7 @@ import * as chatAPI from "../services/chatAPI";
 import { useAppSelector } from "../store/hooks";
 
 const Chat = () => {
+  const MotionDiv = motion.div;
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedDriver, setSelectedDriver] = useState(null);
   const { users } = useAppSelector((state) => state.users);
@@ -88,6 +89,7 @@ const Chat = () => {
           onSelectDriver={handleSelectDriver}
           selectedDriver={selectedDriver}
           chatApi={chatAPI}
+          sourceKey="general"
         />
       </div>
 
@@ -95,7 +97,7 @@ const Chat = () => {
       <div className="flex-1 h-full overflow-hidden min-w-0">
         <AnimatePresence mode="wait">
           {selectedDriver ? (
-            <motion.div
+            <MotionDiv
               key={selectedDriver.userid ?? selectedDriver.id ?? "chat"}
               className="h-full"
               initial={{ opacity: 0, x: 16 }}
@@ -104,9 +106,9 @@ const Chat = () => {
               transition={{ duration: 0.2, ease: "easeOut" }}
             >
               <ChatWindow driver={selectedDriver} chatApi={chatAPI} />
-            </motion.div>
+            </MotionDiv>
           ) : (
-            <motion.div
+            <MotionDiv
               key="placeholder"
               className="flex justify-center items-center h-full text-gray-500"
               initial={{ opacity: 0 }}
@@ -115,7 +117,7 @@ const Chat = () => {
               transition={{ duration: 0.15 }}
             >
               Select a driver to start chat
-            </motion.div>
+            </MotionDiv>
           )}
         </AnimatePresence>
       </div>

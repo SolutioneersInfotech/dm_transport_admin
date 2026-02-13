@@ -13,6 +13,7 @@ const MaintenanceChat = () => {
           onSelectDriver={setSelectedDriver}
           selectedDriver={selectedDriver}
           chatApi={maintenanceChatAPI}
+          sourceKey="maintenance"
         />
       </div>
 

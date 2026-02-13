@@ -1,6 +1,12 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
-import { fetchUsers, fetchMoreUsers, updateUserLastMessage } from "../store/slices/usersSlice";
+import {
+  clearUsers,
+  fetchUsers,
+  fetchMoreUsers,
+  setUsersForSource,
+  updateUserLastMessage,
+} from "../store/slices/usersSlice";
 import ChatListItem from "./ChatListItem";
 import SkeletonLoader from "./skeletons/Skeleton";
 import { Input } from "./ui/input";
@@ -27,9 +33,9 @@ const statusColorClass = {
 
 const fetchedUsersCache = new Set();
 
-const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
+const ChatList = ({ onSelectDriver, selectedDriver, chatApi, sourceKey = "general" }) => {
   const dispatch = useAppDispatch();
-  const { users, loading, loadingMore, hasMore, page, limit, hasLoaded } = useAppSelector(
+  const { users, loading, loadingMore, hasMore, page, limit, hasLoaded, sourceKey: activeSourceKey } = useAppSelector(
     (state) => state.users
   );
   // console.log(users);
@@ -44,6 +50,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const unsubscribeLastMessageRefs = useRef({});
 
   const fetchMessages = chatApi?.fetchMessages || defaultFetchMessages;
+  const fetchUsersForChat = chatApi?.fetchUsersForChat;
   const subscribeUnreadCount = chatApi?.subscribeUnreadCount;
   const subscribeLastMessage =
     chatApi?.subscribeLastMessage || defaultSubscribeLastMessage;
@@ -65,12 +72,43 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     return candidate;
   }
 
-  // Initial fetch on mount - only when the list has never been loaded.
+  // Initial fetch on mount and when source context changes.
   useEffect(() => {
-    if (!hasLoaded && !loading) {
-      dispatch(fetchUsers({ page: 1, limit: -1 }));
-    }
-  }, [dispatch, hasLoaded, loading]);
+    const loadUsers = async () => {
+      if (loading) return;
+
+      // Prevent cross-page leakage between chat and maintenance users.
+      if (hasLoaded && activeSourceKey !== sourceKey) {
+        dispatch(clearUsers());
+      }
+
+      try {
+        if (fetchUsersForChat) {
+          const { users: fetchedUsers = [] } = await fetchUsersForChat();
+          dispatch(
+            setUsersForSource({
+              users: fetchedUsers,
+              sourceKey,
+              page: 1,
+              limit: -1,
+              hasMore: false,
+              totalDocuments: fetchedUsers.length,
+              totalPages: 1,
+            })
+          );
+          return;
+        }
+
+        if (!hasLoaded || activeSourceKey !== sourceKey) {
+          dispatch(fetchUsers({ page: 1, limit: -1, sourceKey }));
+        }
+      } catch (error) {
+        console.error(`Failed to load users for ${sourceKey} chat:`, error);
+      }
+    };
+
+    loadUsers();
+  }, [dispatch, hasLoaded, loading, activeSourceKey, sourceKey, fetchUsersForChat]);
 
   // Infinite scroll observer - prevent duplicate calls
   const isLoadingRef = useRef(false);
@@ -79,11 +117,11 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     if (hasMore && !loadingMore && !loading && !isLoadingRef.current) {
       isLoadingRef.current = true;
       const nextPage = page + 1;
-      dispatch(fetchMoreUsers({ page: nextPage, limit })).finally(() => {
+      dispatch(fetchMoreUsers({ page: nextPage, limit, sourceKey })).finally(() => {
         isLoadingRef.current = false;
       });
     }
-  }, [dispatch, hasMore, loadingMore, loading, page, limit]);
+  }, [dispatch, hasMore, loadingMore, loading, page, limit, sourceKey]);
 
   useEffect(() => {
     // Only set up observer if we have more to load and not currently loading
@@ -135,7 +173,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         const hasLastChatTime = Boolean(u.last_chat_time);
 
         // Avoid rehydrating users that are already resolved in prior mounts.
-        if (fetchedUsersCache.has(userId)) {
+        if (fetchedUsersCache.has(`${sourceKey}:${userId}`)) {
           return false;
         }
 
@@ -203,11 +241,11 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
                 })
               );
             }
-            fetchedUsersCache.add(userId);
+            fetchedUsersCache.add(`${sourceKey}:${userId}`);
           } catch (error) {
             console.error(`Failed to fetch messages for user ${userId}:`, error);
             // On error, still mark as fetched to avoid infinite retries
-            fetchedUsersCache.add(userId);
+            fetchedUsersCache.add(`${sourceKey}:${userId}`);
             // Set empty values on error
             dispatch(
               updateUserLastMessage({
@@ -228,7 +266,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     };
 
     fetchAllLastMessages();
-  }, [users, fetchMessages, dispatch, loading, isFetchingMessages]);
+  }, [users, fetchMessages, dispatch, loading, isFetchingMessages, sourceKey]);
 
 
 
