@@ -308,6 +308,7 @@ export default function ChatMessageBubble({
   replyToMessage = null,
   onReplyClick,
   onImageClick,
+  onDownloadMedia,
 }) {
   /* ================= DATA ================= */
   const isAdmin = msg?.type === 1;
@@ -473,12 +474,22 @@ export default function ChatMessageBubble({
 
           {/* 🎥 Video */}
           {attachment && isVideo && (
-            <video
-              src={attachment}
-              controls
-              preload="metadata"
-              className="mb-2 max-h-72 w-full rounded-lg bg-black"
-            />
+            <div className="mb-2 space-y-2">
+              <video
+                src={attachment}
+                controls
+                controlsList="nodownload"
+                preload="metadata"
+                className="max-h-72 w-full rounded-lg bg-black"
+              />
+              <button
+                type="button"
+                className="rounded bg-black/30 px-3 py-1.5 text-xs text-white hover:bg-black/40"
+                onClick={() => onDownloadMedia?.(attachment)}
+              >
+                Download video
+              </button>
+            </div>
           )}
 
           {/* 📎 Other file */}

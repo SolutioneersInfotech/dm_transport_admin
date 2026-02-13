@@ -263,11 +263,11 @@ export default function ChatWindow({ driver, chatApi }) {
     return `chat_media_${safeSender}_${safeDateTime}.${extension}`;
   }, []);
 
-  const handleLightboxDownload = useCallback(async () => {
-    if (!lightboxMedia?.url) return;
+  const downloadChatMedia = useCallback(async (url, senderName, dateTime) => {
+    if (!url) return;
 
     try {
-      const response = await fetch(lightboxMedia.url, { mode: "cors" });
+      const response = await fetch(url, { mode: "cors" });
       if (!response.ok) {
         throw new Error(`Download failed with status ${response.status}`);
       }
@@ -276,9 +276,9 @@ export default function ChatWindow({ driver, chatApi }) {
       const a = document.createElement("a");
       a.href = objectUrl;
       a.download = buildChatMediaFileName(
-        lightboxMedia.url,
-        lightboxMedia.senderName,
-        lightboxMedia.dateTime
+        url,
+        senderName,
+        dateTime
       );
       document.body.appendChild(a);
       a.click();
@@ -287,7 +287,17 @@ export default function ChatWindow({ driver, chatApi }) {
     } catch (error) {
       console.error("Failed to download chat media:", error);
     }
-  }, [buildChatMediaFileName, lightboxMedia]);
+  }, [buildChatMediaFileName]);
+
+  const handleLightboxDownload = useCallback(async () => {
+    if (!lightboxMedia?.url) return;
+
+    await downloadChatMedia(
+      lightboxMedia.url,
+      lightboxMedia.senderName,
+      lightboxMedia.dateTime
+    );
+  }, [downloadChatMedia, lightboxMedia]);
   const driverId = (() => {
     const candidate =
       driver?.userid ??
@@ -752,6 +762,9 @@ export default function ChatWindow({ driver, chatApi }) {
                           senderName,
                           dateTime: msg?.dateTime,
                         })
+                      }
+                      onDownloadMedia={(url) =>
+                        downloadChatMedia(url, senderName, msg?.dateTime)
                       }
                     />
 
