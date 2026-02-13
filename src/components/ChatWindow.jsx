@@ -187,7 +187,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Paperclip, Trash2 } from "lucide-react";
+import { Download, Paperclip, Trash2, X } from "lucide-react";
 import {
   subscribeMessages as defaultSubscribeMessages,
   sendMessage as defaultSendMessage,
@@ -543,7 +543,7 @@ export default function ChatWindow({ driver, chatApi }) {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-[#0b141a]">
+    <div className="relative flex flex-col h-full overflow-hidden bg-[#0b141a]">
       {/* ================= HEADER (WhatsApp-like) ================= */}
       <div className="px-4 py-3 border-b border-[#2a3942] bg-[#202c33] sticky top-0 z-40 flex justify-between items-center">
         <div className="flex items-center gap-3 min-w-0">
@@ -810,20 +810,33 @@ export default function ChatWindow({ driver, chatApi }) {
       {/* Image lightbox dialog */}
       {lightboxImageUrl && (
         <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 p-4"
+          className="absolute inset-0 z-[200] flex items-center justify-center bg-black/90 p-4"
           onClick={() => setLightboxImageUrl(null)}
           role="dialog"
           aria-modal="true"
           aria-label="Image preview"
         >
-          <button
-            type="button"
-            className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50"
-            onClick={() => setLightboxImageUrl(null)}
-            aria-label="Close"
-          >
-            ✕
-          </button>
+          <div className="absolute right-4 top-4 flex items-center gap-2">
+            <a
+              href={lightboxImageUrl}
+              download
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-full bg-white/10 p-2 text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50"
+              aria-label="Download image"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Download className="h-4 w-4" />
+            </a>
+            <button
+              type="button"
+              className="rounded-full bg-white/10 p-2 text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50"
+              onClick={() => setLightboxImageUrl(null)}
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
           <img
             src={lightboxImageUrl}
             alt="Full size"
