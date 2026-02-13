@@ -460,13 +460,13 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
 
       {/* 📜 DRIVER LIST (ONLY THIS SCROLLS) */}
       <div className="flex-1 overflow-y-auto chat-list-scroll">
-        {/* Show loading skeleton while fetching users OR fetching messages for sorting */}
-        {(showInitialLoader || isFetchingMessages) && (
+        {/* Show loading skeleton only during the very first users fetch */}
+        {showInitialLoader && (
           <SkeletonLoader count={10} />
         )}
 
-        {/* Show sorted list ONLY after messages are fetched and sorted (prevents reordering UX issue) */}
-        {!showInitialLoader && !isFetchingMessages && filtered.length > 0 && (
+        {/* Show list immediately after users are loaded; message preview hydration runs in background */}
+        {!showInitialLoader && filtered.length > 0 && (
           <>
             {filtered.map((driver) => (
               <ChatListItem
@@ -480,7 +480,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         )}
 
         {/* Infinite scroll trigger - only show when hasMore (disabled since we fetch all) */}
-        {hasMore && !showInitialLoader && !isFetchingMessages && (
+        {hasMore && !showInitialLoader && (
           <div 
             ref={observerTarget} 
             className="h-16 flex items-center justify-center py-2"
@@ -497,12 +497,12 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         )}
 
         {/* Empty state */}
-        {!showInitialLoader && !isFetchingMessages && users.length === 0 && filtered.length === 0 && (
+        {!showInitialLoader && users.length === 0 && filtered.length === 0 && (
           <p className="text-center text-gray-500 text-sm mt-4">
             No drivers found
           </p>
         )}
-        {!showInitialLoader && !isFetchingMessages && users.length > 0 && filtered.length === 0 && (
+        {!showInitialLoader && users.length > 0 && filtered.length === 0 && (
           <p className="text-center text-gray-500 text-sm mt-4">
             {statusFilter === "seen" && "No seen chats"}
             {statusFilter === "unseen" && "No unseen chats"}
@@ -511,7 +511,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         )}
 
         {/* No more to load */}
-        {!hasMore && !showInitialLoader && !loadingMore && !isFetchingMessages && filtered.length > 0 && (
+        {!hasMore && !showInitialLoader && !loadingMore && filtered.length > 0 && (
           <p className="text-center text-gray-500 text-xs mt-2 py-2">
             All drivers loaded
           </p>
