@@ -145,7 +145,7 @@ export const maintenanceDeleteSpecificChatRoute = `${baseBackendUrl}/deletespeci
 
 // Driver routes
 export const fetchDriverCountRoute = (options = {}) => {
-  const baseUrl = `${baseBackendUrl}/drivers/count`;
+  const baseUrl = `${baseBackendUrl}/fetchdrivercount`;
   const params = new URLSearchParams();
 
   if (options.search !== undefined) {
