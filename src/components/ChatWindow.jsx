@@ -187,7 +187,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Copy, Download, Paperclip, Trash2, X } from "lucide-react";
+import { Copy, Download, Mail, Paperclip, Phone, Trash2, X } from "lucide-react";
 import {
   subscribeMessages as defaultSubscribeMessages,
   sendMessage as defaultSendMessage,
@@ -641,14 +641,14 @@ export default function ChatWindow({ driver, chatApi }) {
               <span className="font-semibold text-white truncate max-w-[260px]">
                 {driver?.driver_name || "Unknown"}
               </span>
-              <span className="text-gray-400">·</span>
-              <span className="text-sm text-gray-300 truncate max-w-[320px]">
-                {emailText}
-              </span>
-              <span className="text-gray-400">·</span>
-              <span className="text-sm text-gray-300 truncate max-w-[220px]">
-                {phoneText}
-              </span>
+              <div className="flex items-center gap-1 text-xs text-gray-300 min-w-0 max-w-[320px]">
+                <Mail className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                <span className="truncate">{emailText}</span>
+              </div>
+              <div className="flex items-center gap-1 text-xs text-gray-300 min-w-0 max-w-[220px]">
+                <Phone className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                <span className="truncate">{phoneText}</span>
+              </div>
             </div>
             <div className="text-xs text-gray-400">{formatLastSeen(driver?.lastSeen)}</div>
           </div>
