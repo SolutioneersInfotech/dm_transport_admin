@@ -16,6 +16,7 @@ const defaultState = {
   totalPages: 0,
   lastSearch: undefined,
   hasLoaded: false,
+  source: "general",
 };
 
 const readUsersCache = () => {
@@ -38,6 +39,7 @@ const readUsersCache = () => {
       lastSearch: parsed.lastSearch,
       lastFetched: Number.isFinite(parsed.lastFetched) ? parsed.lastFetched : null,
       hasLoaded: parsed.users.length > 0,
+      source: parsed.source || "general",
     };
   } catch (error) {
     console.error("Failed to read chat users cache:", error);
@@ -58,6 +60,7 @@ const writeUsersCache = (state) => {
       totalPages: state.totalPages,
       lastSearch: state.lastSearch,
       lastFetched: state.lastFetched,
+      source: state.source || "general",
     };
     window.localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(payload));
   } catch (error) {
@@ -158,6 +161,24 @@ const usersSlice = createSlice({
       state.totalDocuments = 0;
       state.totalPages = 0;
       state.hasLoaded = false;
+      state.source = "general";
+      writeUsersCache(state);
+    },
+    setUsersFromChatApi: (state, action) => {
+      const { users = [], source = "general" } = action.payload || {};
+      state.users = Array.isArray(users) ? users : [];
+      state.loading = false;
+      state.loadingMore = false;
+      state.error = null;
+      state.hasMore = false;
+      state.page = 1;
+      state.limit = -1;
+      state.totalDocuments = state.users.length;
+      state.totalPages = 1;
+      state.lastSearch = undefined;
+      state.lastFetched = Date.now();
+      state.hasLoaded = true;
+      state.source = source;
       writeUsersCache(state);
     },
     updateUserLastMessage: (state, action) => {
@@ -201,6 +222,7 @@ const usersSlice = createSlice({
         state.error = null;
         state.lastFetched = Date.now();
         state.hasLoaded = true;
+        state.source = "general";
         writeUsersCache(state);
       })
       .addCase(fetchUsers.rejected, (state, action) => {
@@ -208,6 +230,7 @@ const usersSlice = createSlice({
         state.loadingMore = false;
         state.error = action.payload;
         state.hasLoaded = true;
+        state.source = "general";
       })
       // Load more users
       .addCase(fetchMoreUsers.pending, (state) => {
@@ -233,5 +256,5 @@ const usersSlice = createSlice({
   },
 });
 
-export const { clearUsers, updateUserLastMessage } = usersSlice.actions;
+export const { clearUsers, setUsersFromChatApi, updateUserLastMessage } = usersSlice.actions;
 export default usersSlice.reducer;
