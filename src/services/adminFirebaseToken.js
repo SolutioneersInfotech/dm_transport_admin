@@ -1,6 +1,6 @@
 const rawBase =
   import.meta.env.VITE_API_BASE_URL ??
-  "https://northamerica-northeast1-dmtransport-1.cloudfunctions.net/api/admin";
+  "https://northamerica-northeast1-dmtransport-1.cloudfunctions.net/api";
 
 const BASE_URL = rawBase.replace(/\/+$/, "");
 
@@ -21,7 +21,7 @@ export async function getAdminFirebaseCustomToken() {
   }
 
   // BASE_URL is already .../api/admin, so path is /firebase/token (not /admin/firebase/token)
-  const response = await fetch(`${BASE_URL}/firebase/token`, {
+  const response = await fetch(`${BASE_URL}/admin/firebase/token`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${adminToken}`,
