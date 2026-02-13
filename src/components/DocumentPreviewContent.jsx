@@ -189,6 +189,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   const outFormatted = formatDateTime(outVal);
   const showInTime = inVal != null && inVal !== "" && inFormatted !== "—";
   const showOutTime = outVal != null && outVal !== "" && outFormatted !== "—";
+  const inOutTimeCopyValue = `In Time: ${inFormatted} , Out Time: ${outFormatted}`;
   const url = doc.document_url;
   const cleanURL = url?.split("?")[0];
   const ext = cleanURL?.split(".").pop()?.toLowerCase();
@@ -745,16 +746,15 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                 <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
                   <span className="font-medium text-gray-400 uppercase tracking-wide">In:</span>
                   <span className="text-white">{inFormatted}</span>
-                  {renderCopyButton(inFormatted, "in time")}
                 </div>
               )}
               {showOutTime && (
                 <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
                   <span className="font-medium text-gray-400 uppercase tracking-wide">Out:</span>
                   <span className="text-white">{outFormatted}</span>
-                  {renderCopyButton(outFormatted, "out time")}
                 </div>
               )}
+              {renderCopyButton(inOutTimeCopyValue, "in and out time")}
             </div>
           )}
           <div className="flex items-center gap-x-3 sm:ml-auto">
