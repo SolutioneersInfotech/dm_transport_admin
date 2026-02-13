@@ -146,6 +146,8 @@ export const sendNotesMessage = async ({
   contentOverride,
   adminUser,
 }) => {
+  const { firestore: adminFirestore } = await ensureAdminUploadServices();
+
   const resolvedAdmin = adminUser || getAdminUser() || {};
   const senderAdminId = resolvedAdmin?.userid || "";
   const senderName = resolvedAdmin?.name || senderAdminId || "Admin";
