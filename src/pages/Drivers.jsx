@@ -15,6 +15,7 @@ import {
   UploadCloud,
   KeyRound,
   Pencil,
+  Eye,
 } from "lucide-react";
 import { useDriverCountQuery, useDriversQuery } from "../services/driverQueries";
 import { fetchAllDrivers } from "../services/driverAPI";
@@ -22,6 +23,7 @@ import { createDriver } from "../services/driverCreateAPI";
 import { uploadDriverProfilePhoto } from "../services/driverPhotoUpload";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 
 const statusStyles = {
   active: "bg-emerald-500/15 text-emerald-300 border-emerald-500/20",
@@ -107,6 +109,7 @@ export default function Drivers() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [isStatusPopoverOpen, setIsStatusPopoverOpen] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [activeModal, setActiveModal] = useState(null);
   const [page, setPage] = useState(1);
@@ -605,28 +608,7 @@ export default function Drivers() {
                 className="w-full rounded-full border border-slate-800 bg-slate-900/60 py-2 pl-9 pr-4 text-sm text-slate-200 placeholder:text-slate-500 focus:border-sky-500"
               />
             </div>
-            <div className="flex flex-wrap gap-2 text-xs">
-              {["all", "active", "inactive"].map((status) => (
-                <button
-                  key={status}
-                  type="button"
-                  onClick={() => setStatusFilter(status)}
-                  className={`rounded-full border px-3 py-1 transition ${
-                    statusFilter === status
-                      ? "border-sky-500 bg-sky-500/20 text-sky-200"
-                      : "border-slate-700 text-slate-400 hover:border-slate-500"
-                  }`}
-                >
-                  {status === "all"
-                    ? "All status"
-                    : status.charAt(0).toUpperCase() + status.slice(1)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3 text-xs text-slate-400">
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
               {["all", "C", "D", "F"].map((category) => (
                 <button
                   key={category}
@@ -641,16 +623,73 @@ export default function Drivers() {
                   {category === "all" ? "All categories" : `Category ${category}`}
                 </button>
               ))}
+              <Popover open={isStatusPopoverOpen} onOpenChange={setIsStatusPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className={`flex h-8 w-8 items-center justify-center rounded-full border transition ${
+                      statusFilter === "all"
+                        ? "border-slate-700 text-slate-300 hover:border-slate-500"
+                        : statusFilter === "active"
+                          ? "border-emerald-400/50 text-emerald-300"
+                          : "border-rose-400/50 text-rose-300"
+                    }`}
+                    aria-label={`Status filter: ${statusFilter}`}
+                    title={`Status: ${statusFilter}`}
+                  >
+                    <span className="relative">
+                      <Eye className="h-4 w-4" />
+                      {statusFilter !== "all" && (
+                        <span
+                          className={`absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full ${
+                            statusFilter === "active" ? "bg-emerald-400" : "bg-rose-400"
+                          }`}
+                        />
+                      )}
+                    </span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  side="bottom"
+                  className="w-40 border border-slate-700 bg-slate-950 p-1 text-slate-100"
+                >
+                  {["all", "active", "inactive"].map((status) => {
+                    const isActive = statusFilter === status;
+                    return (
+                      <button
+                        key={status}
+                        type="button"
+                        onClick={() => {
+                          setStatusFilter(status);
+                          setIsStatusPopoverOpen(false);
+                        }}
+                        className={`flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm transition hover:bg-slate-800 ${
+                          isActive ? "bg-slate-800" : ""
+                        }`}
+                      >
+                        <span>
+                          {status === "all"
+                            ? "All status"
+                            : status.charAt(0).toUpperCase() + status.slice(1)}
+                        </span>
+                        {isActive && (
+                          <span
+                            className={`h-2 w-2 rounded-full ${
+                              status === "all"
+                                ? "bg-slate-400"
+                                : status === "active"
+                                  ? "bg-emerald-400"
+                                  : "bg-rose-400"
+                            }`}
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                </PopoverContent>
+              </Popover>
             </div>
-            <span>{filteredDrivers.length} drivers</span>
-          </div>
-
-          <div className="grid grid-cols-12 gap-2 border-b border-slate-800 px-4 py-3 text-xs uppercase tracking-[0.2em] text-slate-500">
-            <span className="col-span-4">Driver</span>
-            <span className="col-span-3">Phone</span>
-            <span className="col-span-2">Country</span>
-            <span className="col-span-1">Category</span>
-            <span className="col-span-2 text-right">Last seen</span>
           </div>
 
           <div
