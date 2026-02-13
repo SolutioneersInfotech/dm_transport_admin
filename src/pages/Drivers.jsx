@@ -614,13 +614,13 @@ export default function Drivers() {
                   key={category}
                   type="button"
                   onClick={() => setCategoryFilter(category)}
-                  className={`rounded-full border px-3 py-1 transition ${
+                  className={`flex h-8 w-8 items-center justify-center rounded-full border font-medium uppercase transition ${
                     categoryFilter === category
                       ? "border-slate-500 bg-slate-800 text-slate-100"
                       : "border-slate-800 text-slate-400 hover:border-slate-600"
                   }`}
                 >
-                  {category === "all" ? "All" : `${category}`}
+                  {category === "all" ? "All" : category}
                 </button>
               ))}
               <Popover open={isStatusPopoverOpen} onOpenChange={setIsStatusPopoverOpen}>
