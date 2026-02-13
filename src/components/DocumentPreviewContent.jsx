@@ -712,7 +712,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   onLoad={() => setIsPdfLoading(false)}
                   onError={() => setIsPdfLoading(false)}
                 />
-                <div className="pointer-events-none absolute left-0 top-0 right-0 h-8 bg-[#1d232a]/70 border-b border-gray-700 rounded-t" />
+                <div className="pointer-events-none absolute left-0 top-0 right-0 h-8 rounded-t border-b border-white/25 bg-white/20 backdrop-blur-[1px]" />
               </div>
             </>
           )}
