@@ -38,6 +38,8 @@ const Chat = () => {
     return {
       userid: getUserId(user),
       driver_name: user.name || user.driver_name,
+      email: user.email || null,
+      phone: user.phone || null,
       driver_image: user.profilePic || user.image || null,
       lastSeen: user.lastSeen || null,
       last_message: user.last_message || "",

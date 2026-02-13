@@ -187,7 +187,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Download, Paperclip, Trash2, X } from "lucide-react";
+import { Copy, Download, Paperclip, Trash2, X } from "lucide-react";
 import {
   subscribeMessages as defaultSubscribeMessages,
   sendMessage as defaultSendMessage,
@@ -203,6 +203,7 @@ import { useAuth } from "../context/AuthContext";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Checkbox } from "./ui/checkbox";
+import { toast } from "sonner";
 
 /* ================= LAST SEEN FORMATTER ================= */
 function formatLastSeen(lastSeen) {
@@ -598,6 +599,25 @@ export default function ChatWindow({ driver, chatApi }) {
     setSelected([]);
   }
 
+  const emailText = driver?.email ? driver.email : "—";
+  const phoneText = driver?.phone ? driver.phone : "—";
+
+  const handleCopyDriverInfo = async () => {
+    const copiedText =
+      `Driver: ${driver?.driver_name || "N/A"}
+` +
+      `Email: ${driver?.email || "N/A"}
+` +
+      `Phone: ${driver?.phone || "N/A"}`;
+
+    try {
+      await navigator.clipboard.writeText(copiedText);
+      toast.success("Copied driver info");
+    } catch {
+      toast.error("Failed to copy driver info");
+    }
+  };
+
   /* ================= GROUP MESSAGES ================= */
   const grouped = groupMessagesByDate(messages);
 
@@ -617,14 +637,34 @@ export default function ChatWindow({ driver, chatApi }) {
             className="w-10 h-10 rounded-full object-cover flex-shrink-0"
           />
           <div className="min-w-0">
-            <p className="font-medium text-[#e9edef] truncate">{driver.driver_name}</p>
-            <p className="text-[#8696a0] text-xs">
-              {formatLastSeen(driver.lastSeen)}
-            </p>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="font-semibold text-white truncate max-w-[260px]">
+                {driver?.driver_name || "Unknown"}
+              </span>
+              <span className="text-gray-400">·</span>
+              <span className="text-sm text-gray-300 truncate max-w-[320px]">
+                {emailText}
+              </span>
+              <span className="text-gray-400">·</span>
+              <span className="text-sm text-gray-300 truncate max-w-[220px]">
+                {phoneText}
+              </span>
+            </div>
+            <div className="text-xs text-gray-400">{formatLastSeen(driver?.lastSeen)}</div>
           </div>
         </div>
 
         <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleCopyDriverInfo}
+            title="Copy driver info"
+            aria-label="Copy driver info"
+            className="text-gray-300 hover:text-white"
+          >
+            <Copy className="w-4 h-4" />
+          </Button>
           {selectionMode ? (
             <>
               <Button

@@ -352,6 +352,8 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         return {
           userid: userId,
           driver_name: u.name || u.driver_name,
+          email: u.email || null,
+          phone: u.phone || null,
           driver_image: u.profilePic || u.image || null,
           lastSeen: u.lastSeen || null,
           last_message: u.last_message || "",
