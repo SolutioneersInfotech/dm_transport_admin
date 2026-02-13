@@ -140,7 +140,7 @@ export default function Drivers() {
     isFetching,
     refetch,
   } = useDriversQuery({ page, limit, search: debouncedSearch });
-  const { data: driverCountData } = useDriverCountQuery({
+  const { data: driverCountData, isLoading: isDriverCountLoading } = useDriverCountQuery({
     search: debouncedSearch,
     status: statusFilter,
     category: categoryFilter,
@@ -804,7 +804,18 @@ export default function Drivers() {
           </div>
 
           <div className="sticky bottom-0 flex items-center justify-between border-t border-slate-800 bg-slate-950/95 px-4 py-3 text-sm text-slate-400 backdrop-blur">
-            <span>Total drivers: {totalDrivers ?? "-"}</span>
+            <span className="flex items-center gap-2">
+              Total drivers:{" "}
+              {isDriverCountLoading && totalDrivers === null ? (
+                <span
+                  className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-600 border-t-sky-400"
+                  aria-label="Loading total drivers"
+                  role="status"
+                />
+              ) : (
+                totalDrivers ?? "-"
+              )}
+            </span>
             <button
               type="button"
               onClick={() => openModal("add")}
