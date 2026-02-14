@@ -428,7 +428,8 @@ export default function ChatMessageBubble({
     }
   };
 
-  const copyTitle = copyStatus || (attachment ? "Copy media" : "Copy message");
+  const canCopyMessage = Boolean(text) && !attachment;
+  const copyTitle = copyStatus || "Copy message";
   const isCopied = copyStatus === "Copied" || copyStatus === "Link copied";
 
   const copyButton = (
@@ -453,7 +454,7 @@ export default function ChatMessageBubble({
   return (
     <div className={`flex ${containerAlign} mb-2`}>
       <div className="flex items-start gap-2">
-        {isAdmin && copyButton}
+        {isAdmin && canCopyMessage && copyButton}
 
         <div className={`flex flex-col max-w-[65%] ${bubbleAlign}`}>
           {/* Sender name */}
@@ -602,7 +603,7 @@ export default function ChatMessageBubble({
           </div>
         </div>
 
-        {!isAdmin && copyButton}
+        {!isAdmin && canCopyMessage && copyButton}
       </div>
     </div>
   );
