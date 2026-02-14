@@ -9,6 +9,7 @@ import {
 } from "../services/notesChatAPI";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { auth } from "../firebase/firebaseApp";
 
 const EMOJI_CHOICES = ["😀", "👍", "❤️", "😂", "😡"];
 const PRIORITY_OPTIONS = [
@@ -330,9 +331,12 @@ export default function Notes() {
                   <div className="flex flex-col gap-4">
                     {group.items.map((message) => {
                       const isMine =
-                        message.senderId &&
-                        adminUser?.userid &&
-                        message.senderId === adminUser.userid;
+                        (message.senderId &&
+                          adminUser?.userid &&
+                          message.senderId === adminUser.userid) ||
+                        (message.senderId &&
+                          auth.currentUser?.uid &&
+                          message.senderId === auth.currentUser.uid);
                       const priorityClass =
                         PRIORITY_COLORS[message.priority] ||
                         PRIORITY_COLORS[0];

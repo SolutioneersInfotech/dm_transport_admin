@@ -100,18 +100,16 @@ export const sendNotesMessage = async ({
   contentOverride,
   adminUser,
 }) => {
-  await ensureAdminFirebaseAuth();
+  const firebaseUid = await ensureAdminFirebaseAuth();
 
   const resolvedAdmin = adminUser || getAdminUser() || {};
-  const firebaseUid = auth.currentUser?.uid;
-  const senderId =
-    resolvedAdmin?.userid?.startsWith?.("admin_")
-      ? resolvedAdmin.userid
-      : firebaseUid?.startsWith?.("admin_")
-      ? firebaseUid
-      : resolvedAdmin?.userid || firebaseUid || "admin";
+  const senderId = firebaseUid;
   const senderName = resolvedAdmin?.name || senderId || "Admin";
   const contentValue = contentOverride ?? text ?? "";
+
+  if (import.meta.env.DEV) {
+    console.log("[NotesSend] uid:", firebaseUid, "type:", type, "hasContent:", Boolean(contentValue));
+  }
 
   await addDoc(collection(firestore, "messages"), {
     senderId,
@@ -138,6 +136,10 @@ export const sendNotesMessage = async ({
     timestamp: serverTimestamp(),
     userid: senderId,
   });
+
+  if (import.meta.env.DEV) {
+    console.log("[NotesSend] persisted with senderId:", senderId);
+  }
 };
 
 export const deleteNotesMessage = async (messageId) => {
@@ -201,13 +203,13 @@ export const uploadNotesAttachment = async (file, type) => {
   const url = await getDownloadURL(storageRef);
 
   if (import.meta.env.DEV) {
-    console.log("[NotesUpload] url:", url);
+    console.log("[NotesUpload] path:", storagePath, "url:", url);
   }
 
   return {
     url,
     path: storagePath,
-    name: file.name,
-    contentType: file.type,
+    name: file.name || "file",
+    contentType: file.type || "application/octet-stream",
   };
 };
