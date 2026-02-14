@@ -1353,7 +1353,9 @@ export default function Documents() {
                           </div>
                         </TableCell>
                         <TableCell className="px-1 sm:px-2 py-1.5 hidden sm:table-cell">
-                          <span className="text-[10px] sm:text-xs text-gray-300 truncate max-w-[80px]">{doc.type || "—"}</span>
+                          <span className="text-[10px] sm:text-xs text-gray-300 truncate max-w-[80px]">
+                            {doc.type ? getDocumentTypeLabel(doc.type, FILTER_MAP) : "—"}
+                          </span>
                         </TableCell>
                         <TableCell className="px-1 sm:px-2 py-1.5">
                           <span className="inline-flex items-center px-1 sm:px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-medium bg-gray-800/50 text-gray-300 border border-gray-700">
