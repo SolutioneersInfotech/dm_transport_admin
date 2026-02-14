@@ -227,16 +227,25 @@ export default function Notes() {
         : "document";
 
     setIsUploading(true);
+
+    let attachment;
     try {
-      const downloadURL = await uploadNotesAttachment(file, type);
+      attachment = await uploadNotesAttachment(file, type);
+    } catch (err) {
+      console.error("Upload failed:", err);
+      setIsUploading(false);
+      return; // STOP here
+    }
+
+    try {
       await sendNotesMessage({
         type,
-        contentOverride: downloadURL,
+        contentOverride: attachment.url,
         text: inputValue.trim(),
         adminUser,
       });
     } catch (error) {
-      console.error("Failed to upload attachment", error);
+      console.error("Failed to send attachment message", error);
     } finally {
       setIsUploading(false);
     }
