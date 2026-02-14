@@ -9,6 +9,8 @@ import {
 } from "../services/notesChatAPI";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { auth, storage } from "../firebase/firebaseApp";
+import { getDownloadURL, ref } from "firebase/storage";
 
 const EMOJI_CHOICES = ["😀", "👍", "❤️", "😂", "😡"];
 const PRIORITY_OPTIONS = [
@@ -112,6 +114,7 @@ export default function Notes() {
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const [attachmentType, setAttachmentType] = useState("photo");
   const [modalContent, setModalContent] = useState(null);
+  const [resolvedAttachmentUrls, setResolvedAttachmentUrls] = useState({});
 
   const listRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -144,6 +147,45 @@ export default function Notes() {
     if (isNearBottomRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
+  }, [messages]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const resolveAttachmentUrls = async () => {
+      const attachmentMessages = messages.filter(
+        (message) =>
+          ["image", "video", "document"].includes(message.type) &&
+          typeof message.content === "string" &&
+          message.content &&
+          !/^https?:\/\//i.test(message.content)
+      );
+
+      if (!attachmentMessages.length) {
+        return;
+      }
+
+      const entries = await Promise.all(
+        attachmentMessages.map(async (message) => {
+          try {
+            const url = await getDownloadURL(ref(storage, message.content));
+            return [message.id, url];
+          } catch {
+            return [message.id, message.content];
+          }
+        })
+      );
+
+      if (!cancelled) {
+        setResolvedAttachmentUrls((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
+      }
+    };
+
+    resolveAttachmentUrls();
+
+    return () => {
+      cancelled = true;
+    };
   }, [messages]);
 
   const groupedMessages = useMemo(() => {
@@ -227,16 +269,26 @@ export default function Notes() {
         : "document";
 
     setIsUploading(true);
+
+    let attachment;
     try {
-      const downloadURL = await uploadNotesAttachment(file, type);
+      attachment = await uploadNotesAttachment(file, type);
+    } catch (err) {
+      console.error("Upload failed:", err);
+      setIsUploading(false);
+      return;
+    }
+
+    try {
       await sendNotesMessage({
         type,
-        contentOverride: downloadURL,
+        contentOverride: attachment.url,
+        contentPathOverride: attachment.path,
         text: inputValue.trim(),
         adminUser,
       });
     } catch (error) {
-      console.error("Failed to upload attachment", error);
+      console.error("Failed to send attachment message", error);
     } finally {
       setIsUploading(false);
     }
@@ -330,13 +382,18 @@ export default function Notes() {
                   <div className="flex flex-col gap-4">
                     {group.items.map((message) => {
                       const isMine =
-                        message.senderId &&
-                        adminUser?.userid &&
-                        message.senderId === adminUser.userid;
+                        (message.senderId &&
+                          adminUser?.userid &&
+                          message.senderId === adminUser.userid) ||
+                        (message.senderId &&
+                          auth.currentUser?.uid &&
+                          message.senderId === auth.currentUser.uid);
                       const priorityClass =
                         PRIORITY_COLORS[message.priority] ||
                         PRIORITY_COLORS[0];
                       const reactionCount = getReactionCount(message.reactions);
+                      const attachmentSource =
+                        resolvedAttachmentUrls[message.id] || message.content;
 
                       return (
                         <div
@@ -366,13 +423,13 @@ export default function Notes() {
                                   onClick={() =>
                                     setModalContent({
                                       type: "image",
-                                      content: message.content,
+                                      content: attachmentSource,
                                     })
                                   }
                                   className="overflow-hidden rounded-lg p-0 h-auto"
                                 >
                                   <img
-                                    src={message.content}
+                                    src={attachmentSource}
                                     alt="Note attachment"
                                     className="max-h-60 w-auto rounded-lg object-cover"
                                   />
@@ -385,13 +442,13 @@ export default function Notes() {
                                   onClick={() =>
                                     setModalContent({
                                       type: "video",
-                                      content: message.content,
+                                      content: attachmentSource,
                                     })
                                   }
                                   className="w-full overflow-hidden rounded-lg p-0 h-auto"
                                 >
                                   <video
-                                    src={message.content}
+                                    src={attachmentSource}
                                     className="max-h-60 w-full rounded-lg object-cover"
                                   />
                                   <div className="mt-2 text-xs text-gray-200">
@@ -401,7 +458,7 @@ export default function Notes() {
                               )}
                               {message.type === "document" && (
                                 <a
-                                  href={message.content}
+                                  href={attachmentSource}
                                   target="_blank"
                                   rel="noreferrer"
                                   className="inline-flex items-center gap-2 text-sm font-semibold text-blue-200 hover:text-blue-100"

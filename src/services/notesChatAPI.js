@@ -3,7 +3,6 @@ import {
   collection,
   deleteDoc,
   doc,
-  getFirestore,
   onSnapshot,
   orderBy,
   query,
@@ -11,10 +10,9 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
-import { getApps, initializeApp } from "firebase/app";
-import { getAuth, signInWithCustomToken } from "firebase/auth";
-import { getDownloadURL, getStorage, ref, uploadBytesResumable } from "firebase/storage";
-import { app, firestore } from "../firebase/firebaseApp";
+import { signInWithCustomToken } from "firebase/auth";
+import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
+import * as firebaseApp from "../firebase/firebaseApp";
 import { getAdminFirebaseCustomToken } from "./adminFirebaseToken";
 
 const PRIORITY_FILTERS = {
@@ -24,49 +22,33 @@ const PRIORITY_FILTERS = {
   low: (priority) => priority === 1,
 };
 
-let authPromise = null;
-let notesUploadServices = null;
+const { firestore, storage } = firebaseApp;
 
-function getOrCreateNotesUploadApp() {
-  const appName = "notes-upload";
-  const existing = getApps().find((entry) => entry.name === appName);
-  if (existing) {
-    return existing;
+async function ensureAdminFirebaseAuth() {
+  const { auth } = firebaseApp;
+
+  if (auth.currentUser && auth.currentUser.uid.startsWith("admin_")) {
+    await auth.currentUser.getIdToken(true);
+    return auth.currentUser.uid;
   }
 
-  return initializeApp(app.options, appName);
-}
+  const token = await getAdminFirebaseCustomToken();
 
-async function ensureAdminUploadServices() {
-  if (notesUploadServices) {
-    return notesUploadServices;
+  const userCredential = await signInWithCustomToken(auth, token);
+
+  if (!userCredential?.user) {
+    throw new Error("Firebase admin sign-in failed");
   }
 
-  if (!authPromise) {
-    authPromise = (async () => {
-      const uploadApp = getOrCreateNotesUploadApp();
-      const uploadAuth = getAuth(uploadApp);
+  await userCredential.user.getIdToken(true);
 
-      if (!uploadAuth.currentUser?.uid?.startsWith("admin_")) {
-        const token = await getAdminFirebaseCustomToken();
-        await signInWithCustomToken(uploadAuth, token);
-      }
-
-      notesUploadServices = {
-        app: uploadApp,
-        auth: uploadAuth,
-        storage: getStorage(uploadApp),
-        firestore: getFirestore(uploadApp),
-      };
-
-      return notesUploadServices;
-    })().catch((error) => {
-      authPromise = null;
-      throw error;
-    });
+  if (!userCredential.user.uid.startsWith("admin_")) {
+    throw new Error("Firebase UID is not admin_ prefixed");
   }
 
-  return authPromise;
+  console.log("[AdminAuth] Signed in as:", userCredential.user.uid);
+
+  return userCredential.user.uid;
 }
 
 function getAdminUser() {
@@ -128,24 +110,75 @@ export const sendNotesMessage = async ({
   text,
   type = "text",
   contentOverride,
+  contentPathOverride,
   adminUser,
 }) => {
-  const { firestore: adminFirestore } = await ensureAdminUploadServices();
-
+  const firebaseUid = await ensureAdminFirebaseAuth();
   const resolvedAdmin = adminUser || getAdminUser() || {};
-  const senderId = resolvedAdmin?.userid || "admin";
+  const senderId = firebaseUid;
   const senderName = resolvedAdmin?.name || senderId || "Admin";
   const contentValue = contentOverride ?? text ?? "";
 
-  await addDoc(collection(adminFirestore, "messages"), {
-    senderId,
-    senderName,
-    content: contentValue,
-    type,
-    priority: 0,
-    timestamp: serverTimestamp(),
-    reactions: {},
-  });
+  if (import.meta.env.DEV) {
+    console.log(
+      "[NotesSend] uid:",
+      firebaseUid,
+      "senderId:",
+      senderId,
+      "businessAdminId:",
+      resolvedAdmin?.userid,
+      "type:",
+      type,
+      "hasContent:",
+      Boolean(contentValue)
+    );
+  }
+
+  let messageRef;
+  try {
+    messageRef = await addDoc(collection(firestore, "messages"), {
+      senderId,
+      senderName,
+      content: contentValue,
+      type,
+      priority: 0,
+      timestamp: serverTimestamp(),
+      reactions: {},
+    });
+  } catch (error) {
+    const code = error?.code || "";
+    const msg = error?.message || "";
+    const canRetryWithPath =
+      type !== "text" &&
+      typeof contentPathOverride === "string" &&
+      Boolean(contentPathOverride) &&
+      /^https?:\/\//i.test(contentValue) &&
+      (code === "permission-denied" || /insufficient permissions|permission-denied/i.test(msg));
+
+    if (!canRetryWithPath) {
+      throw error;
+    }
+
+    console.warn("[NotesSend] URL payload denied, retrying with storage path content", {
+      code,
+      message: msg,
+      contentPathOverride,
+    });
+
+    messageRef = await addDoc(collection(firestore, "messages"), {
+      senderId,
+      senderName,
+      content: contentPathOverride,
+      type,
+      priority: 0,
+      timestamp: serverTimestamp(),
+      reactions: {},
+    });
+  }
+
+  if (import.meta.env.DEV) {
+    console.log("[NotesSend] message persisted id:", messageRef.id);
+  }
 
   let notificationMessage = `${senderName}: ${text ?? ""}`;
   if (type === "image") {
@@ -156,12 +189,23 @@ export const sendNotesMessage = async ({
     notificationMessage = `${senderName} shared a document`;
   }
 
-  await addDoc(collection(adminFirestore, "Notes_notifications"), {
-    message: notificationMessage,
-    type,
-    timestamp: serverTimestamp(),
-    userid: senderId,
-  });
+  try {
+    await addDoc(collection(firestore, "Notes_notifications"), {
+      message: notificationMessage,
+      type,
+      timestamp: serverTimestamp(),
+      userid: senderId,
+    });
+  } catch (error) {
+    // Keep message persistence successful even if notifications write is blocked by rules.
+    console.warn("[NotesSend] notification write failed", error);
+  }
+
+  if (import.meta.env.DEV) {
+    console.log("[NotesSend] persisted with senderId:", senderId);
+  }
+
+  return messageRef.id;
 };
 
 export const deleteNotesMessage = async (messageId) => {
@@ -212,29 +256,30 @@ export const uploadNotesAttachment = async (file, type) => {
     throw new Error("Invalid file");
   }
 
-  const { auth: uploadAuth, storage: uploadStorage } =
-    await ensureAdminUploadServices();
+  const uploaderUid = await ensureAdminFirebaseAuth();
+
+  if (!uploaderUid) {
+    throw new Error("Upload blocked: Firebase auth missing");
+  }
 
   const safeName = (file.name || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
   const normalizedType = ["image", "video", "document"].includes(type)
     ? type
     : "document";
-  const uploaderUid = uploadAuth.currentUser?.uid || "admin_unknown";
-  const storageRef = ref(
-    uploadStorage,
-    `chat/uploads/${uploaderUid}/notes/${normalizedType}_${Date.now()}_${safeName}`
-  );
-  const uploadTask = uploadBytesResumable(storageRef, file);
+  const storagePath = `chat/uploads/${uploaderUid}/notes/${normalizedType}_${Date.now()}_${safeName}`;
+  const storageRef = ref(storage, storagePath);
+  const task = uploadBytesResumable(storageRef, file);
+  await task;
+  const url = await getDownloadURL(storageRef);
 
-  return new Promise((resolve, reject) => {
-    uploadTask.on(
-      "state_changed",
-      null,
-      (error) => reject(error),
-      async () => {
-        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-        resolve(downloadURL);
-      }
-    );
-  });
+  if (import.meta.env.DEV) {
+    console.log("[NotesUpload] path:", storagePath, "url:", url);
+  }
+
+  return {
+    url,
+    path: storagePath,
+    name: file.name || "file",
+    contentType: file.type || "application/octet-stream",
+  };
 };
