@@ -293,7 +293,7 @@
 // }
 
 import { useEffect, useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, CheckCheck, Copy } from "lucide-react";
 
 export default function ChatMessageBubble({
   msg,
@@ -346,12 +346,12 @@ export default function ChatMessageBubble({
 
   /* ================= STATUS ================= */
   const statusMap = {
-    0: "✓",
-    1: "✓✓",
-    2: "✓✓",
+    0: Check,
+    1: CheckCheck,
+    2: CheckCheck,
   };
 
-  const statusIcon = statusMap[msg?.status] ?? "";
+  const StatusIcon = statusMap[msg?.status] ?? null;
   const statusColor = msg?.status === 2 ? "text-[#7fb3ff]" : "text-white/70";
 
   /* ================= ATTACHMENT TYPE ================= */
@@ -582,8 +582,8 @@ export default function ChatMessageBubble({
             >
               {time}
             </span>
-            {statusIcon && (
-              <span className={`text-[11px] ${statusColor}`}>{statusIcon}</span>
+            {isAdmin && StatusIcon && (
+              <StatusIcon className={`h-3.5 w-3.5 ${statusColor}`} strokeWidth={2.2} />
             )}
           </div>
         </div>
