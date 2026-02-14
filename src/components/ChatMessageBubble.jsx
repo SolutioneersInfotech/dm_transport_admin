@@ -385,6 +385,9 @@ export default function ChatMessageBubble({
 
   const showReplyTo = msg?.replyTo;
 
+  const hasMediaAttachment = Boolean(attachment);
+  const shouldShowCopyButton = Boolean(text) && !hasMediaAttachment;
+
   const copyMessageContent = async () => {
     const setTempLabel = (value) => {
       setCopyStatus(value);
@@ -394,27 +397,6 @@ export default function ChatMessageBubble({
     };
 
     try {
-      if (attachment) {
-        if (typeof ClipboardItem !== "undefined") {
-          const response = await fetch(attachment);
-          if (!response.ok) {
-            throw new Error("Failed to fetch media");
-          }
-          const blob = await response.blob();
-          await navigator.clipboard.write([
-            new ClipboardItem({
-              [blob.type || "application/octet-stream"]: blob,
-            }),
-          ]);
-          setTempLabel("Copied");
-          return;
-        }
-
-        await navigator.clipboard.writeText(attachment);
-        setTempLabel("Link copied");
-        return;
-      }
-
       if (!text) {
         setTempLabel("No content");
         return;
@@ -428,8 +410,8 @@ export default function ChatMessageBubble({
     }
   };
 
-  const copyTitle = copyStatus || (attachment ? "Copy media" : "Copy message");
-  const isCopied = copyStatus === "Copied" || copyStatus === "Link copied";
+  const copyTitle = copyStatus || "Copy message";
+  const isCopied = copyStatus === "Copied";
 
   const copyButton = (
     <button
@@ -453,7 +435,7 @@ export default function ChatMessageBubble({
   return (
     <div className={`flex ${containerAlign} mb-2`}>
       <div className="flex items-start gap-2">
-        {isAdmin && copyButton}
+        {isAdmin && shouldShowCopyButton && copyButton}
 
         <div className={`flex flex-col max-w-[65%] ${bubbleAlign}`}>
           {/* Sender name */}
@@ -602,7 +584,7 @@ export default function ChatMessageBubble({
           </div>
         </div>
 
-        {!isAdmin && copyButton}
+        {!isAdmin && shouldShowCopyButton && copyButton}
       </div>
     </div>
   );
