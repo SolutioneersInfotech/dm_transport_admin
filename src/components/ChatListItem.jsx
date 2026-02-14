@@ -28,13 +28,26 @@
 
 import { motion } from "framer-motion";
 
+function formatLastChatTime(isoString) {
+  if (!isoString) return "";
+  const d = new Date(isoString);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const msgDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+  if (msgDate.getTime() === today.getTime()) {
+    return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: true });
+  }
+  if (msgDate.getTime() === yesterday.getTime()) {
+    return "Yesterday";
+  }
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+}
+
 const ChatListItem = ({ driver, onClick, isSelected }) => {
-  const time = driver.last_chat_time
-    ? new Date(driver.last_chat_time).toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "short",
-      })
-    : "";
+  const time = formatLastChatTime(driver.last_chat_time);
 
   const unreadCount = driver.unreadCount || 0;
   const itemStateClass = isSelected
@@ -88,11 +101,6 @@ const ChatListItem = ({ driver, onClick, isSelected }) => {
       <div className="flex flex-col items-end gap-0.5">
         <span className="text-[10px] text-gray-500 whitespace-nowrap">
           {time}
-        </span>
-        <span className={`text-[10px] whitespace-nowrap ${
-          unreadCount > 0 ? "text-amber-400" : "text-emerald-500/80"
-        }`}>
-          {unreadCount > 0 ? "Unseen" : "Seen"}
         </span>
         {unreadCount > 0 && (
           <div className="w-2 h-2 bg-[#1f6feb] rounded-full mt-0.5"></div>
