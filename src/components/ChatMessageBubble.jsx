@@ -361,6 +361,10 @@ export default function ChatMessageBubble({
   const isImage = /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(lowerUrl);
   const isVideo = /\.(mp4|mov|m4v|webm|ogv|ogg)(\?|$)/i.test(lowerUrl);
   const isPDF = /\.pdf(\?|$)/i.test(lowerUrl);
+  const isHttpUrl = /^https?:\/\//i.test(attachment);
+  const isKnownMediaAttachment = hasAttachment && (isImage || isVideo || isPDF);
+  const showFileAttachmentLink =
+    hasAttachment && !isKnownMediaAttachment && isHttpUrl;
 
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
@@ -393,7 +397,8 @@ export default function ChatMessageBubble({
       : "Message";
 
   const showReplyTo = msg?.replyTo;
-  const showCopyButton = Boolean(text) && !hasAttachment;
+  const showCopyButton =
+    Boolean(text) && !isKnownMediaAttachment && !showFileAttachmentLink;
   const [copied, setCopied] = useState(false);
 
   const handleCopyMessage = async () => {
@@ -434,159 +439,156 @@ export default function ChatMessageBubble({
   /* ================= RENDER ================= */
   return (
     <div className={`flex ${containerAlign} mb-2`}>
-      <div className="flex items-start gap-2">
-        {isAdmin && copyButton}
+      <div className={`relative flex flex-col max-w-[65%] ${bubbleAlign}`}>
+        {copyButton && (
+          <div
+            className={`absolute z-10 ${showSenderName ? "top-5" : "top-0.5"} ${isAdmin ? "-left-10" : "-right-10"}`}
+          >
+            {copyButton}
+          </div>
+        )}
+        {/* Sender name */}
+        {showSenderName && (
+          <span
+            className={`text-xs text-[#8696a0] mb-0.5 px-1 ${
+              isAdmin ? "pr-2" : "pl-2"
+            }`}
+          >
+            {displayName}
+          </span>
+        )}
 
-        <div className={`flex flex-col max-w-[65%] ${bubbleAlign}`}>
-          {/* Sender name */}
-          {showSenderName && (
-            <span
-              className={`text-xs text-[#8696a0] mb-0.5 px-1 ${
-                isAdmin ? "pr-2" : "pl-2"
-              }`}
+        {/* Bubble */}
+        <div
+          className={`px-3 py-2 shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] text-sm ${bubbleStyle} ${bubbleRounding}`}
+        >
+          {/* Replying to */}
+          {showReplyTo && (
+            <button
+              type="button"
+              onClick={() => onReplyClick?.(msg.replyTo)}
+              className={`mb-2 w-full text-left rounded border-l-2 pl-2 py-1 text-xs ${
+                isAdmin
+                  ? "border-[#1f6feb] bg-white/10 text-white"
+                  : "border-gray-500 bg-black/20 text-gray-300"
+              } truncate`}
+              title={replyToPreview}
             >
-              {displayName}
-            </span>
+              <span className="font-medium opacity-90">Replying to: </span>
+              {replyToPreview}
+            </button>
           )}
 
-          {/* Bubble */}
-          <div
-            className={`px-3 py-2 shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] text-sm ${bubbleStyle} ${bubbleRounding}`}
-          >
-            {/* Replying to */}
-            {showReplyTo && (
-              <button
-                type="button"
-                onClick={() => onReplyClick?.(msg.replyTo)}
-                className={`mb-2 w-full text-left rounded border-l-2 pl-2 py-1 text-xs ${
-                  isAdmin
-                    ? "border-[#1f6feb] bg-white/10 text-white"
-                    : "border-gray-500 bg-black/20 text-gray-300"
-                } truncate`}
-                title={replyToPreview}
-              >
-                <span className="font-medium opacity-90">Replying to: </span>
-                {replyToPreview}
-              </button>
-            )}
-
-            {/* 🖼 Image */}
-            {hasAttachment && isImage && (
-              <div className="relative mb-2 w-[280px] max-w-full overflow-hidden rounded-lg bg-black/20">
-                {!imageLoaded && !imageLoadFailed && (
-                  <div className="h-64 w-full animate-pulse bg-white/20" />
-                )}
-                {imageLoadFailed ? (
-                  <a
-                    href={attachment}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block px-3 py-2 text-sm text-blue-300 underline"
-                  >
-                    Open image
-                  </a>
-                ) : (
-                  <img
-                    src={attachment}
-                    alt="attachment"
-                    className={`w-full rounded-lg object-cover cursor-pointer hover:opacity-95 ${
-                      imageLoaded
-                        ? "relative"
-                        : "absolute inset-0 h-64 opacity-0"
-                    }`}
-                    onLoad={() => setImageLoaded(true)}
-                    onError={() => setImageLoadFailed(true)}
-                    onClick={() =>
-                      onImageClick
-                        ? onImageClick(attachment)
-                        : window.open(attachment, "_blank")
-                    }
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) =>
-                      e.key === "Enter" &&
-                      (onImageClick
-                        ? onImageClick(attachment)
-                        : window.open(attachment, "_blank"))
-                    }
-                  />
-                )}
-              </div>
-            )}
-
-            {/* 📄 PDF */}
-            {hasAttachment && isPDF && (
-              <div className="mb-2">
-                <div className="relative w-[280px] max-w-full overflow-hidden rounded-lg bg-black/30">
-                  <iframe
-                    title="PDF preview"
-                    src={`${attachment}#toolbar=0&navpanes=0&scrollbar=1`}
-                    className="h-56 w-full border-0 bg-white"
-                  />
-                  <button
-                    type="button"
-                    className="absolute inset-0 cursor-pointer"
-                    aria-label="Open PDF"
-                    onClick={() =>
-                      window.open(attachment, "_blank", "noopener,noreferrer")
-                    }
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* 🎥 Video */}
-            {hasAttachment && isVideo && (
-              <div className="mb-2 space-y-2">
-                <video
+          {/* 🖼 Image */}
+          {hasAttachment && isImage && (
+            <div className="relative mb-2 w-[280px] max-w-full overflow-hidden rounded-lg bg-black/20">
+              {!imageLoaded && !imageLoadFailed && (
+                <div className="h-64 w-full animate-pulse bg-white/20" />
+              )}
+              {imageLoadFailed ? (
+                <a
+                  href={attachment}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block px-3 py-2 text-sm text-blue-300 underline"
+                >
+                  Open image
+                </a>
+              ) : (
+                <img
                   src={attachment}
-                  controls
-                  controlsList="nodownload"
-                  preload="metadata"
-                  className="max-h-72 w-full rounded-lg bg-black"
+                  alt="attachment"
+                  className={`w-full rounded-lg object-cover cursor-pointer hover:opacity-95 ${
+                    imageLoaded ? "relative" : "absolute inset-0 h-64 opacity-0"
+                  }`}
+                  onLoad={() => setImageLoaded(true)}
+                  onError={() => setImageLoadFailed(true)}
+                  onClick={() =>
+                    onImageClick
+                      ? onImageClick(attachment)
+                      : window.open(attachment, "_blank")
+                  }
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) =>
+                    e.key === "Enter" &&
+                    (onImageClick
+                      ? onImageClick(attachment)
+                      : window.open(attachment, "_blank"))
+                  }
+                />
+              )}
+            </div>
+          )}
+
+          {/* 📄 PDF */}
+          {hasAttachment && isPDF && (
+            <div className="mb-2">
+              <div className="relative w-[280px] max-w-full overflow-hidden rounded-lg bg-black/30">
+                <iframe
+                  title="PDF preview"
+                  src={`${attachment}#toolbar=0&navpanes=0&scrollbar=1`}
+                  className="h-56 w-full border-0 bg-white"
                 />
                 <button
                   type="button"
-                  className="rounded bg-black/30 px-3 py-1.5 text-xs text-white hover:bg-black/40"
-                  onClick={() => onDownloadMedia?.(attachment)}
-                >
-                  Download video
-                </button>
+                  className="absolute inset-0 cursor-pointer"
+                  aria-label="Open PDF"
+                  onClick={() =>
+                    window.open(attachment, "_blank", "noopener,noreferrer")
+                  }
+                />
               </div>
-            )}
-
-            {/* 📎 Other file */}
-            {hasAttachment && !isImage && !isPDF && !isVideo && (
-              <a
-                href={attachment}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mb-2 block text-blue-300 underline"
-              >
-                📎 Open Attachment
-              </a>
-            )}
-
-            {/* Text */}
-            {text && <p className="whitespace-pre-wrap break-words">{text}</p>}
-
-            {/* Meta */}
-            <div className="mt-1 flex items-center justify-end gap-1">
-              <span
-                className={`text-[10px] ${isAdmin ? "text-white/80" : "text-gray-400"}`}
-              >
-                {time}
-              </span>
-              {statusIcon && (
-                <span className={`text-[11px] ${statusColor}`}>
-                  {statusIcon}
-                </span>
-              )}
             </div>
+          )}
+
+          {/* 🎥 Video */}
+          {hasAttachment && isVideo && (
+            <div className="mb-2 space-y-2">
+              <video
+                src={attachment}
+                controls
+                controlsList="nodownload"
+                preload="metadata"
+                className="max-h-72 w-full rounded-lg bg-black"
+              />
+              <button
+                type="button"
+                className="rounded bg-black/30 px-3 py-1.5 text-xs text-white hover:bg-black/40"
+                onClick={() => onDownloadMedia?.(attachment)}
+              >
+                Download video
+              </button>
+            </div>
+          )}
+
+          {/* 📎 Other file */}
+          {showFileAttachmentLink && (
+            <a
+              href={attachment}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mb-2 block text-blue-300 underline"
+            >
+              📎 Open Attachment
+            </a>
+          )}
+
+          {/* Text */}
+          {text && <p className="whitespace-pre-wrap break-words">{text}</p>}
+
+          {/* Meta */}
+          <div className="mt-1 flex items-center justify-end gap-1">
+            <span
+              className={`text-[10px] ${isAdmin ? "text-white/80" : "text-gray-400"}`}
+            >
+              {time}
+            </span>
+            {statusIcon && (
+              <span className={`text-[11px] ${statusColor}`}>{statusIcon}</span>
+            )}
           </div>
         </div>
-
-        {!isAdmin && copyButton}
       </div>
     </div>
   );
