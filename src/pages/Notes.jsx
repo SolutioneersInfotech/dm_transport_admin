@@ -229,6 +229,10 @@ export default function Notes() {
     setIsUploading(true);
     try {
       const downloadURL = await uploadNotesAttachment(file, type);
+      if (!downloadURL) {
+        return;
+      }
+
       await sendNotesMessage({
         type,
         contentOverride: downloadURL,
