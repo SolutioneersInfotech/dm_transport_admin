@@ -228,8 +228,17 @@ export default function Notes() {
         : "document";
 
     setIsUploading(true);
+
+    let attachment;
     try {
-      const attachment = await uploadNotesAttachment(file, type);
+      attachment = await uploadNotesAttachment(file, type);
+    } catch (err) {
+      console.error("Upload failed:", err);
+      setIsUploading(false);
+      return;
+    }
+
+    try {
       await sendNotesMessage({
         type,
         contentOverride: attachment.url,

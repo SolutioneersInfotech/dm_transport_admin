@@ -12,7 +12,7 @@ import {
 } from "firebase/firestore";
 import { signInWithCustomToken } from "firebase/auth";
 import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
-import { auth, firestore, storage } from "../firebase/firebaseApp";
+import * as firebaseApp from "../firebase/firebaseApp";
 import { getAdminFirebaseCustomToken } from "./adminFirebaseToken";
 
 const PRIORITY_FILTERS = {
@@ -22,21 +22,33 @@ const PRIORITY_FILTERS = {
   low: (priority) => priority === 1,
 };
 
+const { firestore, storage } = firebaseApp;
+
 async function ensureAdminFirebaseAuth() {
-  const cu = auth.currentUser;
-  if (cu?.uid?.startsWith("admin_")) {
-    return cu.uid;
+  const { auth } = firebaseApp;
+
+  if (auth.currentUser && auth.currentUser.uid.startsWith("admin_")) {
+    await auth.currentUser.getIdToken(true);
+    return auth.currentUser.uid;
   }
 
   const token = await getAdminFirebaseCustomToken();
-  await signInWithCustomToken(auth, token);
 
-  const uid = auth.currentUser?.uid;
-  if (!uid) {
-    throw new Error("Firebase auth failed for upload (missing uid)");
+  const userCredential = await signInWithCustomToken(auth, token);
+
+  if (!userCredential?.user) {
+    throw new Error("Firebase admin sign-in failed");
   }
 
-  return uid;
+  await userCredential.user.getIdToken(true);
+
+  if (!userCredential.user.uid.startsWith("admin_")) {
+    throw new Error("Firebase UID is not admin_ prefixed");
+  }
+
+  console.log("[AdminAuth] Signed in as:", userCredential.user.uid);
+
+  return userCredential.user.uid;
 }
 
 function getAdminUser() {
@@ -212,6 +224,10 @@ export const uploadNotesAttachment = async (file, type) => {
   }
 
   const uploaderUid = await ensureAdminFirebaseAuth();
+
+  if (!uploaderUid) {
+    throw new Error("Upload blocked: Firebase auth missing");
+  }
 
   const safeName = (file.name || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
   const normalizedType = ["image", "video", "document"].includes(type)
