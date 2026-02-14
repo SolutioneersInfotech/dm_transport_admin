@@ -3,7 +3,6 @@ import {
   collection,
   deleteDoc,
   doc,
-  getFirestore,
   onSnapshot,
   orderBy,
   query,
@@ -11,10 +10,9 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
-import { getApps, initializeApp } from "firebase/app";
-import { getAuth, signInWithCustomToken } from "firebase/auth";
-import { getDownloadURL, getStorage, ref, uploadBytesResumable } from "firebase/storage";
-import { app, firestore } from "../firebase/firebaseApp";
+import { signInWithCustomToken } from "firebase/auth";
+import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
+import { auth, firestore, storage } from "../firebase/firebaseApp";
 import { getAdminFirebaseCustomToken } from "./adminFirebaseToken";
 
 const PRIORITY_FILTERS = {
@@ -24,49 +22,21 @@ const PRIORITY_FILTERS = {
   low: (priority) => priority === 1,
 };
 
-let authPromise = null;
-let notesUploadServices = null;
-
-function getOrCreateNotesUploadApp() {
-  const appName = "notes-upload";
-  const existing = getApps().find((entry) => entry.name === appName);
-  if (existing) {
-    return existing;
+async function ensureAdminFirebaseAuth() {
+  const cu = auth.currentUser;
+  if (cu?.uid?.startsWith("admin_")) {
+    return cu.uid;
   }
 
-  return initializeApp(app.options, appName);
-}
+  const token = await getAdminFirebaseCustomToken();
+  await signInWithCustomToken(auth, token);
 
-async function ensureAdminUploadServices() {
-  if (notesUploadServices) {
-    return notesUploadServices;
+  const uid = auth.currentUser?.uid;
+  if (!uid) {
+    throw new Error("Firebase auth failed for upload (missing uid)");
   }
 
-  if (!authPromise) {
-    authPromise = (async () => {
-      const uploadApp = getOrCreateNotesUploadApp();
-      const uploadAuth = getAuth(uploadApp);
-
-      if (!uploadAuth.currentUser?.uid?.startsWith("admin_")) {
-        const token = await getAdminFirebaseCustomToken();
-        await signInWithCustomToken(uploadAuth, token);
-      }
-
-      notesUploadServices = {
-        app: uploadApp,
-        auth: uploadAuth,
-        storage: getStorage(uploadApp),
-        firestore: getFirestore(uploadApp),
-      };
-
-      return notesUploadServices;
-    })().catch((error) => {
-      authPromise = null;
-      throw error;
-    });
-  }
-
-  return authPromise;
+  return uid;
 }
 
 function getAdminUser() {
@@ -130,14 +100,14 @@ export const sendNotesMessage = async ({
   contentOverride,
   adminUser,
 }) => {
-  const { firestore: adminFirestore } = await ensureAdminUploadServices();
+  await ensureAdminFirebaseAuth();
 
   const resolvedAdmin = adminUser || getAdminUser() || {};
   const senderId = resolvedAdmin?.userid || "admin";
   const senderName = resolvedAdmin?.name || senderId || "Admin";
   const contentValue = contentOverride ?? text ?? "";
 
-  await addDoc(collection(adminFirestore, "messages"), {
+  await addDoc(collection(firestore, "messages"), {
     senderId,
     senderName,
     content: contentValue,
@@ -156,7 +126,7 @@ export const sendNotesMessage = async ({
     notificationMessage = `${senderName} shared a document`;
   }
 
-  await addDoc(collection(adminFirestore, "Notes_notifications"), {
+  await addDoc(collection(firestore, "Notes_notifications"), {
     message: notificationMessage,
     type,
     timestamp: serverTimestamp(),
@@ -212,29 +182,26 @@ export const uploadNotesAttachment = async (file, type) => {
     throw new Error("Invalid file");
   }
 
-  const { auth: uploadAuth, storage: uploadStorage } =
-    await ensureAdminUploadServices();
+  const uploaderUid = await ensureAdminFirebaseAuth();
 
   const safeName = (file.name || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
   const normalizedType = ["image", "video", "document"].includes(type)
     ? type
     : "document";
-  const uploaderUid = uploadAuth.currentUser?.uid || "admin_unknown";
-  const storageRef = ref(
-    uploadStorage,
-    `chat/uploads/${uploaderUid}/notes/${normalizedType}_${Date.now()}_${safeName}`
-  );
-  const uploadTask = uploadBytesResumable(storageRef, file);
+  const storagePath = `chat/uploads/${uploaderUid}/notes/${normalizedType}_${Date.now()}_${safeName}`;
+  const storageRef = ref(storage, storagePath);
+  const task = uploadBytesResumable(storageRef, file);
+  await task;
+  const url = await getDownloadURL(storageRef);
 
-  return new Promise((resolve, reject) => {
-    uploadTask.on(
-      "state_changed",
-      null,
-      (error) => reject(error),
-      async () => {
-        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-        resolve(downloadURL);
-      }
-    );
-  });
+  if (import.meta.env.DEV) {
+    console.log("[NotesUpload] url:", url);
+  }
+
+  return {
+    url,
+    path: storagePath,
+    name: file.name,
+    contentType: file.type,
+  };
 };
