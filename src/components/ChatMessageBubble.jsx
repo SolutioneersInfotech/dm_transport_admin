@@ -1,7 +1,3 @@
-
-
-
-
 // export default function ChatMessageBubble({ msg }) {
 //   const isAdmin = msg.type === 1;
 //   const text = msg?.content?.message || "";
@@ -35,7 +31,7 @@
 //   return (
 //     <div className={`flex ${isAdmin ? "justify-end" : "justify-start"}`}>
 //       <div
-//         className={`px-4 py-2 max-w-[70%] rounded-lg text-sm shadow 
+//         className={`px-4 py-2 max-w-[70%] rounded-lg text-sm shadow
 //           ${isAdmin ? "bg-blue-600 text-white" : "bg-[#1f2937] text-gray-200"}`}
 //       >
 //         {/* 📌 IMAGE PREVIEW */}
@@ -82,7 +78,6 @@
 //     </div>
 //   );
 // }
-
 
 // export default function ChatMessageBubble({
 //   msg,
@@ -184,7 +179,6 @@
 //     </div>
 //   );
 // }
-
 
 // export default function ChatMessageBubble({ msg }) {
 //   const isAdmin = msg.type === 1;
@@ -298,8 +292,8 @@
 //   );
 // }
 
-
 import { useEffect, useState } from "react";
+import { Check, Copy } from "lucide-react";
 
 export default function ChatMessageBubble({
   msg,
@@ -313,13 +307,32 @@ export default function ChatMessageBubble({
   /* ================= DATA ================= */
   const isAdmin = msg?.type === 1;
 
-  const text = String(msg?.content?.message ?? "").trim() || "";
+  const rawMessage = msg?.content?.message;
+  const text =
+    typeof rawMessage === "string"
+      ? rawMessage.trim()
+      : typeof rawMessage === "number"
+        ? String(rawMessage)
+        : rawMessage && typeof rawMessage === "object"
+          ? typeof rawMessage.text === "string"
+            ? rawMessage.text.trim()
+            : typeof rawMessage.message === "string"
+              ? rawMessage.message.trim()
+              : ""
+          : "";
+
+  const rawAttachment = msg?.content?.attachmentUrl;
   const attachment =
-    typeof msg?.content?.attachmentUrl === "string"
-      ? msg.content.attachmentUrl
-      : msg?.content?.attachmentUrl != null
-        ? String(msg.content.attachmentUrl)
+    typeof rawAttachment === "string"
+      ? rawAttachment.trim()
+      : rawAttachment && typeof rawAttachment === "object"
+        ? typeof rawAttachment.url === "string"
+          ? rawAttachment.url.trim()
+          : ""
         : "";
+  const hasAttachment =
+    Boolean(attachment) &&
+    !["null", "undefined"].includes(attachment.toLowerCase());
 
   const date = msg?.dateTime ? new Date(msg.dateTime) : null;
   const time = date
@@ -339,16 +352,19 @@ export default function ChatMessageBubble({
   };
 
   const statusIcon = statusMap[msg?.status] ?? "";
-  const statusColor =
-    msg?.status === 2 ? "text-[#7fb3ff]" : "text-white/70";
+  const statusColor = msg?.status === 2 ? "text-[#7fb3ff]" : "text-white/70";
 
   /* ================= ATTACHMENT TYPE ================= */
-  const lowerUrl = attachment ? String(attachment).toLowerCase() : "";
+  const lowerUrl = hasAttachment ? attachment.toLowerCase() : "";
 
   // Match extension at end or before query string (?token=...), e.g. Firebase Storage URLs
   const isImage = /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(lowerUrl);
   const isVideo = /\.(mp4|mov|m4v|webm|ogv|ogg)(\?|$)/i.test(lowerUrl);
   const isPDF = /\.pdf(\?|$)/i.test(lowerUrl);
+  const isHttpUrl = /^https?:\/\//i.test(attachment);
+  const isKnownMediaAttachment = hasAttachment && (isImage || isVideo || isPDF);
+  const showFileAttachmentLink =
+    hasAttachment && !isKnownMediaAttachment && isHttpUrl;
 
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
@@ -375,17 +391,62 @@ export default function ChatMessageBubble({
           ? replyToMessage.content.message.trim()
           : replyToMessage.content?.message != null
             ? String(replyToMessage.content.message).trim()
-            : "")
-        || (replyToMessage.content?.attachmentUrl ? "Attachment" : "")
-        || "Message"
+            : "") ||
+        (replyToMessage.content?.attachmentUrl ? "Attachment" : "") ||
+        "Message"
       : "Message";
 
   const showReplyTo = msg?.replyTo;
+  const showCopyButton =
+    Boolean(text) && !isKnownMediaAttachment && !showFileAttachmentLink;
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyMessage = async () => {
+    if (!showCopyButton) return;
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const fallback = document.createElement("textarea");
+        fallback.value = text;
+        fallback.setAttribute("readonly", "");
+        fallback.style.position = "absolute";
+        fallback.style.left = "-9999px";
+        document.body.appendChild(fallback);
+        fallback.select();
+        document.execCommand("copy");
+        document.body.removeChild(fallback);
+      }
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  const copyButton = showCopyButton ? (
+    <button
+      type="button"
+      onClick={handleCopyMessage}
+      className={`inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[#8696a0] transition-colors hover:bg-white/10 hover:text-[#e9edef] ${showSenderName ? "mt-5" : "mt-0.5"}`}
+      aria-label="Copy message"
+      title={copied ? "Copied" : "Copy message"}
+    >
+      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+    </button>
+  ) : null;
 
   /* ================= RENDER ================= */
   return (
     <div className={`flex ${containerAlign} mb-2`}>
-      <div className={`flex flex-col max-w-[65%] ${bubbleAlign}`}>
+      <div className={`relative flex flex-col max-w-[65%] ${bubbleAlign}`}>
+        {copyButton && (
+          <div
+            className={`absolute z-10 ${showSenderName ? "top-5" : "top-0.5"} ${isAdmin ? "-left-10" : "-right-10"}`}
+          >
+            {copyButton}
+          </div>
+        )}
         {/* Sender name */}
         {showSenderName && (
           <span
@@ -419,7 +480,7 @@ export default function ChatMessageBubble({
           )}
 
           {/* 🖼 Image */}
-          {attachment && isImage && (
+          {hasAttachment && isImage && (
             <div className="relative mb-2 w-[280px] max-w-full overflow-hidden rounded-lg bg-black/20">
               {!imageLoaded && !imageLoadFailed && (
                 <div className="h-64 w-full animate-pulse bg-white/20" />
@@ -461,7 +522,7 @@ export default function ChatMessageBubble({
           )}
 
           {/* 📄 PDF */}
-          {attachment && isPDF && (
+          {hasAttachment && isPDF && (
             <div className="mb-2">
               <div className="relative w-[280px] max-w-full overflow-hidden rounded-lg bg-black/30">
                 <iframe
@@ -473,14 +534,16 @@ export default function ChatMessageBubble({
                   type="button"
                   className="absolute inset-0 cursor-pointer"
                   aria-label="Open PDF"
-                  onClick={() => window.open(attachment, "_blank", "noopener,noreferrer")}
+                  onClick={() =>
+                    window.open(attachment, "_blank", "noopener,noreferrer")
+                  }
                 />
               </div>
             </div>
           )}
 
           {/* 🎥 Video */}
-          {attachment && isVideo && (
+          {hasAttachment && isVideo && (
             <div className="mb-2 space-y-2">
               <video
                 src={attachment}
@@ -500,7 +563,7 @@ export default function ChatMessageBubble({
           )}
 
           {/* 📎 Other file */}
-          {attachment && !isImage && !isPDF && !isVideo && (
+          {showFileAttachmentLink && (
             <a
               href={attachment}
               target="_blank"
@@ -512,21 +575,17 @@ export default function ChatMessageBubble({
           )}
 
           {/* Text */}
-          {text && (
-            <p className="whitespace-pre-wrap break-words">
-              {text}
-            </p>
-          )}
+          {text && <p className="whitespace-pre-wrap break-words">{text}</p>}
 
           {/* Meta */}
           <div className="mt-1 flex items-center justify-end gap-1">
-            <span className={`text-[10px] ${isAdmin ? "text-white/80" : "text-gray-400"}`}>
+            <span
+              className={`text-[10px] ${isAdmin ? "text-white/80" : "text-gray-400"}`}
+            >
               {time}
             </span>
             {statusIcon && (
-              <span className={`text-[11px] ${statusColor}`}>
-                {statusIcon}
-              </span>
+              <span className={`text-[11px] ${statusColor}`}>{statusIcon}</span>
             )}
           </div>
         </div>
