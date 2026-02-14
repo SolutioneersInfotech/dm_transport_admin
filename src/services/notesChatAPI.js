@@ -110,6 +110,7 @@ export const sendNotesMessage = async ({
   text,
   type = "text",
   contentOverride,
+  contentPathOverride,
   adminUser,
 }) => {
   const firebaseUid = await ensureAdminFirebaseAuth();
@@ -133,15 +134,47 @@ export const sendNotesMessage = async ({
     );
   }
 
-  const messageRef = await addDoc(collection(firestore, "messages"), {
-    senderId,
-    senderName,
-    content: contentValue,
-    type,
-    priority: 0,
-    timestamp: serverTimestamp(),
-    reactions: {},
-  });
+  let messageRef;
+  try {
+    messageRef = await addDoc(collection(firestore, "messages"), {
+      senderId,
+      senderName,
+      content: contentValue,
+      type,
+      priority: 0,
+      timestamp: serverTimestamp(),
+      reactions: {},
+    });
+  } catch (error) {
+    const code = error?.code || "";
+    const msg = error?.message || "";
+    const canRetryWithPath =
+      type !== "text" &&
+      typeof contentPathOverride === "string" &&
+      Boolean(contentPathOverride) &&
+      /^https?:\/\//i.test(contentValue) &&
+      (code === "permission-denied" || /insufficient permissions|permission-denied/i.test(msg));
+
+    if (!canRetryWithPath) {
+      throw error;
+    }
+
+    console.warn("[NotesSend] URL payload denied, retrying with storage path content", {
+      code,
+      message: msg,
+      contentPathOverride,
+    });
+
+    messageRef = await addDoc(collection(firestore, "messages"), {
+      senderId,
+      senderName,
+      content: contentPathOverride,
+      type,
+      priority: 0,
+      timestamp: serverTimestamp(),
+      reactions: {},
+    });
+  }
 
   if (import.meta.env.DEV) {
     console.log("[NotesSend] message persisted id:", messageRef.id);
