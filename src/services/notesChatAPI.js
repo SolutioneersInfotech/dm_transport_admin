@@ -19,7 +19,7 @@ import { getAdminFirebaseCustomToken } from "./adminFirebaseToken";
 
 const adminRawBase =
   import.meta.env.VITE_API_BASE_URL ??
-  "https://northamerica-northeast1-dmtransport-1.cloudfunctions.net/api/admin";
+  "https://northamerica-northeast1-dmtransport-1.cloudfunctions.net/api";
 
 const ADMIN_BASE_URL = adminRawBase.replace(/\/+$/, "");
 
@@ -100,7 +100,7 @@ async function sendNotesMessageViaBackend(payload) {
     throw new Error("Missing admin token for sending notes message.");
   }
 
-  const response = await fetch(`${ADMIN_BASE_URL}/notes/message`, {
+  const response = await fetch(`${ADMIN_BASE_URL}/admin/notes/message`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
