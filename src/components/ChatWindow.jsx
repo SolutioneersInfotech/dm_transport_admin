@@ -636,7 +636,7 @@ export default function ChatWindow({ driver, chatApi }) {
                 {driver?.driver_name || "Unknown"}
               </span>
               <div className="flex items-center gap-1.5 text-xs text-gray-300 min-w-0 max-w-[320px]">
-                <Mail className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                <Mail className="w-4 h-4 text-gray-400 flex-shrink-0" />
                 <span className="truncate">{emailText}</span>
                 {driver?.email ? (
                   <Button
@@ -645,14 +645,14 @@ export default function ChatWindow({ driver, chatApi }) {
                     onClick={() => handleCopyField(driver.email, "email")}
                     title="Copy email"
                     aria-label="Copy email"
-                    className="h-5 w-5 text-gray-300 hover:text-white"
+                    className="h-5 w-5 text-gray-600 hover:text-white"
                   >
-                    <Copy className="w-3 h-3" />
+                    <Copy className="w-2 h-2" />
                   </Button>
                 ) : null}
               </div>
               <div className="flex items-center gap-1.5 text-xs text-gray-300 min-w-0 max-w-[220px]">
-                <Phone className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                <Phone className="w-4 h-4 text-gray-400 flex-shrink-0" />
                 <span className="truncate">{phoneText}</span>
                 {driver?.phone ? (
                   <Button
@@ -661,9 +661,9 @@ export default function ChatWindow({ driver, chatApi }) {
                     onClick={() => handleCopyField(driver.phone, "phone number")}
                     title="Copy phone number"
                     aria-label="Copy phone number"
-                    className="h-5 w-5 text-gray-300 hover:text-white"
+                    className="h-5 w-5 text-gray-600 hover:text-white"
                   >
-                    <Copy className="w-3 h-3" />
+                    <Copy className="w-2 h-2" />
                   </Button>
                 ) : null}
               </div>
