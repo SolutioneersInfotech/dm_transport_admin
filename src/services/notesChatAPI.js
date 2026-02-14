@@ -220,21 +220,21 @@ export const uploadNotesAttachment = async (file, type) => {
     ? type
     : "document";
   const uploaderUid = uploadAuth.currentUser?.uid || "admin_unknown";
+  const storagePath =
+    `chat/uploads/${uploaderUid}/notes/${normalizedType}_${Date.now()}_${safeName}`;
   const storageRef = ref(
     uploadStorage,
-    `chat/uploads/${uploaderUid}/notes/${normalizedType}_${Date.now()}_${safeName}`
+    storagePath
   );
   const uploadTask = uploadBytesResumable(storageRef, file);
 
-  return new Promise((resolve, reject) => {
-    uploadTask.on(
-      "state_changed",
-      null,
-      (error) => reject(error),
-      async () => {
-        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-        resolve(downloadURL);
-      }
-    );
-  });
+  await uploadTask;
+  const downloadURL = await getDownloadURL(storageRef);
+
+  return {
+    url: downloadURL,
+    path: storagePath,
+    name: file.name,
+    contentType: file.type,
+  };
 };

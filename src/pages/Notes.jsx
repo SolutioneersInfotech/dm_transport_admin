@@ -228,10 +228,10 @@ export default function Notes() {
 
     setIsUploading(true);
     try {
-      const downloadURL = await uploadNotesAttachment(file, type);
+      const attachment = await uploadNotesAttachment(file, type);
       await sendNotesMessage({
         type,
-        contentOverride: downloadURL,
+        contentOverride: attachment.url,
         text: inputValue.trim(),
         adminUser,
       });
