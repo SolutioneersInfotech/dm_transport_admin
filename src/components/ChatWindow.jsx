@@ -602,19 +602,13 @@ export default function ChatWindow({ driver, chatApi }) {
   const emailText = driver?.email ? driver.email : "—";
   const phoneText = driver?.phone ? driver.phone : "—";
 
-  const handleCopyDriverInfo = async () => {
-    const copiedText =
-      `Driver: ${driver?.driver_name || "N/A"}
-` +
-      `Email: ${driver?.email || "N/A"}
-` +
-      `Phone: ${driver?.phone || "N/A"}`;
-
+  const handleCopyField = async (value, label) => {
+    if (!value) return;
     try {
-      await navigator.clipboard.writeText(copiedText);
-      toast.success("Copied driver info");
+      await navigator.clipboard.writeText(value);
+      toast.success(`Copied ${label}`);
     } catch {
-      toast.error("Failed to copy driver info");
+      toast.error(`Failed to copy ${label}`);
     }
   };
 
@@ -644,10 +638,34 @@ export default function ChatWindow({ driver, chatApi }) {
               <div className="flex items-center gap-1.5 text-xs text-gray-300 min-w-0 max-w-[320px]">
                 <Mail className="w-3 h-3 text-gray-400 flex-shrink-0" />
                 <span className="truncate">{emailText}</span>
+                {driver?.email ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleCopyField(driver.email, "email")}
+                    title="Copy email"
+                    aria-label="Copy email"
+                    className="h-5 w-5 text-gray-300 hover:text-white"
+                  >
+                    <Copy className="w-3 h-3" />
+                  </Button>
+                ) : null}
               </div>
               <div className="flex items-center gap-1.5 text-xs text-gray-300 min-w-0 max-w-[220px]">
                 <Phone className="w-3 h-3 text-gray-400 flex-shrink-0" />
                 <span className="truncate">{phoneText}</span>
+                {driver?.phone ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleCopyField(driver.phone, "phone number")}
+                    title="Copy phone number"
+                    aria-label="Copy phone number"
+                    className="h-5 w-5 text-gray-300 hover:text-white"
+                  >
+                    <Copy className="w-3 h-3" />
+                  </Button>
+                ) : null}
               </div>
             </div>
             <div className="pt-1 text-xs text-gray-400">{formatLastSeen(driver?.lastSeen)}</div>
@@ -655,16 +673,6 @@ export default function ChatWindow({ driver, chatApi }) {
         </div>
 
         <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleCopyDriverInfo}
-            title="Copy driver info"
-            aria-label="Copy driver info"
-            className="text-gray-300 hover:text-white"
-          >
-            <Copy className="w-4 h-4" />
-          </Button>
           {selectionMode ? (
             <>
               <Button
