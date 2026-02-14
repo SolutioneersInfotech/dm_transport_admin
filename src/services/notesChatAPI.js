@@ -102,7 +102,7 @@ export const sendNotesMessage = async ({
 }) => {
   const firebaseUid = await ensureAdminFirebaseAuth();
   const resolvedAdmin = adminUser || getAdminUser() || {};
-  const senderId = resolvedAdmin?.userid || firebaseUid;
+  const senderId = firebaseUid;
   const senderName = resolvedAdmin?.name || senderId || "Admin";
   const contentValue = contentOverride ?? text ?? "";
 
@@ -112,6 +112,8 @@ export const sendNotesMessage = async ({
       firebaseUid,
       "senderId:",
       senderId,
+      "businessAdminId:",
+      resolvedAdmin?.userid,
       "type:",
       type,
       "hasContent:",
