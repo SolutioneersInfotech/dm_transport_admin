@@ -9,6 +9,7 @@ import {
 } from "../services/notesChatAPI";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { toast } from "sonner";
 
 const EMOJI_CHOICES = ["😀", "👍", "❤️", "😂", "😡"];
 const PRIORITY_OPTIONS = [
@@ -179,9 +180,18 @@ export default function Notes() {
     setInputValue("");
 
     try {
+      if (import.meta.env.DEV) {
+        console.log("[NotesUI] sending note", {
+          type: "text",
+          hasAttachment: false,
+          textLen: trimmed.length,
+        });
+      }
+
       await sendNotesMessage({ text: trimmed, type: "text", adminUser });
     } catch (error) {
-      console.error("Failed to send note", error);
+      console.error("sendNotesMessage failed", error);
+      toast.error(error?.message || "Failed to send note (Firestore write failed)");
     }
   };
 
@@ -229,12 +239,26 @@ export default function Notes() {
     setIsUploading(true);
     try {
       const downloadURL = await uploadNotesAttachment(file, type);
-      await sendNotesMessage({
-        type,
-        contentOverride: downloadURL,
-        text: inputValue.trim(),
-        adminUser,
-      });
+
+      try {
+        if (import.meta.env.DEV) {
+          console.log("[NotesUI] sending note", {
+            type,
+            hasAttachment: Boolean(file),
+            textLen: inputValue.trim().length,
+          });
+        }
+
+        await sendNotesMessage({
+          type,
+          contentOverride: downloadURL,
+          text: inputValue.trim(),
+          adminUser,
+        });
+      } catch (error) {
+        console.error("sendNotesMessage failed", error);
+        toast.error(error?.message || "Failed to send note (Firestore write failed)");
+      }
     } catch (error) {
       console.error("Failed to upload attachment", error);
     } finally {
