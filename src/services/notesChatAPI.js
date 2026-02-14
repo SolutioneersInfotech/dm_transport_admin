@@ -17,6 +17,12 @@ import { getDownloadURL, getStorage, ref, uploadBytesResumable } from "firebase/
 import { app, firestore } from "../firebase/firebaseApp";
 import { getAdminFirebaseCustomToken } from "./adminFirebaseToken";
 
+const adminRawBase =
+  import.meta.env.VITE_API_BASE_URL ??
+  "https://northamerica-northeast1-dmtransport-1.cloudfunctions.net/api/admin";
+
+const ADMIN_BASE_URL = adminRawBase.replace(/\/+$/, "");
+
 const PRIORITY_FILTERS = {
   all: () => true,
   high: (priority) => priority === 3,
@@ -77,6 +83,44 @@ function getAdminUser() {
   }
 }
 
+function parseResponseText(text) {
+  if (!text) return {};
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: text };
+  }
+}
+
+async function sendNotesMessageViaBackend(payload) {
+  const adminToken = localStorage.getItem("adminToken");
+
+  if (!adminToken) {
+    throw new Error("Missing admin token for sending notes message.");
+  }
+
+  const response = await fetch(`${ADMIN_BASE_URL}/notes/message`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${adminToken}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const text = await response.text();
+  const data = parseResponseText(text);
+
+  if (!response.ok) {
+    const message =
+      data?.message || data?.error || text || "Failed to send notes message.";
+    throw new Error(message);
+  }
+
+  return data;
+}
+
 export const subscribeNotesMessages = ({
   onChange,
   onError,
@@ -130,22 +174,21 @@ export const sendNotesMessage = async ({
   contentOverride,
   adminUser,
 }) => {
-  const { firestore: adminFirestore } = await ensureAdminUploadServices();
-
   const resolvedAdmin = adminUser || getAdminUser() || {};
   const senderId = resolvedAdmin?.userid || "admin";
   const senderName = resolvedAdmin?.name || senderId || "Admin";
   const contentValue = contentOverride ?? text ?? "";
-
-  await addDoc(collection(adminFirestore, "messages"), {
+  const payload = {
     senderId,
     senderName,
     content: contentValue,
     type,
     priority: 0,
-    timestamp: serverTimestamp(),
-    reactions: {},
-  });
+  };
+
+  await sendNotesMessageViaBackend(payload);
+
+  const { firestore: adminFirestore } = await ensureAdminUploadServices();
 
   let notificationMessage = `${senderName}: ${text ?? ""}`;
   if (type === "image") {
