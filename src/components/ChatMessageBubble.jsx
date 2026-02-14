@@ -307,13 +307,32 @@ export default function ChatMessageBubble({
   /* ================= DATA ================= */
   const isAdmin = msg?.type === 1;
 
-  const text = String(msg?.content?.message ?? "").trim() || "";
+  const rawMessage = msg?.content?.message;
+  const text =
+    typeof rawMessage === "string"
+      ? rawMessage.trim()
+      : typeof rawMessage === "number"
+        ? String(rawMessage)
+        : rawMessage && typeof rawMessage === "object"
+          ? typeof rawMessage.text === "string"
+            ? rawMessage.text.trim()
+            : typeof rawMessage.message === "string"
+              ? rawMessage.message.trim()
+              : ""
+          : "";
+
+  const rawAttachment = msg?.content?.attachmentUrl;
   const attachment =
-    typeof msg?.content?.attachmentUrl === "string"
-      ? msg.content.attachmentUrl
-      : msg?.content?.attachmentUrl != null
-        ? String(msg.content.attachmentUrl)
+    typeof rawAttachment === "string"
+      ? rawAttachment.trim()
+      : rawAttachment && typeof rawAttachment === "object"
+        ? typeof rawAttachment.url === "string"
+          ? rawAttachment.url.trim()
+          : ""
         : "";
+  const hasAttachment =
+    Boolean(attachment) &&
+    !["null", "undefined"].includes(attachment.toLowerCase());
 
   const date = msg?.dateTime ? new Date(msg.dateTime) : null;
   const time = date
@@ -336,7 +355,7 @@ export default function ChatMessageBubble({
   const statusColor = msg?.status === 2 ? "text-[#7fb3ff]" : "text-white/70";
 
   /* ================= ATTACHMENT TYPE ================= */
-  const lowerUrl = attachment ? String(attachment).toLowerCase() : "";
+  const lowerUrl = hasAttachment ? attachment.toLowerCase() : "";
 
   // Match extension at end or before query string (?token=...), e.g. Firebase Storage URLs
   const isImage = /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(lowerUrl);
@@ -374,7 +393,7 @@ export default function ChatMessageBubble({
       : "Message";
 
   const showReplyTo = msg?.replyTo;
-  const showCopyButton = Boolean(text) && !attachment;
+  const showCopyButton = Boolean(text) && !hasAttachment;
   const [copied, setCopied] = useState(false);
 
   const handleCopyMessage = async () => {
@@ -404,7 +423,7 @@ export default function ChatMessageBubble({
     <button
       type="button"
       onClick={handleCopyMessage}
-      className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center self-start rounded-full text-[#8696a0] transition-colors hover:bg-white/10 hover:text-[#e9edef]"
+      className={`inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[#8696a0] transition-colors hover:bg-white/10 hover:text-[#e9edef] ${showSenderName ? "mt-5" : "mt-0.5"}`}
       aria-label="Copy message"
       title={copied ? "Copied" : "Copy message"}
     >
@@ -452,7 +471,7 @@ export default function ChatMessageBubble({
             )}
 
             {/* 🖼 Image */}
-            {attachment && isImage && (
+            {hasAttachment && isImage && (
               <div className="relative mb-2 w-[280px] max-w-full overflow-hidden rounded-lg bg-black/20">
                 {!imageLoaded && !imageLoadFailed && (
                   <div className="h-64 w-full animate-pulse bg-white/20" />
@@ -496,7 +515,7 @@ export default function ChatMessageBubble({
             )}
 
             {/* 📄 PDF */}
-            {attachment && isPDF && (
+            {hasAttachment && isPDF && (
               <div className="mb-2">
                 <div className="relative w-[280px] max-w-full overflow-hidden rounded-lg bg-black/30">
                   <iframe
@@ -517,7 +536,7 @@ export default function ChatMessageBubble({
             )}
 
             {/* 🎥 Video */}
-            {attachment && isVideo && (
+            {hasAttachment && isVideo && (
               <div className="mb-2 space-y-2">
                 <video
                   src={attachment}
@@ -537,7 +556,7 @@ export default function ChatMessageBubble({
             )}
 
             {/* 📎 Other file */}
-            {attachment && !isImage && !isPDF && !isVideo && (
+            {hasAttachment && !isImage && !isPDF && !isVideo && (
               <a
                 href={attachment}
                 target="_blank"
