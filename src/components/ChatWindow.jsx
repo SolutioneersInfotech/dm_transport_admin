@@ -720,7 +720,7 @@ export default function ChatWindow({ driver, chatApi }) {
               >
                 <Trash2 className="h-5 w-5" strokeWidth={1.8} />
               </Button>
-              <Button onClick={handleDeleteAll} variant="destructive" size="sm">
+              <Button onClick={handleDeleteAll} variant="ghost" size="sm" className="bg-red-900 text-red-100 hover:bg-red-600 hover:text-white">
                 Delete All
               </Button>
             </>
@@ -963,7 +963,7 @@ export default function ChatWindow({ driver, chatApi }) {
           aria-modal="true"
           aria-label="Image preview"
         >
-          <div className="absolute right-4 top-4 flex items-center gap-2">
+          <div className="absolute right-38 top-10 flex items-center gap-2">
             <a
               href="#"
               className="rounded-full bg-white/10 p-2 text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50"
