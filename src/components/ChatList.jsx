@@ -390,16 +390,13 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       })
       .filter(Boolean);
 
-    // 🔥 SORT → latest chat first (by timestamp only, no unread priority)
+    // SORT by last MESSAGE time only (last_chat_time). Do NOT use lastSeen.
     const driversWithIds = withLastChat.filter(Boolean);
     driversWithIds.sort((a, b) => {
-      // Sort only by last chat time (newest first)
-      if (!a.last_chat_time) return 1;
-      if (!b.last_chat_time) return -1;
-      return (
-        new Date(b.last_chat_time).getTime() -
-        new Date(a.last_chat_time).getTime()
-      );
+      const timeA = a.last_chat_time ? new Date(a.last_chat_time).getTime() : 0;
+      const timeB = b.last_chat_time ? new Date(b.last_chat_time).getTime() : 0;
+      if (timeB !== timeA) return timeB - timeA; // newest message first
+      return (a.userid || "").localeCompare(b.userid || ""); // stable order when same time
     });
    
 
