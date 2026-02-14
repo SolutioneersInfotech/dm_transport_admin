@@ -103,7 +103,13 @@ export const sendNotesMessage = async ({
   await ensureAdminFirebaseAuth();
 
   const resolvedAdmin = adminUser || getAdminUser() || {};
-  const senderId = resolvedAdmin?.userid || "admin";
+  const firebaseUid = auth.currentUser?.uid;
+  const senderId =
+    resolvedAdmin?.userid?.startsWith?.("admin_")
+      ? resolvedAdmin.userid
+      : firebaseUid?.startsWith?.("admin_")
+      ? firebaseUid
+      : resolvedAdmin?.userid || firebaseUid || "admin";
   const senderName = resolvedAdmin?.name || senderId || "Admin";
   const contentValue = contentOverride ?? text ?? "";
 
