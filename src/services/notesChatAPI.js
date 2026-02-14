@@ -102,12 +102,21 @@ export const sendNotesMessage = async ({
 }) => {
   const firebaseUid = await ensureAdminFirebaseAuth();
   const resolvedAdmin = adminUser || getAdminUser() || {};
-  const senderId = firebaseUid;
+  const senderId = resolvedAdmin?.userid || firebaseUid;
   const senderName = resolvedAdmin?.name || senderId || "Admin";
   const contentValue = contentOverride ?? text ?? "";
 
   if (import.meta.env.DEV) {
-    console.log("[NotesSend] uid:", firebaseUid, "type:", type, "hasContent:", Boolean(contentValue));
+    console.log(
+      "[NotesSend] uid:",
+      firebaseUid,
+      "senderId:",
+      senderId,
+      "type:",
+      type,
+      "hasContent:",
+      Boolean(contentValue)
+    );
   }
 
   await addDoc(collection(firestore, "messages"), {
