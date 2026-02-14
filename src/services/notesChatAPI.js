@@ -1,5 +1,4 @@
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -9,6 +8,7 @@ import {
   query,
   runTransaction,
   serverTimestamp,
+  setDoc,
   updateDoc,
 } from "firebase/firestore";
 import { getApps, initializeApp } from "firebase/app";
@@ -53,7 +53,6 @@ async function ensureAdminUploadServices() {
       }
 
       notesUploadServices = {
-        app: uploadApp,
         auth: uploadAuth,
         storage: getStorage(uploadApp),
         firestore: getFirestore(uploadApp),
@@ -75,6 +74,39 @@ function getAdminUser() {
   } catch {
     return null;
   }
+}
+
+function normalizeContent(content) {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (content && typeof content === "object") {
+    if (typeof content.attachmentUrl === "string" && content.attachmentUrl.trim()) {
+      return content.attachmentUrl;
+    }
+
+    if (typeof content.message === "string") {
+      return content.message;
+    }
+  }
+
+  return "";
+}
+
+
+async function writeToCollectionWithFallback(collectionName, docData) {
+  const docRef = doc(collection(firestore, collectionName));
+
+  try {
+    const { firestore: adminFirestore } = await ensureAdminUploadServices();
+    await setDoc(doc(adminFirestore, collectionName, docRef.id), docData);
+    return;
+  } catch (adminError) {
+    console.warn(`[Notes] Admin write failed for ${collectionName}, falling back to primary app auth.`, adminError);
+  }
+
+  await setDoc(docRef, docData);
 }
 
 export const subscribeNotesMessages = ({
@@ -103,8 +135,9 @@ export const subscribeNotesMessages = ({
           return {
             id: docSnapshot.id,
             senderId: data.senderId ?? "",
+            senderAdminId: data.senderAdminId ?? "",
             senderName: data.senderName ?? "",
-            content: data.content ?? "",
+            content: normalizeContent(data.content),
             type: data.type ?? "text",
             priority: typeof data.priority === "number" ? data.priority : 0,
             timestamp,
@@ -130,15 +163,22 @@ export const sendNotesMessage = async ({
   contentOverride,
   adminUser,
 }) => {
-  const { firestore: adminFirestore } = await ensureAdminUploadServices();
-
   const resolvedAdmin = adminUser || getAdminUser() || {};
-  const senderId = resolvedAdmin?.userid || "admin";
-  const senderName = resolvedAdmin?.name || senderId || "Admin";
+  const senderAdminId = resolvedAdmin?.userid || "";
+  const senderName = resolvedAdmin?.name || senderAdminId || "Admin";
   const contentValue = contentOverride ?? text ?? "";
 
-  await addDoc(collection(adminFirestore, "messages"), {
+  let senderId = senderAdminId || "admin";
+  try {
+    const { auth: uploadAuth } = await ensureAdminUploadServices();
+    senderId = uploadAuth.currentUser?.uid || senderId;
+  } catch {
+    // Fall back to previous senderId when admin upload services are unavailable.
+  }
+
+  await writeToCollectionWithFallback("messages", {
     senderId,
+    senderAdminId,
     senderName,
     content: contentValue,
     type,
@@ -156,11 +196,11 @@ export const sendNotesMessage = async ({
     notificationMessage = `${senderName} shared a document`;
   }
 
-  await addDoc(collection(adminFirestore, "Notes_notifications"), {
+  await writeToCollectionWithFallback("Notes_notifications", {
     message: notificationMessage,
     type,
     timestamp: serverTimestamp(),
-    userid: senderId,
+    userid: senderAdminId || senderId,
   });
 };
 

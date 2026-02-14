@@ -300,6 +300,7 @@
 
 
 import { useEffect, useState } from "react";
+import { Copy } from "lucide-react";
 
 export default function ChatMessageBubble({
   msg,
@@ -309,6 +310,8 @@ export default function ChatMessageBubble({
   onReplyClick,
   onImageClick,
   onDownloadMedia,
+  onCopyMessage,
+  onCopyMedia,
 }) {
   /* ================= DATA ================= */
   const isAdmin = msg?.type === 1;
@@ -519,7 +522,29 @@ export default function ChatMessageBubble({
           )}
 
           {/* Meta */}
-          <div className="mt-1 flex items-center justify-end gap-1">
+          <div className="mt-1 flex items-center justify-end gap-1.5">
+            {attachment && (
+              <button
+                type="button"
+                onClick={() => onCopyMedia?.(attachment)}
+                className="rounded p-1 text-white/70 hover:bg-white/10 hover:text-white"
+                aria-label="Copy media"
+                title="Copy media"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {text && (
+              <button
+                type="button"
+                onClick={() => onCopyMessage?.(text)}
+                className="rounded p-1 text-white/70 hover:bg-white/10 hover:text-white"
+                aria-label="Copy message"
+                title="Copy message"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+            )}
             <span className={`text-[10px] ${isAdmin ? "text-white/80" : "text-gray-400"}`}>
               {time}
             </span>

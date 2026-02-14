@@ -612,6 +612,49 @@ export default function ChatWindow({ driver, chatApi }) {
     }
   };
 
+  const handleCopyMessageText = useCallback(async (messageText) => {
+    if (!messageText) return;
+
+    try {
+      await navigator.clipboard.writeText(String(messageText));
+      toast.success("Message copied");
+    } catch {
+      toast.error("Failed to copy message");
+    }
+  }, []);
+
+  const handleCopyMediaToClipboard = useCallback(async (url) => {
+    if (!url) return;
+
+    try {
+      const response = await fetch(url, { mode: "cors" });
+      if (!response.ok) {
+        throw new Error(`Fetch failed: ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      if (navigator.clipboard?.write && window.ClipboardItem) {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            [blob.type || "application/octet-stream"]: blob,
+          }),
+        ]);
+        toast.success("Media copied");
+        return;
+      }
+
+      await navigator.clipboard.writeText(url);
+      toast.success("Media link copied");
+    } catch {
+      try {
+        await navigator.clipboard.writeText(url);
+        toast.success("Media link copied");
+      } catch {
+        toast.error("Failed to copy media");
+      }
+    }
+  }, []);
+
   /* ================= GROUP MESSAGES ================= */
   const grouped = groupMessagesByDate(messages);
 
@@ -814,6 +857,8 @@ export default function ChatWindow({ driver, chatApi }) {
                       onDownloadMedia={(url) =>
                         downloadChatMedia(url, senderName, msg?.dateTime)
                       }
+                      onCopyMessage={handleCopyMessageText}
+                      onCopyMedia={handleCopyMediaToClipboard}
                     />
 
                   </div>
