@@ -8,6 +8,7 @@ import {
   orderBy,
   query,
   runTransaction,
+  Timestamp,
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
@@ -84,7 +85,7 @@ export const subscribeNotesMessages = ({
 }) => {
   const messagesQuery = query(
     collection(firestore, "messages"),
-    orderBy("timestamp", "asc")
+    orderBy("clientTimestamp", "asc")
   );
 
   const filterFn = PRIORITY_FILTERS[priorityFilter] || PRIORITY_FILTERS.all;
@@ -98,6 +99,14 @@ export const subscribeNotesMessages = ({
           const timestamp =
             data.timestamp && typeof data.timestamp.toDate === "function"
               ? data.timestamp.toDate()
+              : data.clientTimestamp &&
+                typeof data.clientTimestamp.toDate === "function"
+              ? data.clientTimestamp.toDate()
+              : null;
+          const clientTimestamp =
+            data.clientTimestamp &&
+            typeof data.clientTimestamp.toDate === "function"
+              ? data.clientTimestamp.toDate()
               : null;
 
           return {
@@ -108,6 +117,7 @@ export const subscribeNotesMessages = ({
             type: data.type ?? "text",
             priority: typeof data.priority === "number" ? data.priority : 0,
             timestamp,
+            clientTimestamp,
             reactions: data.reactions ?? {},
           };
         })
@@ -137,13 +147,14 @@ export const sendNotesMessage = async ({
   const senderName = resolvedAdmin?.name || senderId || "Admin";
   const contentValue = contentOverride ?? text ?? "";
 
-  await addDoc(collection(adminFirestore, "messages"), {
+  const docRef = await addDoc(collection(adminFirestore, "messages"), {
     senderId,
     senderName,
     content: contentValue,
     type,
     priority: 0,
     timestamp: serverTimestamp(),
+    clientTimestamp: Timestamp.now(),
     reactions: {},
   });
 
@@ -162,6 +173,8 @@ export const sendNotesMessage = async ({
     timestamp: serverTimestamp(),
     userid: senderId,
   });
+
+  return docRef;
 };
 
 export const deleteNotesMessage = async (messageId) => {
