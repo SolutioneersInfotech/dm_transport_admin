@@ -299,7 +299,7 @@
 // }
 
 
-import { Copy } from "lucide-react";
+import { Check, Copy } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export default function ChatMessageBubble({
@@ -354,6 +354,7 @@ export default function ChatMessageBubble({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const [copyStatus, setCopyStatus] = useState("");
+  const [isCopyAnimating, setIsCopyAnimating] = useState(false);
 
   useEffect(() => {
     setImageLoaded(false);
@@ -387,6 +388,8 @@ export default function ChatMessageBubble({
   const copyMessageContent = async () => {
     const setTempLabel = (value) => {
       setCopyStatus(value);
+      setIsCopyAnimating(true);
+      setTimeout(() => setIsCopyAnimating(false), 220);
       setTimeout(() => setCopyStatus(""), 1400);
     };
 
@@ -426,12 +429,15 @@ export default function ChatMessageBubble({
   };
 
   const copyTitle = copyStatus || (attachment ? "Copy media" : "Copy message");
+  const isCopied = copyStatus === "Copied" || copyStatus === "Link copied";
 
   const copyButton = (
     <button
       type="button"
       onClick={copyMessageContent}
-      className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+      className={`flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 ${
+        isCopyAnimating ? "scale-110" : "scale-100"
+      } ${
         isAdmin
           ? "bg-[#17212b] text-[#d1e2ff] hover:bg-[#233242]"
           : "bg-[#22303d] text-[#9db7d1] hover:bg-[#2d3c4c]"
@@ -439,14 +445,14 @@ export default function ChatMessageBubble({
       title={copyTitle}
       aria-label={copyTitle}
     >
-      <Copy size={15} />
+      {isCopied ? <Check size={15} className="animate-pulse" /> : <Copy size={15} />}
     </button>
   );
 
   /* ================= RENDER ================= */
   return (
     <div className={`flex ${containerAlign} mb-2`}>
-      <div className="flex items-end gap-2">
+      <div className="flex items-start gap-2">
         {isAdmin && copyButton}
 
         <div className={`flex flex-col max-w-[65%] ${bubbleAlign}`}>
