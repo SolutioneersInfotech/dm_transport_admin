@@ -380,7 +380,19 @@ export default function ChatMessageBubble({
   const handleCopyMessage = async () => {
     if (!showCopyButton) return;
     try {
-      await navigator.clipboard.writeText(text);
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const fallback = document.createElement("textarea");
+        fallback.value = text;
+        fallback.setAttribute("readonly", "");
+        fallback.style.position = "absolute";
+        fallback.style.left = "-9999px";
+        document.body.appendChild(fallback);
+        fallback.select();
+        document.execCommand("copy");
+        document.body.removeChild(fallback);
+      }
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -388,27 +400,23 @@ export default function ChatMessageBubble({
     }
   };
 
+  const copyButton = showCopyButton ? (
+    <button
+      type="button"
+      onClick={handleCopyMessage}
+      className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center self-start rounded-full text-[#8696a0] transition-colors hover:bg-white/10 hover:text-[#e9edef]"
+      aria-label="Copy message"
+      title={copied ? "Copied" : "Copy message"}
+    >
+      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+    </button>
+  ) : null;
+
   /* ================= RENDER ================= */
   return (
     <div className={`flex ${containerAlign} mb-2`}>
-      <div
-        className={`flex items-start gap-2 ${isAdmin ? "flex-row" : "flex-row-reverse"}`}
-      >
-        {showCopyButton && (
-          <button
-            type="button"
-            onClick={handleCopyMessage}
-            className="mt-6 inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[#8696a0] transition-colors hover:bg-white/10 hover:text-[#e9edef]"
-            aria-label="Copy message"
-            title={copied ? "Copied" : "Copy message"}
-          >
-            {copied ? (
-              <Check className="h-4 w-4" />
-            ) : (
-              <Copy className="h-4 w-4" />
-            )}
-          </button>
-        )}
+      <div className="flex items-start gap-2">
+        {isAdmin && copyButton}
 
         <div className={`flex flex-col max-w-[65%] ${bubbleAlign}`}>
           {/* Sender name */}
@@ -558,6 +566,8 @@ export default function ChatMessageBubble({
             </div>
           </div>
         </div>
+
+        {!isAdmin && copyButton}
       </div>
     </div>
   );
