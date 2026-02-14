@@ -119,7 +119,7 @@ export const sendNotesMessage = async ({
     );
   }
 
-  await addDoc(collection(firestore, "messages"), {
+  const messageRef = await addDoc(collection(firestore, "messages"), {
     senderId,
     senderName,
     content: contentValue,
@@ -128,6 +128,10 @@ export const sendNotesMessage = async ({
     timestamp: serverTimestamp(),
     reactions: {},
   });
+
+  if (import.meta.env.DEV) {
+    console.log("[NotesSend] message persisted id:", messageRef.id);
+  }
 
   let notificationMessage = `${senderName}: ${text ?? ""}`;
   if (type === "image") {
@@ -138,16 +142,23 @@ export const sendNotesMessage = async ({
     notificationMessage = `${senderName} shared a document`;
   }
 
-  await addDoc(collection(firestore, "Notes_notifications"), {
-    message: notificationMessage,
-    type,
-    timestamp: serverTimestamp(),
-    userid: senderId,
-  });
+  try {
+    await addDoc(collection(firestore, "Notes_notifications"), {
+      message: notificationMessage,
+      type,
+      timestamp: serverTimestamp(),
+      userid: senderId,
+    });
+  } catch (error) {
+    // Keep message persistence successful even if notifications write is blocked by rules.
+    console.warn("[NotesSend] notification write failed", error);
+  }
 
   if (import.meta.env.DEV) {
     console.log("[NotesSend] persisted with senderId:", senderId);
   }
+
+  return messageRef.id;
 };
 
 export const deleteNotesMessage = async (messageId) => {
