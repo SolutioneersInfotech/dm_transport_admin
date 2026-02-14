@@ -43,7 +43,15 @@ const storage = getStorage(app);
 const auth = getAuth(app);
 
 if (import.meta.env.DEV) {
-  console.log("[Firebase] projectId:", firebaseConfig.projectId);
+  const appliedEnvKeys = Object.entries(envConfig)
+    .filter(([, value]) => Boolean(value))
+    .map(([key]) => key);
+
+  console.log("[FirebaseConfig] projectId:", firebaseConfig.projectId);
+  console.log("[FirebaseConfig] authDomain:", firebaseConfig.authDomain);
+  console.log("[FirebaseConfig] storageBucket:", firebaseConfig.storageBucket);
+  console.log("[FirebaseConfig] databaseURL:", firebaseConfig.databaseURL);
+  console.log("[FirebaseConfig] env overrides:", appliedEnvKeys);
 }
 
 export { app, database, firestore, storage, auth };

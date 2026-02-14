@@ -136,8 +136,7 @@ export const sendNotesMessage = async ({
   const senderId = resolvedAdmin?.userid || "admin";
   const senderName = resolvedAdmin?.name || senderId || "Admin";
   const contentValue = contentOverride ?? text ?? "";
-
-  await addDoc(collection(adminFirestore, "messages"), {
+  const payload = {
     senderId,
     senderName,
     content: contentValue,
@@ -145,23 +144,49 @@ export const sendNotesMessage = async ({
     priority: 0,
     timestamp: serverTimestamp(),
     reactions: {},
-  });
-
-  let notificationMessage = `${senderName}: ${text ?? ""}`;
-  if (type === "image") {
-    notificationMessage = `${senderName} shared an image`;
-  } else if (type === "video") {
-    notificationMessage = `${senderName} shared a video`;
-  } else if (type === "document") {
-    notificationMessage = `${senderName} shared a document`;
+  };
+  if (import.meta.env.DEV) {
+    payload.debug_client = "admin_web_local";
   }
 
-  await addDoc(collection(adminFirestore, "Notes_notifications"), {
-    message: notificationMessage,
-    type,
-    timestamp: serverTimestamp(),
-    userid: senderId,
-  });
+  const colRef = collection(adminFirestore, "messages");
+
+  try {
+    if (import.meta.env.DEV) {
+      console.log("[NotesWrite] writing to:", {
+        projectId: adminFirestore?.app?.options?.projectId || "unknown",
+        collection: "messages",
+        payloadPreview: { type, senderId, hasContentOverride: Boolean(contentOverride) },
+      });
+    }
+
+    const docRef = await addDoc(colRef, payload);
+
+    if (import.meta.env.DEV) {
+      console.log("[NotesWrite] success:", { id: docRef.id, path: docRef.path });
+    }
+
+    let notificationMessage = `${senderName}: ${text ?? ""}`;
+    if (type === "image") {
+      notificationMessage = `${senderName} shared an image`;
+    } else if (type === "video") {
+      notificationMessage = `${senderName} shared a video`;
+    } else if (type === "document") {
+      notificationMessage = `${senderName} shared a document`;
+    }
+
+    await addDoc(collection(adminFirestore, "Notes_notifications"), {
+      message: notificationMessage,
+      type,
+      timestamp: serverTimestamp(),
+      userid: senderId,
+    });
+
+    return docRef;
+  } catch (error) {
+    console.error("[NotesWrite] FAILED:", error);
+    throw error;
+  }
 };
 
 export const deleteNotesMessage = async (messageId) => {
