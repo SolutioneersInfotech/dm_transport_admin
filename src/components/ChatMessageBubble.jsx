@@ -524,20 +524,18 @@ export default function ChatMessageBubble({
           {/* 📄 PDF */}
           {hasAttachment && isPDF && (
             <div className="mb-2">
-              <div className="relative w-[280px] max-w-full overflow-hidden rounded-lg bg-black/30">
-                <iframe
-                  title="PDF preview"
-                  src={`${attachment}#toolbar=0&navpanes=0&scrollbar=1`}
-                  className="h-56 w-full border-0 bg-white"
-                />
+              <div className="w-[280px] max-w-full rounded-lg border border-white/10 bg-black/30 p-3">
+                <p className="text-xs text-white/80">PDF attachment</p>
                 <button
                   type="button"
-                  className="absolute inset-0 cursor-pointer"
+                  className="mt-2 rounded bg-white/10 px-3 py-1.5 text-xs text-white hover:bg-white/20"
                   aria-label="Open PDF"
                   onClick={() =>
                     window.open(attachment, "_blank", "noopener,noreferrer")
                   }
-                />
+                >
+                  Open PDF
+                </button>
               </div>
             </div>
           )}
