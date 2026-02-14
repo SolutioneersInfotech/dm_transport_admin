@@ -602,19 +602,17 @@ export default function ChatWindow({ driver, chatApi }) {
   const emailText = driver?.email ? driver.email : "—";
   const phoneText = driver?.phone ? driver.phone : "—";
 
-  const handleCopyDriverInfo = async () => {
-    const copiedText =
-      `Driver: ${driver?.driver_name || "N/A"}
-` +
-      `Email: ${driver?.email || "N/A"}
-` +
-      `Phone: ${driver?.phone || "N/A"}`;
+  const handleCopyField = async (value, label) => {
+    if (!value || value === "—") {
+      toast.error(`No ${label} available to copy`);
+      return;
+    }
 
     try {
-      await navigator.clipboard.writeText(copiedText);
-      toast.success("Copied driver info");
+      await navigator.clipboard.writeText(value);
+      toast.success(`Copied ${label}`);
     } catch {
-      toast.error("Failed to copy driver info");
+      toast.error(`Failed to copy ${label}`);
     }
   };
 
@@ -658,9 +656,19 @@ export default function ChatWindow({ driver, chatApi }) {
           <Button
             variant="ghost"
             size="icon"
-            onClick={handleCopyDriverInfo}
-            title="Copy driver info"
-            aria-label="Copy driver info"
+            onClick={() => handleCopyField(driver?.email, "email")}
+            title="Copy email"
+            aria-label="Copy email"
+            className="text-gray-300 hover:text-white"
+          >
+            <Mail className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => handleCopyField(driver?.phone, "phone number")}
+            title="Copy phone number"
+            aria-label="Copy phone number"
             className="text-gray-300 hover:text-white"
           >
             <Copy className="w-4 h-4" />
