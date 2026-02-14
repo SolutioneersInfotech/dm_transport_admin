@@ -26,6 +26,8 @@
 
 // export default ChatListItem;
 
+import { motion } from "framer-motion";
+
 const ChatListItem = ({ driver, onClick, isSelected }) => {
   const time = driver.last_chat_time
     ? new Date(driver.last_chat_time).toLocaleDateString("en-GB", {
@@ -42,7 +44,14 @@ const ChatListItem = ({ driver, onClick, isSelected }) => {
     : "";
 
   return (
-    <div
+    <motion.div
+      layout
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{
+        layout: { type: "spring", stiffness: 350, damping: 30 },
+        opacity: { duration: 0.2 },
+      }}
       onClick={onClick}
       className={`flex items-center gap-3 p-3 cursor-pointer transition-colors hover:bg-[#1b222c] ${itemStateClass}`}
     >
@@ -70,21 +79,26 @@ const ChatListItem = ({ driver, onClick, isSelected }) => {
         <p className={`text-xs truncate ${
           unreadCount > 0 ? "text-gray-300 font-medium" : "text-gray-400"
         }`}>
-          {driver.last_message && driver.last_message.trim() !== "" 
-            ? driver.last_message 
-            : "No messages yet"}
+          {driver.last_message && driver.last_message.trim() !== ""
+            ? driver.last_message
+            : "—"}
         </p>
       </div>
 
-      <div className="flex flex-col items-end gap-1">
-      <span className="text-[10px] text-gray-500 whitespace-nowrap">
-        {time}
-      </span>
+      <div className="flex flex-col items-end gap-0.5">
+        <span className="text-[10px] text-gray-500 whitespace-nowrap">
+          {time}
+        </span>
+        <span className={`text-[10px] whitespace-nowrap ${
+          unreadCount > 0 ? "text-amber-400" : "text-emerald-500/80"
+        }`}>
+          {unreadCount > 0 ? "Unseen" : "Seen"}
+        </span>
         {unreadCount > 0 && (
-          <div className="w-2 h-2 bg-[#1f6feb] rounded-full"></div>
+          <div className="w-2 h-2 bg-[#1f6feb] rounded-full mt-0.5"></div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 };
 

@@ -137,6 +137,15 @@ export const deleteAcknowledgementRoute = `${baseBackendUrl}/deletechatacknowled
 export const sendPushNotificationRoute = `${baseBackendUrl}/sendpushnotification`;
 
 // Maintenance chat routes
+export const fetchMaintenanceUsersRoute = (limit = -1, search = undefined) => {
+  const baseUrl = `${baseBackendUrl}/fetchmaintenanceusers`;
+  const params = new URLSearchParams();
+  params.append("limit", limit);
+  if (search !== undefined) {
+    params.append("search", search);
+  }
+  return `${baseUrl}?${params.toString()}`;
+};
 export const maintenanceFetchUsersRoute = `${baseBackendUrl}/fetchusers`;
 export const maintenanceFetchChatHistoryRoute = (userid) => `${baseBackendUrl}/fetchchathistory?userid=${userid}`;
 export const maintenanceSendChatMessageRoute = `${baseBackendUrl}/sendchatmessage`;

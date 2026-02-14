@@ -187,6 +187,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { useLocation } from "react-router-dom";
 import { Copy, Download, Mail, Paperclip, Phone, Trash2, X } from "lucide-react";
 import {
   subscribeMessages as defaultSubscribeMessages,
@@ -200,6 +201,9 @@ import FilePreviewModal from "./FilePreviewModal";
 import { groupMessagesByDate } from "../utils/groupMessages";
 import ChatWindowSkeleton from "./skeletons/ChatWindowSkeleton";
 import { useAuth } from "../context/AuthContext";
+import { useAppDispatch } from "../store/hooks";
+import { updateUserLastMessage } from "../store/slices/usersSlice";
+import { updateMaintenanceUserLastMessage } from "../store/slices/maintenanceUsersSlice";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Checkbox } from "./ui/checkbox";
@@ -221,6 +225,11 @@ function formatLastSeen(lastSeen) {
 
 export default function ChatWindow({ driver, chatApi }) {
   const { user } = useAuth();
+  const dispatch = useAppDispatch();
+  const location = useLocation();
+  const isMaintenanceChat = location.pathname === "/maintenance-chat";
+  const updateLastMessageAction = isMaintenanceChat ? updateMaintenanceUserLastMessage : updateUserLastMessage;
+
   const adminId = user?.userid || user?.userId || "admin";
   const [messages, setMessages] = useState([]);
   const [selected, setSelected] = useState([]);
@@ -547,6 +556,8 @@ export default function ChatWindow({ driver, chatApi }) {
     setReplyTo(null);
     shouldScrollToBottomRef.current = true;
     scrollToBottom("smooth");
+    const now = new Date().toISOString();
+    dispatch(updateLastMessageAction({ userid: driverId, lastMessage: "Attachment", lastChatTime: now }));
     sendMessage(driverId, "", undefined, replyTo?.msgId ?? null, url).catch((err) => {
       console.error("Failed to send attachment message:", err);
     });
@@ -566,10 +577,13 @@ export default function ChatWindow({ driver, chatApi }) {
 
     setMessages((prev) => [...prev, tempMsg]);
     setText("");
-    
+
+    const now = new Date().toISOString();
+    dispatch(updateLastMessageAction({ userid: driverId, lastMessage: text.trim(), lastChatTime: now }));
+
     // Refocus input for better UX (allows continuous typing)
     inputRef.current?.focus();
-    
+
     // Always scroll smoothly when sending a message to show the new message
     shouldScrollToBottomRef.current = true;
     scrollToBottom("smooth");
