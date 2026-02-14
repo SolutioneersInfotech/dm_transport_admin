@@ -1087,10 +1087,9 @@ export default function Documents() {
                 isPreviewOpen ? "lg:border-r border-gray-700" : ""
               }`}
             >
-            <div ref={tableScrollRef} className="flex-1 overflow-y-auto chat-list-scroll">
-              <div className="overflow-x-auto">
-              <Table>
-            <TableHeader className="sticky top-0 bg-[#161b22] z-10 border-b border-gray-700">
+            <div ref={tableScrollRef} className="flex-1 overflow-auto chat-list-scroll">
+              <Table containerClassName="overflow-visible">
+            <TableHeader className="sticky top-0 z-30 border-b border-gray-700 [&_th]:sticky [&_th]:top-0 [&_th]:z-30 [&_th]:bg-[#161b22]">
               <TableRow className="hover:bg-transparent border-gray-700">
                 <TableHead className="w-10 sm:w-12 h-8 px-1 sm:px-2">
                   <div className="flex items-center gap-0.5 sm:gap-1">
@@ -1394,7 +1393,6 @@ export default function Documents() {
               )}
             </TableBody>
               </Table>
-              </div>
 
               {!loading && (
                 <div className="mt-2 sticky bottom-0 items-center justify-between text-[10px] sm:text-xs text-gray-400 w-full bg-gray-900 p-1 sm:p-1.5 rounded-b-lg">
