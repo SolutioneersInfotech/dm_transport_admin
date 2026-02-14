@@ -45,16 +45,10 @@ async function ensureAdminUploadServices() {
   if (!authPromise) {
     authPromise = (async () => {
       const uploadApp = getOrCreateNotesUploadApp();
-      const uploadAuth = getAuth(uploadApp);
-
-      if (!uploadAuth.currentUser?.uid?.startsWith("admin_")) {
-        const token = await getAdminFirebaseCustomToken();
-        await signInWithCustomToken(uploadAuth, token);
-      }
 
       notesUploadServices = {
         app: uploadApp,
-        auth: uploadAuth,
+        auth: getAuth(uploadApp),
         storage: getStorage(uploadApp),
         firestore: getFirestore(uploadApp),
       };
@@ -67,6 +61,34 @@ async function ensureAdminUploadServices() {
   }
 
   return authPromise;
+}
+
+async function ensureAdminFirebaseAuth() {
+  const firebaseApp = await ensureAdminUploadServices();
+  const { auth } = firebaseApp; // use existing auth instance
+
+  if (auth.currentUser && auth.currentUser.uid.startsWith("admin_")) {
+    await auth.currentUser.getIdToken(true);
+    return auth.currentUser.uid;
+  }
+
+  const token = await getAdminFirebaseCustomToken();
+
+  const userCredential = await signInWithCustomToken(auth, token);
+
+  if (!userCredential?.user) {
+    throw new Error("Firebase admin sign-in failed");
+  }
+
+  await userCredential.user.getIdToken(true);
+
+  if (!userCredential.user.uid.startsWith("admin_")) {
+    throw new Error("Firebase UID is not admin_ prefixed");
+  }
+
+  console.log("[AdminAuth] Signed in as:", userCredential.user.uid);
+
+  return userCredential.user.uid;
 }
 
 function getAdminUser() {
@@ -212,18 +234,19 @@ export const uploadNotesAttachment = async (file, type) => {
     throw new Error("Invalid file");
   }
 
-  const { auth: uploadAuth, storage: uploadStorage } =
-    await ensureAdminUploadServices();
+  const { storage: uploadStorage } = await ensureAdminUploadServices();
+  const uploaderUid = await ensureAdminFirebaseAuth();
+
+  if (!uploaderUid) {
+    throw new Error("Upload blocked: Firebase auth missing");
+  }
 
   const safeName = (file.name || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
   const normalizedType = ["image", "video", "document"].includes(type)
     ? type
     : "document";
-  const uploaderUid = uploadAuth.currentUser?.uid || "admin_unknown";
-  const storageRef = ref(
-    uploadStorage,
-    `chat/uploads/${uploaderUid}/notes/${normalizedType}_${Date.now()}_${safeName}`
-  );
+  const storagePath = `chat/uploads/${uploaderUid}/notes/${normalizedType}_${Date.now()}_${safeName}`;
+  const storageRef = ref(uploadStorage, storagePath);
   const uploadTask = uploadBytesResumable(storageRef, file);
 
   return new Promise((resolve, reject) => {
@@ -233,7 +256,7 @@ export const uploadNotesAttachment = async (file, type) => {
       (error) => reject(error),
       async () => {
         const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-        resolve(downloadURL);
+        resolve({ url: downloadURL });
       }
     );
   });
