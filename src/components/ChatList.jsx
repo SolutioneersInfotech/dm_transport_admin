@@ -1,6 +1,9 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import { useLocation } from "react-router-dom";
+import { motion } from "framer-motion";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { fetchUsers, fetchMoreUsers, updateUserLastMessage } from "../store/slices/usersSlice";
+import { fetchMaintenanceUsers, updateMaintenanceUserLastMessage } from "../store/slices/maintenanceUsersSlice";
 import ChatListItem from "./ChatListItem";
 import SkeletonLoader from "./skeletons/Skeleton";
 import { Input } from "./ui/input";
@@ -29,9 +32,21 @@ const fetchedUsersCache = new Set();
 
 const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const dispatch = useAppDispatch();
-  const { users, loading, loadingMore, hasMore, page, limit, hasLoaded } = useAppSelector(
-    (state) => state.users
-  );
+  const location = useLocation();
+  const isMaintenanceChat = location.pathname === "/maintenance-chat";
+
+  const usersState = useAppSelector((state) => state.users);
+  const maintenanceUsersState = useAppSelector((state) => state.maintenanceUsers);
+
+  const users = isMaintenanceChat ? maintenanceUsersState.users : usersState.users;
+  const loading = isMaintenanceChat ? maintenanceUsersState.loading : usersState.loading;
+  const loadingMore = isMaintenanceChat ? false : usersState.loadingMore;
+  const hasMore = isMaintenanceChat ? false : usersState.hasMore;
+  const page = usersState.page;
+  const limit = usersState.limit;
+  const hasLoaded = isMaintenanceChat ? maintenanceUsersState.hasLoaded : usersState.hasLoaded;
+
+  const updateLastMessageAction = isMaintenanceChat ? updateMaintenanceUserLastMessage : updateUserLastMessage;
   // console.log(users);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState([]); // Array of selected categories: ["F", "D", "C"]
@@ -65,12 +80,18 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     return candidate;
   }
 
-  // Initial fetch on mount - only when the list has never been loaded.
+  // Initial fetch: maintenance chat uses fetchMaintenanceUsers (GET /admin/fetchmaintenanceusers), regular chat uses fetchUsers.
   useEffect(() => {
-    if (!hasLoaded && !loading) {
-      dispatch(fetchUsers({ page: 1, limit: -1 }));
+    if (isMaintenanceChat) {
+      if (!hasLoaded && !loading) {
+        dispatch(fetchMaintenanceUsers({ limit: -1 }));
+      }
+    } else {
+      if (!hasLoaded && !loading) {
+        dispatch(fetchUsers({ page: 1, limit: -1 }));
+      }
     }
-  }, [dispatch, hasLoaded, loading]);
+  }, [dispatch, isMaintenanceChat, hasLoaded, loading]);
 
   // Infinite scroll observer - prevent duplicate calls
   const isLoadingRef = useRef(false);
@@ -123,9 +144,16 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       // Don't fetch if we're already fetching
       if (isFetchingMessages) return;
 
+      // When list came from API (users have no last_chat_time), clear cache so we re-fetch and get correct order on refresh
+      const listNeedsHydration = users.some((u) => !u.last_chat_time);
+      if (listNeedsHydration) {
+        users.forEach((u) => {
+          const id = getDriverId(u);
+          if (id) fetchedUsersCache.delete(id);
+        });
+      }
+
       // Find all users that need message fetching
-      // FIX: Always fetch from Firebase to get actual message text, even if backend has timestamp
-      // Backend might have timestamp but not message text, so we need to fetch to show proper message
       const usersToFetch = users.filter((u) => {
         const userId = getDriverId(u);
         if (!userId) return false;
@@ -134,12 +162,10 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
           typeof u.last_message === "string" && u.last_message.trim() !== "";
         const hasLastChatTime = Boolean(u.last_chat_time);
 
-        // Avoid rehydrating users that are already resolved in prior mounts.
         if (fetchedUsersCache.has(userId)) {
           return false;
         }
 
-        // If backend already sent enough preview metadata, keep the UI stable.
         return !(hasMessageText || hasLastChatTime);
       });
 
@@ -187,7 +213,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
 
               // Update Redux store with last message
               dispatch(
-                updateUserLastMessage({
+                updateLastMessageAction({
                   userid: userId,
                   lastMessage: lastMessageText,
                   lastChatTime: lastChatTime,
@@ -196,7 +222,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
             } else {
               // Even if no messages, mark as fetched
               dispatch(
-                updateUserLastMessage({
+                updateLastMessageAction({
                   userid: userId,
                   lastMessage: "",
                   lastChatTime: null,
@@ -210,7 +236,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
             fetchedUsersCache.add(userId);
             // Set empty values on error
             dispatch(
-              updateUserLastMessage({
+              updateLastMessageAction({
                 userid: userId,
                 lastMessage: "",
                 lastChatTime: null,
@@ -228,7 +254,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     };
 
     fetchAllLastMessages();
-  }, [users, fetchMessages, dispatch, loading, isFetchingMessages]);
+  }, [users, fetchMessages, dispatch, loading, isFetchingMessages, updateLastMessageAction]);
 
 
 
@@ -258,7 +284,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         }
 
         dispatch(
-          updateUserLastMessage({
+          updateLastMessageAction({
             userid: userId,
             lastMessage: lastMessageText || "",
             lastChatTime: lastMessage?.dateTime || null,
@@ -283,7 +309,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         }
       });
     };
-  }, [users, subscribeLastMessage, dispatch]);
+  }, [users, subscribeLastMessage, dispatch, updateLastMessageAction]);
 
   const showInitialLoader = loading && !hasLoaded && users.length === 0;
 
@@ -533,7 +559,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
 
         {/* Show list immediately after users are loaded; message preview hydration runs in background */}
         {!showInitialLoader && filtered.length > 0 && (
-          <>
+          <motion.div layout className="flex flex-col">
             {filtered.map((driver) => (
               <ChatListItem
                 key={driver.userid}
@@ -542,7 +568,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
                 onClick={() => onSelectDriver(driver)}
               />
             ))}
-          </>
+          </motion.div>
         )}
 
         {/* Infinite scroll trigger - only show when hasMore (disabled since we fetch all) */}

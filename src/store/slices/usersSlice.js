@@ -37,7 +37,7 @@ const readUsersCache = () => {
       totalPages: Number.isFinite(parsed.totalPages) ? parsed.totalPages : 0,
       lastSearch: parsed.lastSearch,
       lastFetched: Number.isFinite(parsed.lastFetched) ? parsed.lastFetched : null,
-      hasLoaded: parsed.users.length > 0,
+      hasLoaded: false, // Always refetch on load so we get fresh list and correct message order
     };
   } catch (error) {
     console.error("Failed to read chat users cache:", error);
@@ -162,17 +162,15 @@ const usersSlice = createSlice({
     },
     updateUserLastMessage: (state, action) => {
       const { userid, lastMessage, lastChatTime } = action.payload;
-      const user = state.users.find((u) => {
-        // Try multiple possible ID fields
-        return (
+      const user = state.users.find(
+        (u) =>
           u.userid === userid ||
           u.userId === userid ||
           u.contactId === userid ||
           u.contactid === userid ||
           u.uid === userid ||
           u.id === userid
-        );
-      });
+      );
       if (user) {
         user.last_message = lastMessage;
         user.last_chat_time = lastChatTime;
@@ -189,8 +187,12 @@ const usersSlice = createSlice({
         state.error = null;
       })
       .addCase(fetchUsers.fulfilled, (state, action) => {
-        // Replace users for initial load
-        state.users = action.payload.users;
+        // Strip last_message/last_chat_time so ChatList re-fetches from Firebase and sorts by real order
+        state.users = (action.payload.users || []).map((u) => ({
+          ...u,
+          last_message: undefined,
+          last_chat_time: undefined,
+        }));
         state.hasMore = action.payload.hasMore;
         state.page = action.payload.page;
         state.limit = action.payload.limit;
@@ -215,7 +217,12 @@ const usersSlice = createSlice({
         state.error = null;
       })
       .addCase(fetchMoreUsers.fulfilled, (state, action) => {
-        state.users = [...state.users, ...action.payload.users];
+        const newUsers = (action.payload.users || []).map((u) => ({
+          ...u,
+          last_message: undefined,
+          last_chat_time: undefined,
+        }));
+        state.users = [...state.users, ...newUsers];
         state.hasMore = action.payload.hasMore;
         state.page = action.payload.page;
         state.limit = action.payload.limit;
