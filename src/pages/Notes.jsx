@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   addReaction,
   deleteNotesMessage,
@@ -123,7 +124,12 @@ export default function Notes() {
     setIsLoading(true);
     const unsubscribe = subscribeNotesMessages({
       onChange: (nextMessages) => {
-        setMessages(nextMessages);
+        setMessages(
+          nextMessages.map((message) => ({
+            ...message,
+            timestamp: message.timestamp ?? message.clientTimestamp ?? null,
+          }))
+        );
         setIsLoading(false);
       },
       onError: (error) => {
@@ -229,14 +235,19 @@ export default function Notes() {
     setIsUploading(true);
     try {
       const downloadURL = await uploadNotesAttachment(file, type);
-      await sendNotesMessage({
+      const sentMessage = await sendNotesMessage({
         type,
         contentOverride: downloadURL,
         text: inputValue.trim(),
         adminUser,
       });
+
+      if (!sentMessage) {
+        throw new Error("Failed to send attachment message");
+      }
     } catch (error) {
       console.error("Failed to upload attachment", error);
+      toast.error("Failed to send attachment. Please try again.");
     } finally {
       setIsUploading(false);
     }
