@@ -628,6 +628,7 @@ export default function ChatWindow({ driver, chatApi }) {
 
   /* ================= GROUP MESSAGES ================= */
   const grouped = groupMessagesByDate(messages);
+  console.log(messages);
 
   /* ================= LOADER ================= */
   if (loading) {
@@ -770,6 +771,8 @@ export default function ChatWindow({ driver, chatApi }) {
             <div className="text-center text-[#8696a0] text-xs my-2">{date}</div>
             {grouped[date].map((msg, idx) => {
               const isSelected = selected.includes(msg.msgId);
+              const lastMsg = messages.length ? messages[messages.length - 1] : null;
+              const isLastMessageInChat = lastMsg && msg.msgId === lastMsg.msgId;
               const senderName = msg.type === 1
                 ? (msg.sendername ?? "You")
                 : (driver?.driver_name ?? msg.sendername ?? "Driver");
@@ -812,6 +815,7 @@ export default function ChatWindow({ driver, chatApi }) {
                       senderName={senderName}
                       showSenderName={showSenderName}
                       replyToMessage={replyToMessage}
+                      isLastMessageInChat={isLastMessageInChat}
                       onReplyClick={(msgId) => {
                         const el = document.getElementById(`msg-${msgId}`);
                         el?.scrollIntoView({ behavior: "smooth", block: "center" });

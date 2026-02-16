@@ -303,6 +303,7 @@ export default function ChatMessageBubble({
   onReplyClick,
   onImageClick,
   onDownloadMedia,
+  isLastMessageInChat,
 }) {
   /* ================= DATA ================= */
   const isAdmin = msg?.type === 1;
@@ -344,15 +345,13 @@ export default function ChatMessageBubble({
 
   const displayName = senderName ?? (isAdmin ? "You" : "Driver");
 
-  /* ================= STATUS ================= */
-  const statusMap = {
-    0: "✓",
-    1: "✓✓",
-    2: "✓✓",
-  };
-
-  const statusIcon = statusMap[msg?.status] ?? "";
-  const statusColor = msg?.status === 2 ? "text-[#7fb3ff]" : "text-white/70";
+  /* ================= STATUS (single = sent, double = delivered & seen) ================= */
+  const status = msg?.status ?? 0;
+  const fromBackend = status === 1 || status === 2;
+  const isLastInChat = isLastMessageInChat !== false;
+  const isDeliveredAndSeen = fromBackend || (isAdmin && !isLastInChat);
+  const statusIcon = isAdmin ? (isDeliveredAndSeen ? "✓✓" : "✓") : "";
+  const statusColor = "text-white/70";
 
   /* ================= ATTACHMENT TYPE ================= */
   const lowerUrl = hasAttachment ? attachment.toLowerCase() : "";
