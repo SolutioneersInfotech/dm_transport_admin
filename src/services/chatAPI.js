@@ -1,7 +1,9 @@
 import {
   get,
+  limitToLast,
   onValue,
   push,
+  query,
   ref,
   remove,
   set,
@@ -9,11 +11,8 @@ import {
 } from "firebase/database";
 import { database } from "../firebase/firebaseApp";
 
-// Realtime DB structure: chat/users/{userId}/admin (all messages for this user's admin chat)
-const CHAT_USERS_BASE = "chat/users";
-function userAdminPath(userid) {
-  return `${CHAT_USERS_BASE}/${userid}/admin`;
-}
+const ADMIN_GENERAL_PATH = "chat/users/admin/general";
+const USER_MIRROR_BASE = "chat/users";
 const FETCH_USERS_URL =
   "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin/fetchusers";
 
@@ -64,60 +63,6 @@ function sortByDateTimeAsc(messages) {
   });
 }
 
-/** Returns true if obj looks like a message (has dateTime or content). */
-function isMessageLike(obj) {
-  if (!obj || typeof obj !== "object") return false;
-  return (
-    obj.dateTime != null ||
-    obj.datetime != null ||
-    obj.content != null ||
-    obj.message != null
-  );
-}
-
-/**
- * Flatten Firebase snapshot at chat/users/{userId}/admin into [ [messageId, message], ... ].
- * Handles: direct { msgId: msg } or nested { general: { msgId: msg } } / { messages: { ... } }.
- */
-function flattenMessagesFromSnapshot(val) {
-  if (!val || typeof val !== "object") return [];
-  const entries = Object.entries(val);
-  const out = [];
-  for (const [key, value] of entries) {
-    if (!value || typeof value !== "object") continue;
-    if (isMessageLike(value)) {
-      out.push([key, value]);
-      continue;
-    }
-    const inner = Object.entries(value);
-    const allLookLikeMessages = inner.length > 0 && inner.every(([, v]) => isMessageLike(v));
-    if (allLookLikeMessages) {
-      inner.forEach(([id, msg]) => out.push([id, msg]));
-    }
-  }
-  return out;
-}
-
-/** Collect [pathSuffix, messageId, message] for every message (handles nested e.g. general/msgId). */
-function collectMessagePaths(obj, prefix = "") {
-  if (!obj || typeof obj !== "object") return [];
-  const out = [];
-  for (const [key, value] of Object.entries(obj)) {
-    if (!value || typeof value !== "object") continue;
-    if (isMessageLike(value)) {
-      const pathSuffix = prefix ? `${prefix}/${key}` : key;
-      out.push([pathSuffix, key, value]);
-      continue;
-    }
-    const inner = Object.entries(value);
-    if (inner.length > 0 && inner.every(([, v]) => isMessageLike(v))) {
-      const segment = prefix ? `${prefix}/${key}` : key;
-      inner.forEach(([id, msg]) => out.push([`${segment}/${id}`, id, msg]));
-    }
-  }
-  return out;
-}
-
 /**
  * Fetch users for chat from the API
  * @returns {Promise<{users: Array}>}
@@ -147,39 +92,52 @@ export async function fetchUsersForChat() {
  * @returns {Promise<{messages: Array}>}
  */
 export async function fetchMessages(userid, messageLimit = 10) {
-  const messagesRef = ref(database, userAdminPath(userid));
+  // FIX: Fetch more messages and sort by timestamp to get the actual most recent
+  // limitToLast() uses Firebase key order, not timestamp order, so we need to sort
+  // Fetch more messages (20) to ensure we get the most recent even if keys are out of order
+  const messagesRef = query(
+    ref(database, `${ADMIN_GENERAL_PATH}/${userid}`)
+  );
+  
   const snapshot = await get(messagesRef);
-  const raw = snapshot.exists() ? snapshot.val() : null;
-  const flat = flattenMessagesFromSnapshot(raw);
+  const messagesObject = snapshot.exists() ? snapshot.val() : {};
 
+  // Sort all messages by dateTime to get the actual most recent
   const messages = sortByDateTimeAsc(
-    flat.map(([id, msg]) => normalizeMessage(id, msg))
+    Object.entries(messagesObject).map(([id, msg]) =>
+      normalizeMessage(id, msg)
+    )
   );
 
+  // If we only need 1 message, return just the most recent (last in sorted array)
   if (messageLimit === 1 && messages.length > 0) {
     return { messages: [messages[messages.length - 1]] };
   }
-  if (messageLimit <= 0 || messageLimit >= messages.length) {
-    return { messages };
-  }
+
+  // Return the last N messages (most recent)
   return { messages: messages.slice(-messageLimit) };
 }
 
 /**
- * Subscribe to messages for a specific user - loads the whole chat (no limit).
+ * Subscribe to messages for a specific user - fetches all messages
  * @param {string} userid - User ID
  * @param {function} onChange - Callback function called when messages change
  * @returns {function} Unsubscribe function
  */
 export function subscribeMessages(userid, onChange) {
-  const messagesRef = ref(database, userAdminPath(userid));
+  // Fetch all messages without limit to ensure no messages are missed
+  const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
 
   const unsubscribe = onValue(messagesRef, (snapshot) => {
-    const raw = snapshot.exists() ? snapshot.val() : null;
-    const flat = flattenMessagesFromSnapshot(raw);
+    const messagesObject = snapshot.exists() ? snapshot.val() : {};
+    
+    // Normalize and sort all messages by dateTime
     const messages = sortByDateTimeAsc(
-      flat.map(([id, msg]) => normalizeMessage(id, msg))
+      Object.entries(messagesObject || {}).map(([id, msg]) =>
+        normalizeMessage(id, msg)
+      )
     );
+
     onChange(messages);
   });
 
@@ -194,18 +152,23 @@ export function subscribeMessages(userid, onChange) {
  * @returns {function} Unsubscribe function
  */
 export function subscribeLastMessage(userid, onChange) {
-  const messagesRef = ref(database, userAdminPath(userid));
+  const messagesRef = query(
+    ref(database, `${ADMIN_GENERAL_PATH}/${userid}`),
+    limitToLast(30)
+  );
 
   const unsubscribe = onValue(messagesRef, (snapshot) => {
     if (!snapshot.exists()) {
       onChange(null);
       return;
     }
-    const raw = snapshot.val();
-    const flat = flattenMessagesFromSnapshot(raw);
+
     const messages = sortByDateTimeAsc(
-      flat.map(([id, msg]) => normalizeMessage(id, msg))
+      Object.entries(snapshot.val() || {}).map(([id, msg]) =>
+        normalizeMessage(id, msg)
+      )
     );
+
     onChange(messages.length ? messages[messages.length - 1] : null);
   });
 
@@ -222,8 +185,7 @@ export function subscribeLastMessage(userid, onChange) {
  * @returns {Promise<{message: object}>}
  */
 export async function sendMessage(userid, text, adminUser = getAdminUser(), replyToMsgId = null, attachmentUrl = "") {
-  const path = userAdminPath(userid);
-  const messageId = push(ref(database, path)).key;
+  const messageId = push(ref(database, `${ADMIN_GENERAL_PATH}/${userid}`)).key;
 
   if (!messageId) {
     throw new Error("Unable to generate message id.");
@@ -249,7 +211,11 @@ export async function sendMessage(userid, text, adminUser = getAdminUser(), repl
     type: 1,
   };
 
-  await set(ref(database, `${path}/${messageId}`), userPayload);
+  await Promise.all([
+    set(ref(database, `${ADMIN_GENERAL_PATH}/${userid}/${messageId}`), payload),
+    set(ref(database, `${USER_MIRROR_BASE}/${userid}/admin/${messageId}`), userPayload),
+  ]);
+
   return { message: payload };
 }
 
@@ -260,7 +226,11 @@ export async function sendMessage(userid, text, adminUser = getAdminUser(), repl
  * @returns {Promise<{success: boolean}>}
  */
 export async function deleteSpecificMessage(messageId, userid) {
-  await remove(ref(database, `${userAdminPath(userid)}/${messageId}`));
+  await Promise.all([
+    remove(ref(database, `${ADMIN_GENERAL_PATH}/${userid}/${messageId}`)),
+    remove(ref(database, `${USER_MIRROR_BASE}/${userid}/admin/${messageId}`)),
+  ]);
+
   return { success: true };
 }
 
@@ -270,7 +240,11 @@ export async function deleteSpecificMessage(messageId, userid) {
  * @returns {Promise<{success: boolean}>}
  */
 export async function deleteChatHistory(userid) {
-  await remove(ref(database, userAdminPath(userid)));
+  await Promise.all([
+    remove(ref(database, `${ADMIN_GENERAL_PATH}/${userid}`)),
+    remove(ref(database, `${USER_MIRROR_BASE}/${userid}/admin`)),
+  ]);
+
   return { success: true };
 }
 
@@ -300,24 +274,24 @@ function isSeenByCurrentAdmin(msg) {
  */
 export async function markMessagesAsSeen(userid) {
   try {
-    const basePath = userAdminPath(userid);
-    const messagesRef = ref(database, basePath);
+    const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
     const snapshot = await get(messagesRef);
 
     if (!snapshot.exists()) {
       return { success: true };
     }
 
-    const raw = snapshot.val();
-    const pathEntries = collectMessagePaths(raw);
+    const messagesObject = snapshot.val();
     const updateData = {};
     const adminId = getCurrentAdminId();
     const seenTimestamp = new Date().toISOString();
 
-    pathEntries.forEach(([pathSuffix, , msg]) => {
+    // Mark only for current admin: set seenByAdmins/<adminId> (and legacy fields for display)
+    Object.keys(messagesObject).forEach((messageId) => {
+      const msg = messagesObject[messageId];
       if (msg.type !== 1) return;
       if (isSeenByCurrentAdmin(msg)) return;
-      const messagePath = `${basePath}/${pathSuffix}`;
+      const messagePath = `${ADMIN_GENERAL_PATH}/${userid}/${messageId}`;
       updateData[`${messagePath}/seenByAdmins/${adminId}`] = seenTimestamp;
       updateData[`${messagePath}/seenAt`] = seenTimestamp;
       updateData[`${messagePath}/seenBy`] = adminId;
@@ -347,21 +321,22 @@ export async function markMessagesAsSeen(userid) {
  */
 export async function getUnreadCount(userid) {
   try {
-    const messagesRef = ref(database, userAdminPath(userid));
+    const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
     const snapshot = await get(messagesRef);
 
     if (!snapshot.exists()) {
       return 0;
     }
 
-    const raw = snapshot.val();
-    const flat = flattenMessagesFromSnapshot(raw);
+    const messagesObject = snapshot.val();
     let unreadCount = 0;
-    flat.forEach(([, msg]) => {
+
+    Object.values(messagesObject).forEach((msg) => {
       if (msg.type === 1 && !isSeenByCurrentAdmin(msg)) {
         unreadCount++;
       }
     });
+
     return unreadCount;
   } catch (error) {
     console.error("Error getting unread count:", error);
@@ -376,21 +351,23 @@ export async function getUnreadCount(userid) {
  * @returns {function} Unsubscribe function
  */
 export function subscribeUnreadCount(userid, onChange) {
-  const messagesRef = ref(database, userAdminPath(userid));
+  const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
 
   const unsubscribe = onValue(messagesRef, (snapshot) => {
     if (!snapshot.exists()) {
       onChange(0);
       return;
     }
-    const raw = snapshot.val();
-    const flat = flattenMessagesFromSnapshot(raw);
+
+    const messagesObject = snapshot.val();
     let unreadCount = 0;
-    flat.forEach(([, msg]) => {
+
+    Object.values(messagesObject).forEach((msg) => {
       if (msg.type === 1 && !isSeenByCurrentAdmin(msg)) {
         unreadCount++;
       }
     });
+
     onChange(unreadCount);
   });
 
