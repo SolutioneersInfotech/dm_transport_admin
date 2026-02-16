@@ -344,15 +344,29 @@ export default function ChatMessageBubble({
 
   const displayName = senderName ?? (isAdmin ? "You" : "Driver");
 
-  /* ================= STATUS ================= */
-  const statusMap = {
-    0: "✓",
-    1: "✓✓",
-    2: "✓✓",
-  };
-
-  const statusIcon = statusMap[msg?.status] ?? "";
-  const statusColor = msg?.status === 2 ? "text-[#7fb3ff]" : "text-white/70";
+  /* ================= STATUS (WhatsApp-style: sent / delivered / read) ================= */
+  // Only show ticks for admin (outgoing) messages. status: 0 = sent, 1 = delivered, 2 = read
+  // If Firebase never updates status, treat messages older than 2s as "delivered" so double tick shows
+  const rawStatus = msg?.status ?? 0;
+  const messageAgeMs = date ? Date.now() - date.getTime() : 0;
+  const displayStatus =
+    rawStatus >= 2 ? 2 : rawStatus === 1 ? 1 : messageAgeMs >= 2000 ? 1 : 0;
+  const showStatusTicks = isAdmin;
+  const statusColor =
+    displayStatus === 2 ? "#7fb3ff" : "currentColor"; // blue when read, inherit otherwise
+  const statusOpacity = displayStatus === 2 ? 1 : 0.85;
+  // WhatsApp-style: single tick = one check, double tick = two checks (second offset right)
+  const TickSingle = () => (
+    <svg width="14" height="10" viewBox="0 0 14 10" fill="none" className="shrink-0" style={{ opacity: statusOpacity }} aria-hidden>
+      <path d="M1 5L4.5 8.5L13 1" stroke={statusColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+  const TickDouble = () => (
+    <svg width="16" height="11" viewBox="0 0 16 11" fill="none" className="shrink-0" style={{ opacity: statusOpacity }} aria-hidden>
+      <path d="M1 5.5L4 9L8 3" stroke={statusColor} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6 5.5L9 9L14 2" stroke={statusColor} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 
   /* ================= ATTACHMENT TYPE ================= */
   const lowerUrl = hasAttachment ? attachment.toLowerCase() : "";
@@ -575,15 +589,17 @@ export default function ChatMessageBubble({
           {/* Text */}
           {text && <p className="whitespace-pre-wrap break-words">{text}</p>}
 
-          {/* Meta */}
+          {/* Meta (time + WhatsApp-style ticks for outgoing messages) */}
           <div className="mt-1 flex items-center justify-end gap-1">
             <span
               className={`text-[10px] ${isAdmin ? "text-white/80" : "text-gray-400"}`}
             >
               {time}
             </span>
-            {statusIcon && (
-              <span className={`text-[11px] ${statusColor}`}>{statusIcon}</span>
+            {showStatusTicks && (
+              <span className="text-white/90" title={displayStatus === 0 ? "Sent" : displayStatus === 1 ? "Delivered" : "Read"}>
+                {displayStatus === 0 ? <TickSingle /> : <TickDouble />}
+              </span>
             )}
           </div>
         </div>

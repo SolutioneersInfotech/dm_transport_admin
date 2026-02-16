@@ -190,6 +190,7 @@ import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
 import { Copy, Download, Mail, Paperclip, Phone, Trash2, X } from "lucide-react";
 import {
+  fetchMessages as defaultFetchMessages,
   subscribeMessages as defaultSubscribeMessages,
   sendMessage as defaultSendMessage,
   deleteChatHistory as defaultDeleteChatHistory,
@@ -330,12 +331,14 @@ export default function ChatWindow({ driver, chatApi }) {
   const shouldScrollToBottomRef = useRef(true);
 
   const {
+    fetchMessages: fetchMessagesApi,
     subscribeMessages,
     sendMessage,
     deleteChatHistory,
     deleteSpecificMessage,
     markMessagesAsSeen,
   } = chatApi || {
+    fetchMessages: defaultFetchMessages,
     subscribeMessages: defaultSubscribeMessages,
     sendMessage: defaultSendMessage,
     deleteChatHistory: defaultDeleteChatHistory,
@@ -343,7 +346,7 @@ export default function ChatWindow({ driver, chatApi }) {
     markMessagesAsSeen: async () => ({ success: true }),
   };
 
-  /* ================= LOAD MESSAGES ================= */
+  /* ================= LOAD MESSAGES (whole chat for this user) ================= */
   useEffect(() => {
     if (!driverId) {
       setMessages([]);
@@ -359,21 +362,38 @@ export default function ChatWindow({ driver, chatApi }) {
     setContextMenu(null);
     setReplyTo(null);
 
-    // Mark messages as seen when chat window opens
     if (markMessagesAsSeen) {
       markMessagesAsSeen(driverId).catch((error) => {
         console.error("Failed to mark messages as seen:", error);
       });
     }
 
-    // Reset scroll flag when driver changes
     shouldScrollToBottomRef.current = true;
 
+    let cancelled = false;
+
+    // 1) Load whole chat once (messageLimit 0 = return all messages)
+    if (fetchMessagesApi) {
+      fetchMessagesApi(driverId, 0)
+        .then(({ messages: allMessages }) => {
+          if (!cancelled && Array.isArray(allMessages)) {
+            setMessages(allMessages);
+          }
+        })
+        .catch((err) => {
+          if (!cancelled) console.error("Failed to load full chat:", err);
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }
+
+    // 2) Subscribe for real-time updates (also sends full list from Firebase)
     const unsubscribe = subscribeMessages(driverId, (nextMessages) => {
-      setMessages(nextMessages || []);
-      setLoading(false);
-      
-      // Mark messages as seen after loading
+      if (!cancelled && Array.isArray(nextMessages)) {
+        setMessages(nextMessages);
+      }
+      if (!cancelled) setLoading(false);
       if (markMessagesAsSeen) {
         markMessagesAsSeen(driverId).catch((error) => {
           console.error("Failed to mark messages as seen:", error);
@@ -382,11 +402,10 @@ export default function ChatWindow({ driver, chatApi }) {
     });
 
     return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
+      cancelled = true;
+      if (unsubscribe) unsubscribe();
     };
-  }, [driverId, subscribeMessages, markMessagesAsSeen]);
+  }, [driverId, fetchMessagesApi, subscribeMessages, markMessagesAsSeen]);
 
   // Focus input when driver changes
   useEffect(() => {
