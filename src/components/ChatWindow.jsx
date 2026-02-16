@@ -322,7 +322,8 @@ export default function ChatWindow({ driver, chatApi }) {
       return null;
     }
 
-    return candidate;
+    const numericOnly = String(candidate).replace(/\D/g, "");
+    return numericOnly || null;
   })();
 
   const bottomRef = useRef(null);
@@ -370,6 +371,8 @@ export default function ChatWindow({ driver, chatApi }) {
     shouldScrollToBottomRef.current = true;
 
     const unsubscribe = subscribeMessages(driverId, (nextMessages) => {
+      console.log(driverId);
+      console.log(nextMessages);
       setMessages(nextMessages || []);
       setLoading(false);
       
