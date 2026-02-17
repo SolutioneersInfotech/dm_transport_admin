@@ -99,6 +99,9 @@ export default function Documents() {
   const [isFlagUpdating, setIsFlagUpdating] = useState(false);
   const [isFlagFilterLoading, setIsFlagFilterLoading] = useState(false);
   const hasFlagFilterRequestStartedRef = useRef(false);
+  const [isTypeFilterLoading, setIsTypeFilterLoading] = useState(false);
+  const [activeTypeFilterValue, setActiveTypeFilterValue] = useState(null);
+  const hasTypeFilterRequestStartedRef = useRef(false);
 
   const [searchParams] = useSearchParams();
 
@@ -348,6 +351,10 @@ export default function Documents() {
     return selectedFilters.length > 0 ? selectedFilters : [];
   }, [selectedFilters]);
 
+  const shouldShowTypeFilterSpinner = useCallback((filterValue, isSelected) => {
+    return isTypeFilterLoading && isSelected && activeTypeFilterValue === filterValue;
+  }, [activeTypeFilterValue, isTypeFilterLoading]);
+
   const startDate = useMemo(() => {
     return dateRange?.from ? formatLocalDate(dateRange.from) : undefined;
   }, [dateRange]);
@@ -452,8 +459,25 @@ export default function Documents() {
     }
   }, [isFlagFilterLoading, loading]);
 
+  useEffect(() => {
+    if (!isTypeFilterLoading) return;
+
+    if (loading) {
+      hasTypeFilterRequestStartedRef.current = true;
+      return;
+    }
+
+    if (hasTypeFilterRequestStartedRef.current) {
+      setIsTypeFilterLoading(false);
+      setActiveTypeFilterValue(null);
+      hasTypeFilterRequestStartedRef.current = false;
+    }
+  }, [isTypeFilterLoading, loading]);
+
   // Toggle filter selection
   const toggleFilter = (filterValue) => {
+    setActiveTypeFilterValue(filterValue);
+    setIsTypeFilterLoading(true);
     setSelectedFilters((prev) => {
       if (prev.includes(filterValue)) {
         return prev.filter((f) => f !== filterValue);
@@ -465,6 +489,8 @@ export default function Documents() {
 
   // Remove a specific filter
   const removeFilter = (filterValue) => {
+    setActiveTypeFilterValue(filterValue);
+    setIsTypeFilterLoading(true);
     setSelectedFilters((prev) => prev.filter((f) => f !== filterValue));
   };
 
@@ -771,7 +797,7 @@ export default function Documents() {
                           onClick={() => {
                             toggleFilter(filterValue);
                           }}
-                          className={`w-full text-left px-3 py-2 text-sm hover:bg-[#1d232a] transition-colors flex items-center gap-2 rounded ${
+                          className={`relative w-full text-left px-3 py-2 text-sm hover:bg-[#1d232a] transition-colors flex items-center gap-2 rounded ${
                             isSelected ? "text-[#1f6feb] bg-[#1d232a]" : "text-gray-300"
                           }`}
                         >
@@ -780,7 +806,12 @@ export default function Documents() {
                           }`}>
                             {isSelected && <Check className="h-3 w-3 text-white" />}
                           </span>
-                          {item}
+                          <span className="relative z-0">{item}</span>
+                          {shouldShowTypeFilterSpinner(filterValue, isSelected) && (
+                            <span className="absolute inset-0 z-10 flex items-center justify-center rounded bg-black/50">
+                              <Loader2 className="h-3.5 w-3.5 text-white animate-spin" />
+                            </span>
+                          )}
                         </button>
                       );
                     })}
@@ -800,9 +831,14 @@ export default function Documents() {
                 return (
                   <div
                     key={filterValue}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#1f6feb] text-white text-xs"
+                    className="relative inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#1f6feb] text-white text-xs"
                   >
                     <span>{filterLabel}</span>
+                    {shouldShowTypeFilterSpinner(filterValue, true) && (
+                      <span className="absolute inset-0 z-10 flex items-center justify-center rounded-full bg-black/50">
+                        <Loader2 className="h-3.5 w-3.5 text-white animate-spin" />
+                      </span>
+                    )}
                     <button
                       onClick={() => removeFilter(filterValue)}
                       className="hover:bg-[#1a5fd4] rounded-full p-0.5 transition-colors"
@@ -828,13 +864,18 @@ export default function Documents() {
                 onClick={() => toggleFilter(filterValue)}
                 variant={isSelected ? "default" : "outline"}
                 size="sm"
-                className={`rounded-full text-xs md:text-sm whitespace-nowrap ${
+                className={`relative overflow-hidden rounded-full text-xs md:text-sm whitespace-nowrap ${
                   isSelected
                     ? "bg-[#1f6feb] border-[#1f6feb] text-white"
                     : "border-gray-600 bg-[#161b22] text-gray-300 hover:bg-[#1d232a]"
                 }`}
               >
-                {item}
+                <span className="relative z-0">{item}</span>
+                {shouldShowTypeFilterSpinner(filterValue, isSelected) && (
+                  <span className="absolute inset-0 z-10 flex items-center justify-center rounded-full bg-black/50">
+                    <Loader2 className="h-3.5 w-3.5 text-white animate-spin" />
+                  </span>
+                )}
               </Button>
             );
           })}
@@ -912,6 +953,10 @@ export default function Documents() {
             {(selectedFilters.length > 0 || statusFilter !== "all" || (Array.isArray(categoryFilter) && categoryFilter.length > 0)) && (
           <button
                 onClick={() => {
+                  if (selectedFilters.length > 0) {
+                    setActiveTypeFilterValue(null);
+                    setIsTypeFilterLoading(true);
+                  }
                   setSelectedFilters([]);
                   setStatusFilter("all");
                   setCategoryFilter([]);
