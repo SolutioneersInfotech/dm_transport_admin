@@ -35,14 +35,15 @@ import { buildDocumentDownloadName, getDocumentTypeLabel } from "../utils/docume
 
 const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
 
-// Last 60 Days
+// Preload only the most relevant documents first to keep initial render light
+// on low-end devices (today + yesterday).
 function getDefaultDates() {
   const today = new Date();
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const past = new Date(start);
-  past.setDate(past.getDate() - 60);
+  const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const start = new Date(end);
+  start.setDate(start.getDate() - 1);
 
-  return { from: past, to: start };
+  return { from: start, to: end };
 }
 
 const FILTER_MAP = {
@@ -368,7 +369,8 @@ export default function Documents() {
       startDate,
       endDate,
       page: 1,
-      limit: 20,
+      // Keep initial payload small for smoother UX on low-end browsers.
+      limit: 15,
       search: searchDebounced,
       isSeen: isSeenParam,
       isFlagged: isFlaggedParam,
@@ -498,10 +500,10 @@ export default function Documents() {
   const filteredDocuments = allDocuments;
 
   function resetDates() {
-    const { start, end } = defaultDates;
+    const { from, to } = defaultDates;
     setDateRange({
-      from: new Date(start),
-      to: new Date(end),
+      from: new Date(from),
+      to: new Date(to),
     });
   }
 
