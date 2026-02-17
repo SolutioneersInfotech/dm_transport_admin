@@ -804,7 +804,12 @@ export default function Documents() {
                           <span className={`w-4 h-4 border rounded flex items-center justify-center ${
                             isSelected ? "border-[#1f6feb] bg-[#1f6feb]" : "border-gray-600"
                           }`}>
-                            {isSelected && <Check className="h-3 w-3 text-white" />}
+                            {isSelected &&
+                              (isTypeFilterLoading ? (
+                                <Loader2 className="h-3 w-3 text-white animate-spin" />
+                              ) : (
+                                <Check className="h-3 w-3 text-white" />
+                              ))}
                           </span>
                           <span className="relative z-0">{item}</span>
                           {shouldShowTypeFilterSpinner(filterValue, isSelected) && (
