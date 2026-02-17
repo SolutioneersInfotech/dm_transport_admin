@@ -99,6 +99,8 @@ export default function Documents() {
   const [isFlagUpdating, setIsFlagUpdating] = useState(false);
   const [isFlagFilterLoading, setIsFlagFilterLoading] = useState(false);
   const hasFlagFilterRequestStartedRef = useRef(false);
+  const [isTypeFilterLoading, setIsTypeFilterLoading] = useState(false);
+  const hasTypeFilterRequestStartedRef = useRef(false);
 
   const [searchParams] = useSearchParams();
 
@@ -452,8 +454,23 @@ export default function Documents() {
     }
   }, [isFlagFilterLoading, loading]);
 
+  useEffect(() => {
+    if (!isTypeFilterLoading) return;
+
+    if (loading) {
+      hasTypeFilterRequestStartedRef.current = true;
+      return;
+    }
+
+    if (hasTypeFilterRequestStartedRef.current) {
+      setIsTypeFilterLoading(false);
+      hasTypeFilterRequestStartedRef.current = false;
+    }
+  }, [isTypeFilterLoading, loading]);
+
   // Toggle filter selection
   const toggleFilter = (filterValue) => {
+    setIsTypeFilterLoading(true);
     setSelectedFilters((prev) => {
       if (prev.includes(filterValue)) {
         return prev.filter((f) => f !== filterValue);
@@ -465,6 +482,7 @@ export default function Documents() {
 
   // Remove a specific filter
   const removeFilter = (filterValue) => {
+    setIsTypeFilterLoading(true);
     setSelectedFilters((prev) => prev.filter((f) => f !== filterValue));
   };
 
@@ -778,7 +796,12 @@ export default function Documents() {
                           <span className={`w-4 h-4 border rounded flex items-center justify-center ${
                             isSelected ? "border-[#1f6feb] bg-[#1f6feb]" : "border-gray-600"
                           }`}>
-                            {isSelected && <Check className="h-3 w-3 text-white" />}
+                            {isSelected &&
+                              (isTypeFilterLoading ? (
+                                <Loader2 className="h-3 w-3 text-white animate-spin" />
+                              ) : (
+                                <Check className="h-3 w-3 text-white" />
+                              ))}
                           </span>
                           {item}
                         </button>
@@ -803,6 +826,7 @@ export default function Documents() {
                     className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#1f6feb] text-white text-xs"
                   >
                     <span>{filterLabel}</span>
+                    {isTypeFilterLoading && <Loader2 className="h-3 w-3 animate-spin" />}
                     <button
                       onClick={() => removeFilter(filterValue)}
                       className="hover:bg-[#1a5fd4] rounded-full p-0.5 transition-colors"
@@ -834,6 +858,7 @@ export default function Documents() {
                     : "border-gray-600 bg-[#161b22] text-gray-300 hover:bg-[#1d232a]"
                 }`}
               >
+                {isSelected && isTypeFilterLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 {item}
               </Button>
             );
@@ -912,6 +937,9 @@ export default function Documents() {
             {(selectedFilters.length > 0 || statusFilter !== "all" || (Array.isArray(categoryFilter) && categoryFilter.length > 0)) && (
           <button
                 onClick={() => {
+                  if (selectedFilters.length > 0) {
+                    setIsTypeFilterLoading(true);
+                  }
                   setSelectedFilters([]);
                   setStatusFilter("all");
                   setCategoryFilter([]);
