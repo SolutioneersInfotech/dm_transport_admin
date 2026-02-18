@@ -767,25 +767,17 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
               )}
 
               {!pdfLoadError && pdfPreviewUrl && (
-                <div className="relative w-full h-[600px] bg-[#06090f] p-3">
-                  <object
-                    data={pdfPreviewUrl}
-                    type="application/pdf"
+                <div className="relative w-full h-[600px] bg-[#05070d]">
+                  <iframe
+                    src={pdfPreviewUrl}
                     className="w-full h-full rounded bg-[#05070d]"
+                    title="PDF Preview"
                     onLoad={() => setIsPdfLoading(false)}
-                  >
-                    <iframe
-                      src={pdfPreviewUrl}
-                      className="w-full h-full rounded bg-[#05070d]"
-                      title="PDF Preview"
-                      onLoad={() => setIsPdfLoading(false)}
-                      onError={() => {
-                        setPdfLoadError("Unable to render PDF preview");
-                        setIsPdfLoading(false);
-                      }}
-                    />
-                  </object>
-                  <div className="pointer-events-none absolute left-0 top-0 right-0 h-8 border-b border-white/25 " />
+                    onError={() => {
+                      setPdfLoadError("Unable to render PDF preview");
+                      setIsPdfLoading(false);
+                    }}
+                  />
                 </div>
               )}
 
