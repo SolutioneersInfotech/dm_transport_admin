@@ -189,7 +189,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
           try {
             // Fetch only 1 message (just to get last message time) - fastest!
             // FIX: fetchMessages now fetches 20 messages, sorts by timestamp, and returns the most recent
-            const { messages } = await fetchMessages(userId, 1);
+            const { messages } = await fetchMessages(u, 1);
             if (messages && messages.length > 0) {
               // Messages are already sorted ascending by fetchMessages, so last element is most recent
               const lastMessage = messages[messages.length - 1];
@@ -267,7 +267,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       if (!userId) return;
       if (unsubscribeLastMessageRefs.current[userId]) return;
 
-      const unsubscribe = subscribeLastMessage(userId, (lastMessage) => {
+      const unsubscribe = subscribeLastMessage(u, (lastMessage) => {
         let lastMessageText =
           lastMessage?.content?.message ||
           lastMessage?.message ||
@@ -326,7 +326,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       if (unsubscribeUnreadRefs.current[userId]) return;
 
       // Subscribe to unread count changes
-      const unsubscribe = subscribeUnreadCount(userId, (count) => {
+      const unsubscribe = subscribeUnreadCount(u, (count) => {
         setUnreadCounts((prev) => ({
           ...prev,
           [userId]: count,
