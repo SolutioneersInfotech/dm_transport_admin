@@ -131,13 +131,10 @@ export default function DocumentPreview({ selectedDoc }) {
         {isPDF && (
           <div className="relative w-full h-full">
             <iframe
-              src={`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(
-                url
-              )}`}
+              src={url}
               className="w-full h-full rounded"
               title="PDF Preview"
             ></iframe>
-            <div className="pointer-events-none absolute left-0 top-0 right-0 h-8 bg-[#1d232a]/70 border-b border-gray-700 rounded-t" />
           </div>
         )}
 

@@ -708,15 +708,12 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
               )}
               <div className="relative w-full h-[600px]">
                 <iframe
-                  src={`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(
-                    url
-                  )}`}
+                  src={url}
                   className="w-full h-full rounded"
                   title="PDF Preview"
                   onLoad={() => setIsPdfLoading(false)}
                   onError={() => setIsPdfLoading(false)}
                 />
-                <div className="pointer-events-none absolute left-0 top-0 right-0 h-8 border-b border-white/25 " />
               </div>
             </>
           )}
