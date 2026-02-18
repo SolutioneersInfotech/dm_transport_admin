@@ -196,6 +196,9 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
   const isPDF = ext === "pdf";
   const isImage = ["jpg", "jpeg", "png", "webp", "gif"].includes(ext);
+  const pdfPreviewUrl = url
+    ? `${url}${url.includes("#") ? "&" : "#"}toolbar=1&navpanes=0&scrollbar=1`
+    : "";
 
   if (loading) {
     return (
@@ -708,9 +711,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
               )}
               <div className="relative w-full h-[600px]">
                 <iframe
-                  src={`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(
-                    url
-                  )}`}
+                  src={pdfPreviewUrl}
                   className="w-full h-full rounded"
                   title="PDF Preview"
                   onLoad={() => setIsPdfLoading(false)}
