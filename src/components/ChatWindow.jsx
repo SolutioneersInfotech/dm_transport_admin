@@ -362,7 +362,7 @@ export default function ChatWindow({ driver, chatApi }) {
 
     // Mark messages as seen when chat window opens
     if (markMessagesAsSeen) {
-      markMessagesAsSeen(driverId).catch((error) => {
+      markMessagesAsSeen(driver).catch((error) => {
         console.error("Failed to mark messages as seen:", error);
       });
     }
@@ -370,15 +370,13 @@ export default function ChatWindow({ driver, chatApi }) {
     // Reset scroll flag when driver changes
     shouldScrollToBottomRef.current = true;
 
-    const unsubscribe = subscribeMessages(driverId, (nextMessages) => {
-      console.log(driverId);
-      console.log(nextMessages);
+    const unsubscribe = subscribeMessages(driver, (nextMessages) => {
       setMessages(nextMessages || []);
       setLoading(false);
       
       // Mark messages as seen after loading
       if (markMessagesAsSeen) {
-        markMessagesAsSeen(driverId).catch((error) => {
+        markMessagesAsSeen(driver).catch((error) => {
           console.error("Failed to mark messages as seen:", error);
         });
       }
@@ -389,7 +387,7 @@ export default function ChatWindow({ driver, chatApi }) {
         unsubscribe();
       }
     };
-  }, [driverId, subscribeMessages, markMessagesAsSeen]);
+  }, [driverId, driver, subscribeMessages, markMessagesAsSeen]);
 
   // Focus input when driver changes
   useEffect(() => {
@@ -561,7 +559,7 @@ export default function ChatWindow({ driver, chatApi }) {
     scrollToBottom("smooth");
     const now = new Date().toISOString();
     dispatch(updateLastMessageAction({ userid: driverId, lastMessage: "Attachment", lastChatTime: now }));
-    sendMessage(driverId, "", undefined, replyTo?.msgId ?? null, url).catch((err) => {
+    sendMessage(driver, "", undefined, replyTo?.msgId ?? null, url).catch((err) => {
       console.error("Failed to send attachment message:", err);
     });
   }
@@ -591,7 +589,7 @@ export default function ChatWindow({ driver, chatApi }) {
     shouldScrollToBottomRef.current = true;
     scrollToBottom("smooth");
 
-    await sendMessage(driverId, text, undefined, replyTo?.msgId ?? null);
+    await sendMessage(driver, text, undefined, replyTo?.msgId ?? null);
     setReplyTo(null);
   }
 
@@ -631,8 +629,6 @@ export default function ChatWindow({ driver, chatApi }) {
 
   /* ================= GROUP MESSAGES ================= */
   const grouped = groupMessagesByDate(messages);
-  console.log(messages);
-
   /* ================= LOADER ================= */
   if (loading) {
     return <ChatWindowSkeleton />;
