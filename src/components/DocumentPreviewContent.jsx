@@ -54,6 +54,8 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   const [isLoadingAcknowledgements, setIsLoadingAcknowledgements] = useState(false);
   const [isSendingAcknowledgement, setIsSendingAcknowledgement] = useState(false);
   const [isPdfLoading, setIsPdfLoading] = useState(true);
+  const [pdfViewerUrl, setPdfViewerUrl] = useState("");
+  const [pdfLoadError, setPdfLoadError] = useState("");
   const [docSizeMb, setDocSizeMb] = useState(null);
   const [isDownloading, setIsDownloading] = useState(false);
 
@@ -75,6 +77,14 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
       return "—";
     }
   };
+
+  const blobToDataUrl = (blob) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error("Failed to prepare PDF preview"));
+      reader.readAsDataURL(blob);
+    });
 
   // Fetch document size via HEAD request (when doc URL is available)
   const docUrl = fullDoc?.document_url || selectedDoc?.document_url;
@@ -156,13 +166,71 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     }
   }, [showAcknowledgementDropdown]);
 
-  // Reset PDF loading state when document URL changes
+  // Prepare PDF as blob URL to avoid forced-download behavior from attachment responses
   useEffect(() => {
-    const doc = fullDoc || selectedDoc;
-    if (doc?.document_url) {
-      setIsPdfLoading(true);
+    let cancelled = false;
+    let nextObjectUrl = null;
+
+    const currentUrl = fullDoc?.document_url || selectedDoc?.document_url;
+    const extFromUrl = currentUrl?.split("?")[0]?.split(".").pop()?.toLowerCase();
+
+    if (!currentUrl || extFromUrl !== "pdf") {
+      setPdfLoadError("");
+      setPdfViewerUrl("");
+      setIsPdfLoading(false);
+      return;
     }
+
+    setPdfLoadError("");
+    setIsPdfLoading(true);
+
+    (async () => {
+      try {
+        const res = await fetch(currentUrl, { credentials: "omit" });
+        if (!res.ok) {
+          throw new Error("Unable to load PDF for preview");
+        }
+
+        const fetchedBlob = await res.blob();
+        if (cancelled) return;
+
+        const pdfBlob = new Blob([fetchedBlob], { type: "application/pdf" });
+        nextObjectUrl = URL.createObjectURL(pdfBlob);
+
+        const dataUrl = await blobToDataUrl(pdfBlob);
+        if (cancelled) return;
+
+        setPdfViewerUrl(`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(dataUrl)}`);
+      } catch (err) {
+        if (!cancelled) {
+          setPdfViewerUrl("");
+          setPdfLoadError(err?.message || "Unable to preview this PDF");
+          setIsPdfLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (nextObjectUrl) URL.revokeObjectURL(nextObjectUrl);
+    };
   }, [fullDoc?.document_url, selectedDoc?.document_url]);
+
+
+  // Prevent indefinite loader if browser PDF renderer does not emit load events
+  useEffect(() => {
+    const currentUrl = fullDoc?.document_url || selectedDoc?.document_url;
+    const extFromUrl = currentUrl?.split("?")[0]?.split(".").pop()?.toLowerCase();
+
+    if (extFromUrl !== "pdf" || !pdfViewerUrl || !isPdfLoading) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setIsPdfLoading(false);
+      setPdfLoadError((prev) => prev || "PDF preview is taking longer than expected. Use Open PDF if needed.");
+    }, 10000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [fullDoc?.document_url, selectedDoc?.document_url, pdfViewerUrl, isPdfLoading]);
 
   const loadAcknowledgements = async () => {
     setIsLoadingAcknowledgements(true);
@@ -196,6 +264,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
   const isPDF = ext === "pdf";
   const isImage = ["jpg", "jpeg", "png", "webp", "gif"].includes(ext);
+  const pdfPreviewUrl = pdfViewerUrl;
 
   if (loading) {
     return (
@@ -706,18 +775,32 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   </div>
                 </div>
               )}
-              <div className="relative w-full h-[600px]">
-                <iframe
-                  src={`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(
-                    url
-                  )}`}
-                  className="w-full h-full rounded"
-                  title="PDF Preview"
-                  onLoad={() => setIsPdfLoading(false)}
-                  onError={() => setIsPdfLoading(false)}
-                />
-                <div className="pointer-events-none absolute left-0 top-0 right-0 h-8 border-b border-white/25 " />
-              </div>
+
+              {!pdfLoadError && pdfPreviewUrl && (
+                <div className="relative w-full h-[600px] bg-[#05070d]">
+                  <iframe
+                    src={pdfPreviewUrl}
+                    className="w-full h-full rounded bg-[#05070d]"
+                    title="PDF Preview"
+                    onLoad={() => setIsPdfLoading(false)}
+                    onError={() => {
+                      setPdfLoadError("Unable to render PDF preview");
+                      setIsPdfLoading(false);
+                    }}
+                  />
+                </div>
+              )}
+
+              {pdfLoadError && (
+                <div className="text-center p-8 space-y-4">
+                  <p className="text-sm text-gray-400">{pdfLoadError}</p>
+                  <Button asChild variant="outline" className="border-gray-600 text-white hover:bg-gray-800">
+                    <a href={url} target="_blank" rel="noopener noreferrer">
+                      Open PDF
+                    </a>
+                  </Button>
+                </div>
+              )}
             </>
           )}
 
