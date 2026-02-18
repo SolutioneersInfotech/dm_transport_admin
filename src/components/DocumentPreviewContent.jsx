@@ -767,16 +767,16 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
               )}
 
               {!pdfLoadError && pdfPreviewUrl && (
-                <div className="relative w-full h-[600px]">
+                <div className="relative w-full h-[600px] bg-[#06090f] p-3">
                   <object
                     data={pdfPreviewUrl}
                     type="application/pdf"
-                    className="w-full h-full rounded"
+                    className="w-full h-full rounded bg-[#05070d]"
                     onLoad={() => setIsPdfLoading(false)}
                   >
                     <iframe
                       src={pdfPreviewUrl}
-                      className="w-full h-full rounded"
+                      className="w-full h-full rounded bg-[#05070d]"
                       title="PDF Preview"
                       onLoad={() => setIsPdfLoading(false)}
                       onError={() => {
