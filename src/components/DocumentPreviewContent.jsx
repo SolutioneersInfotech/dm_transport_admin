@@ -54,7 +54,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   const [isLoadingAcknowledgements, setIsLoadingAcknowledgements] = useState(false);
   const [isSendingAcknowledgement, setIsSendingAcknowledgement] = useState(false);
   const [isPdfLoading, setIsPdfLoading] = useState(true);
-  const [pdfObjectUrl, setPdfObjectUrl] = useState("");
+  const [pdfViewerUrl, setPdfViewerUrl] = useState("");
   const [pdfLoadError, setPdfLoadError] = useState("");
   const [docSizeMb, setDocSizeMb] = useState(null);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -77,6 +77,14 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
       return "—";
     }
   };
+
+  const blobToDataUrl = (blob) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error("Failed to prepare PDF preview"));
+      reader.readAsDataURL(blob);
+    });
 
   // Fetch document size via HEAD request (when doc URL is available)
   const docUrl = fullDoc?.document_url || selectedDoc?.document_url;
@@ -168,7 +176,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
     if (!currentUrl || extFromUrl !== "pdf") {
       setPdfLoadError("");
-      setPdfObjectUrl("");
+      setPdfViewerUrl("");
       setIsPdfLoading(false);
       return;
     }
@@ -188,10 +196,14 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
         const pdfBlob = new Blob([fetchedBlob], { type: "application/pdf" });
         nextObjectUrl = URL.createObjectURL(pdfBlob);
-        setPdfObjectUrl(nextObjectUrl);
+
+        const dataUrl = await blobToDataUrl(pdfBlob);
+        if (cancelled) return;
+
+        setPdfViewerUrl(`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(dataUrl)}`);
       } catch (err) {
         if (!cancelled) {
-          setPdfObjectUrl("");
+          setPdfViewerUrl("");
           setPdfLoadError(err?.message || "Unable to preview this PDF");
           setIsPdfLoading(false);
         }
@@ -210,7 +222,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     const currentUrl = fullDoc?.document_url || selectedDoc?.document_url;
     const extFromUrl = currentUrl?.split("?")[0]?.split(".").pop()?.toLowerCase();
 
-    if (extFromUrl !== "pdf" || !pdfObjectUrl || !isPdfLoading) return;
+    if (extFromUrl !== "pdf" || !pdfViewerUrl || !isPdfLoading) return;
 
     const timeoutId = window.setTimeout(() => {
       setIsPdfLoading(false);
@@ -218,7 +230,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     }, 10000);
 
     return () => window.clearTimeout(timeoutId);
-  }, [fullDoc?.document_url, selectedDoc?.document_url, pdfObjectUrl, isPdfLoading]);
+  }, [fullDoc?.document_url, selectedDoc?.document_url, pdfViewerUrl, isPdfLoading]);
 
   const loadAcknowledgements = async () => {
     setIsLoadingAcknowledgements(true);
@@ -252,9 +264,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
   const isPDF = ext === "pdf";
   const isImage = ["jpg", "jpeg", "png", "webp", "gif"].includes(ext);
-  const pdfPreviewUrl = pdfObjectUrl
-    ? `${pdfObjectUrl}#toolbar=1&navpanes=0&scrollbar=1`
-    : "";
+  const pdfPreviewUrl = pdfViewerUrl;
 
   if (loading) {
     return (
