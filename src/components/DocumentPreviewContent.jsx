@@ -54,6 +54,8 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   const [isLoadingAcknowledgements, setIsLoadingAcknowledgements] = useState(false);
   const [isSendingAcknowledgement, setIsSendingAcknowledgement] = useState(false);
   const [isPdfLoading, setIsPdfLoading] = useState(true);
+  const [pdfObjectUrl, setPdfObjectUrl] = useState("");
+  const [pdfLoadError, setPdfLoadError] = useState("");
   const [docSizeMb, setDocSizeMb] = useState(null);
   const [isDownloading, setIsDownloading] = useState(false);
 
@@ -156,12 +158,49 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     }
   }, [showAcknowledgementDropdown]);
 
-  // Reset PDF loading state when document URL changes
+  // Prepare PDF as blob URL to avoid forced-download behavior from attachment responses
   useEffect(() => {
-    const doc = fullDoc || selectedDoc;
-    if (doc?.document_url) {
-      setIsPdfLoading(true);
+    let cancelled = false;
+    let nextObjectUrl = null;
+
+    const currentUrl = fullDoc?.document_url || selectedDoc?.document_url;
+    const extFromUrl = currentUrl?.split("?")[0]?.split(".").pop()?.toLowerCase();
+
+    if (!currentUrl || extFromUrl !== "pdf") {
+      setPdfLoadError("");
+      setPdfObjectUrl("");
+      setIsPdfLoading(false);
+      return;
     }
+
+    setPdfLoadError("");
+    setIsPdfLoading(true);
+
+    (async () => {
+      try {
+        const res = await fetch(currentUrl, { credentials: "omit" });
+        if (!res.ok) {
+          throw new Error("Unable to load PDF for preview");
+        }
+
+        const blob = await res.blob();
+        if (cancelled) return;
+
+        nextObjectUrl = URL.createObjectURL(blob);
+        setPdfObjectUrl(nextObjectUrl);
+      } catch (err) {
+        if (!cancelled) {
+          setPdfObjectUrl("");
+          setPdfLoadError(err?.message || "Unable to preview this PDF");
+          setIsPdfLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (nextObjectUrl) URL.revokeObjectURL(nextObjectUrl);
+    };
   }, [fullDoc?.document_url, selectedDoc?.document_url]);
 
   const loadAcknowledgements = async () => {
@@ -196,8 +235,8 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
   const isPDF = ext === "pdf";
   const isImage = ["jpg", "jpeg", "png", "webp", "gif"].includes(ext);
-  const pdfPreviewUrl = url
-    ? `${url}${url.includes("#") ? "&" : "#"}toolbar=1&navpanes=0&scrollbar=1`
+  const pdfPreviewUrl = pdfObjectUrl
+    ? `${pdfObjectUrl}#toolbar=1&navpanes=0&scrollbar=1`
     : "";
 
   if (loading) {
@@ -709,16 +748,33 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   </div>
                 </div>
               )}
-              <div className="relative w-full h-[600px]">
-                <iframe
-                  src={pdfPreviewUrl}
-                  className="w-full h-full rounded"
-                  title="PDF Preview"
-                  onLoad={() => setIsPdfLoading(false)}
-                  onError={() => setIsPdfLoading(false)}
-                />
-                <div className="pointer-events-none absolute left-0 top-0 right-0 h-8 border-b border-white/25 " />
-              </div>
+
+              {!pdfLoadError && pdfPreviewUrl && (
+                <div className="relative w-full h-[600px]">
+                  <iframe
+                    src={pdfPreviewUrl}
+                    className="w-full h-full rounded"
+                    title="PDF Preview"
+                    onLoad={() => setIsPdfLoading(false)}
+                    onError={() => {
+                      setPdfLoadError("Unable to render PDF preview");
+                      setIsPdfLoading(false);
+                    }}
+                  />
+                  <div className="pointer-events-none absolute left-0 top-0 right-0 h-8 border-b border-white/25 " />
+                </div>
+              )}
+
+              {pdfLoadError && (
+                <div className="text-center p-8 space-y-4">
+                  <p className="text-sm text-gray-400">{pdfLoadError}</p>
+                  <Button asChild variant="outline" className="border-gray-600 text-white hover:bg-gray-800">
+                    <a href={url} target="_blank" rel="noopener noreferrer">
+                      Open PDF
+                    </a>
+                  </Button>
+                </div>
+              )}
             </>
           )}
 
