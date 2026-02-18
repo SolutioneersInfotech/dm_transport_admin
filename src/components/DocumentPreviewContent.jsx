@@ -183,10 +183,11 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
           throw new Error("Unable to load PDF for preview");
         }
 
-        const blob = await res.blob();
+        const fetchedBlob = await res.blob();
         if (cancelled) return;
 
-        nextObjectUrl = URL.createObjectURL(blob);
+        const pdfBlob = new Blob([fetchedBlob], { type: "application/pdf" });
+        nextObjectUrl = URL.createObjectURL(pdfBlob);
         setPdfObjectUrl(nextObjectUrl);
       } catch (err) {
         if (!cancelled) {
@@ -202,6 +203,22 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
       if (nextObjectUrl) URL.revokeObjectURL(nextObjectUrl);
     };
   }, [fullDoc?.document_url, selectedDoc?.document_url]);
+
+
+  // Prevent indefinite loader if browser PDF renderer does not emit load events
+  useEffect(() => {
+    const currentUrl = fullDoc?.document_url || selectedDoc?.document_url;
+    const extFromUrl = currentUrl?.split("?")[0]?.split(".").pop()?.toLowerCase();
+
+    if (extFromUrl !== "pdf" || !pdfObjectUrl || !isPdfLoading) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setIsPdfLoading(false);
+      setPdfLoadError((prev) => prev || "PDF preview is taking longer than expected. Use Open PDF if needed.");
+    }, 10000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [fullDoc?.document_url, selectedDoc?.document_url, pdfObjectUrl, isPdfLoading]);
 
   const loadAcknowledgements = async () => {
     setIsLoadingAcknowledgements(true);
@@ -751,16 +768,23 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
               {!pdfLoadError && pdfPreviewUrl && (
                 <div className="relative w-full h-[600px]">
-                  <iframe
-                    src={pdfPreviewUrl}
+                  <object
+                    data={pdfPreviewUrl}
+                    type="application/pdf"
                     className="w-full h-full rounded"
-                    title="PDF Preview"
                     onLoad={() => setIsPdfLoading(false)}
-                    onError={() => {
-                      setPdfLoadError("Unable to render PDF preview");
-                      setIsPdfLoading(false);
-                    }}
-                  />
+                  >
+                    <iframe
+                      src={pdfPreviewUrl}
+                      className="w-full h-full rounded"
+                      title="PDF Preview"
+                      onLoad={() => setIsPdfLoading(false)}
+                      onError={() => {
+                        setPdfLoadError("Unable to render PDF preview");
+                        setIsPdfLoading(false);
+                      }}
+                    />
+                  </object>
                   <div className="pointer-events-none absolute left-0 top-0 right-0 h-8 border-b border-white/25 " />
                 </div>
               )}
