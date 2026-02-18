@@ -79,6 +79,14 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     }
   };
 
+  const blobToDataUrl = (blob) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error("Failed to prepare PDF preview"));
+      reader.readAsDataURL(blob);
+    });
+
   // Fetch document size via HEAD request (when doc URL is available)
   const docUrl = fullDoc?.document_url || selectedDoc?.document_url;
   useEffect(() => {
