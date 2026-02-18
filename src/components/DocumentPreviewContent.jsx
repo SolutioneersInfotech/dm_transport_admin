@@ -56,6 +56,14 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   const [isPdfLoading, setIsPdfLoading] = useState(true);
   const [docSizeMb, setDocSizeMb] = useState(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
+  const [pdfPreviewError, setPdfPreviewError] = useState(false);
+
+  const previewDoc = fullDoc || selectedDoc;
+  const previewUrl = previewDoc?.document_url;
+  const previewCleanUrl = previewUrl?.split("?")[0];
+  const previewExt = previewCleanUrl?.split(".").pop()?.toLowerCase();
+  const isPreviewPdf = previewExt === "pdf";
 
   // Format date for In time / Out time display
   const formatDateTime = (value) => {
@@ -158,11 +166,58 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
   // Reset PDF loading state when document URL changes
   useEffect(() => {
-    const doc = fullDoc || selectedDoc;
-    if (doc?.document_url) {
+    if (previewUrl) {
       setIsPdfLoading(true);
+      setPdfPreviewError(false);
     }
-  }, [fullDoc?.document_url, selectedDoc?.document_url]);
+  }, [previewUrl]);
+
+  // Build a blob URL for PDF preview so browser renders inline even when server sends attachment headers.
+  useEffect(() => {
+    if (!isPreviewPdf || !previewUrl) {
+      setPdfPreviewUrl("");
+      setPdfPreviewError(false);
+      setIsPdfLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    let objectUrl = "";
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setIsPdfLoading(true);
+        setPdfPreviewError(false);
+
+        const response = await fetch(previewUrl, { signal: controller.signal, credentials: "omit" });
+        if (!response.ok) {
+          throw new Error(`Failed to load PDF (${response.status})`);
+        }
+
+        const blob = await response.blob();
+        if (cancelled) return;
+
+        objectUrl = URL.createObjectURL(blob);
+        setPdfPreviewUrl(objectUrl);
+      } catch (err) {
+        if (!cancelled) {
+          console.error("PDF preview fetch failed:", err);
+          setPdfPreviewUrl("");
+          setPdfPreviewError(true);
+          setIsPdfLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [isPreviewPdf, previewUrl]);
 
   const loadAcknowledgements = async () => {
     setIsLoadingAcknowledgements(true);
@@ -708,17 +763,24 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
               )}
               <div className="relative w-full h-[600px]">
                 <iframe
-                  src={`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(
-                    url
-                  )}`}
+                  src={pdfPreviewUrl}
                   className="w-full h-full rounded"
                   title="PDF Preview"
                   onLoad={() => setIsPdfLoading(false)}
-                  onError={() => setIsPdfLoading(false)}
                 />
-                <div className="pointer-events-none absolute left-0 top-0 right-0 h-8 border-b border-white/25 " />
               </div>
             </>
+          )}
+
+          {isPDF && pdfPreviewError && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-6">
+              <div className="text-center space-y-3">
+                <p className="text-sm text-gray-300">Unable to render PDF in preview.</p>
+                <Button asChild variant="outline" className="border-gray-600 text-white hover:bg-gray-800">
+                  <a href={url} target="_blank" rel="noopener noreferrer">Open PDF</a>
+                </Button>
+              </div>
+            </div>
           )}
 
           {!isImage && !isPDF && (
