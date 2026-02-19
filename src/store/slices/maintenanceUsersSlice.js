@@ -38,13 +38,20 @@ export const fetchMaintenanceUsers = createAsyncThunk(
   }
 );
 
-const matchUserId = (u, userid) =>
-  u.userid === userid ||
-  u.userId === userid ||
-  u.contactId === userid ||
-  u.contactid === userid ||
-  u.uid === userid ||
-  u.id === userid;
+const normalizeComparableId = (value) => {
+  if (value === null || value === undefined) return null;
+  const normalized = String(value).trim();
+  return normalized || null;
+};
+
+const matchUserId = (user, targetUserId) => {
+  const expected = normalizeComparableId(targetUserId);
+  if (!expected) return false;
+
+  return [user.userid, user.userId, user.contactId, user.contactid, user.uid, user.id]
+    .map(normalizeComparableId)
+    .some((candidate) => candidate === expected);
+};
 
 const maintenanceUsersSlice = createSlice({
   name: "maintenanceUsers",

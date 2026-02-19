@@ -77,7 +77,8 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       return null;
     }
 
-    return candidate;
+    const normalizedId = String(candidate).trim();
+    return normalizedId || null;
   }
 
   // Initial fetch: maintenance chat uses fetchMaintenanceUsers (GET /admin/fetchmaintenanceusers), regular chat uses fetchUsers.

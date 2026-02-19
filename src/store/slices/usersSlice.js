@@ -67,6 +67,21 @@ const writeUsersCache = (state) => {
 
 const cachedState = readUsersCache();
 
+const normalizeComparableId = (value) => {
+  if (value === null || value === undefined) return null;
+  const normalized = String(value).trim();
+  return normalized || null;
+};
+
+const matchUserId = (user, targetUserId) => {
+  const expected = normalizeComparableId(targetUserId);
+  if (!expected) return false;
+
+  return [user.userid, user.userId, user.contactId, user.contactid, user.uid, user.id]
+    .map(normalizeComparableId)
+    .some((candidate) => candidate === expected);
+};
+
 // Async thunk for fetching initial users
 export const fetchUsers = createAsyncThunk(
   "users/fetchUsers",
@@ -162,15 +177,7 @@ const usersSlice = createSlice({
     },
     updateUserLastMessage: (state, action) => {
       const { userid, lastMessage, lastChatTime } = action.payload;
-      const user = state.users.find(
-        (u) =>
-          u.userid === userid ||
-          u.userId === userid ||
-          u.contactId === userid ||
-          u.contactid === userid ||
-          u.uid === userid ||
-          u.id === userid
-      );
+      const user = state.users.find((u) => matchUserId(u, userid));
       if (user) {
         user.last_message = lastMessage;
         user.last_chat_time = lastChatTime;
