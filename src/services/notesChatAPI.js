@@ -1,7 +1,6 @@
 import {
   addDoc,
   collection,
-  deleteDoc,
   doc,
   getFirestore,
   onSnapshot,
@@ -9,7 +8,6 @@ import {
   query,
   runTransaction,
   serverTimestamp,
-  updateDoc,
 } from "firebase/firestore";
 import { getApps, initializeApp } from "firebase/app";
 import { getAuth, signInWithCustomToken } from "firebase/auth";
@@ -73,6 +71,64 @@ async function ensureAdminUploadServices() {
   }
 
   return authPromise;
+}
+
+
+
+async function sendNotesMutationRequest(attempts) {
+  const adminToken = localStorage.getItem("adminToken");
+
+  if (!adminToken) {
+    throw new Error("Missing admin token for notes mutation.");
+  }
+
+  const normalizedAttempts = attempts.map((attempt) =>
+    typeof attempt === "string"
+      ? { path: attempt, method: "POST", body: undefined }
+      : {
+          path: attempt.path,
+          method: attempt.method || "POST",
+          body: attempt.body,
+        }
+  );
+
+  const tried = [];
+
+  for (const attempt of normalizedAttempts) {
+    const normalizedPath = attempt.path.startsWith("/")
+      ? attempt.path
+      : `/${attempt.path}`;
+    const url = `${ADMIN_BASE_URL}${normalizedPath}`;
+
+    const response = await fetch(url, {
+      method: attempt.method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: attempt.body ? JSON.stringify(attempt.body) : undefined,
+    });
+
+    const text = await response.text();
+    const data = parseResponseText(text);
+
+    if (response.ok) {
+      return data;
+    }
+
+    tried.push(`${attempt.method} ${normalizedPath} (${response.status})`);
+
+    if (![404, 405].includes(response.status)) {
+      const message =
+        data?.message ||
+        data?.error ||
+        text ||
+        `Failed notes mutation on ${attempt.method} ${normalizedPath}`;
+      throw new Error(message);
+    }
+  }
+
+  throw new Error(`Notes mutation endpoint not found/method not allowed. Tried: ${tried.join(", ")}`);
 }
 
 function getAdminUser() {
@@ -212,7 +268,16 @@ export const deleteNotesMessage = async (messageId) => {
     return;
   }
 
-  await deleteDoc(doc(firestore, "messages", messageId));
+  const payload = {
+    id: messageId,
+    messageId,
+  };
+
+  await sendNotesMutationRequest([
+    { path: `/admin/notes/message/${messageId}`, method: "DELETE" },
+    { path: "/admin/deletenotesmessage", method: "DELETE", body: payload },
+    { path: "/admin/deletenotesmessage", method: "POST", body: payload },
+  ]);
 };
 
 export const updateNotesMessagePriority = async (messageId, priorityValue) => {
@@ -220,9 +285,19 @@ export const updateNotesMessagePriority = async (messageId, priorityValue) => {
     return;
   }
 
-  await updateDoc(doc(firestore, "messages", messageId), {
+  const payload = {
+    id: messageId,
+    messageId,
     priority: priorityValue,
-  });
+  };
+
+  await sendNotesMutationRequest([
+    { path: "/admin/notes/message/priority", method: "PATCH", body: payload },
+    { path: "/admin/notes/message/priority", method: "PUT", body: payload },
+    { path: "/admin/updatenotesmessagepriority", method: "PATCH", body: payload },
+    { path: "/admin/updatenotesmessagepriority", method: "PUT", body: payload },
+    { path: "/admin/updatenotesmessagepriority", method: "POST", body: payload },
+  ]);
 };
 
 export const addReaction = async ({ messageId, emoji, userId }) => {
@@ -232,19 +307,32 @@ export const addReaction = async ({ messageId, emoji, userId }) => {
 
   const messageRef = doc(firestore, "messages", messageId);
 
+  // Toggle reaction in Firestore using old-compatible schema:
+  // reactions: { "😊": ["user1"], "👍": ["user2"] }
   await runTransaction(firestore, async (transaction) => {
     const snapshot = await transaction.get(messageRef);
     const data = snapshot.data() ?? {};
     const reactions = { ...(data.reactions ?? {}) };
-    const currentUsers = Array.isArray(reactions[emoji])
+
+    const existingUsers = Array.isArray(reactions[emoji])
       ? [...reactions[emoji]]
       : [];
 
-    if (!currentUsers.includes(userId)) {
-      currentUsers.push(userId);
+    let nextUsers;
+
+    if (existingUsers.includes(userId)) {
+      // remove reaction
+      nextUsers = existingUsers.filter((id) => id !== userId);
+    } else {
+      // add reaction
+      nextUsers = [...existingUsers, userId];
     }
 
-    reactions[emoji] = currentUsers;
+    if (!nextUsers.length) {
+      delete reactions[emoji];
+    } else {
+      reactions[emoji] = nextUsers;
+    }
 
     transaction.update(messageRef, { reactions });
   });
