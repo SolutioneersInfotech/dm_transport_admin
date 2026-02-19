@@ -76,6 +76,33 @@ function normalizeSearchText(value = "") {
     .trim();
 }
 
+function formatDriver(driver) {
+  return {
+    ...driver,
+    phone: formatPhone(driver.phone || driver.id),
+    lastSeenLabel: formatRelativeTime(driver.lastSeen),
+  };
+}
+
+function mergeUniqueDrivers(...driverGroups) {
+  const merged = [];
+  const seen = new Set();
+
+  driverGroups.flat().forEach((driver) => {
+    const key = driver.id || driver.phone;
+    if (!key) {
+      merged.push(driver);
+      return;
+    }
+
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push(driver);
+  });
+
+  return merged;
+}
+
 function driverMatchesSearch(driver, searchTerm) {
   const normalizedTerm = normalizeSearchText(searchTerm);
   if (!normalizedTerm) return true;
@@ -186,15 +213,23 @@ export default function Drivers() {
   }, [search]);
 
   useEffect(() => {
-    setDrivers([]);
-    setSelectedId(null);
-  }, [debouncedSearch]);
-
-  useEffect(() => {
     const activeSearch = debouncedSearch.trim();
     if (!activeSearch) {
       setIsSearchLoading(false);
       setSearchError("");
+      return;
+    }
+
+    const cachedMatches = searchCache.filter((driver) =>
+      driverMatchesSearch(driver, activeSearch)
+    );
+    if (cachedMatches.length > 0 || hasLoadedSearchCache) {
+      setDrivers(cachedMatches);
+      setSelectedId(cachedMatches[0]?.id ?? null);
+    }
+
+    if (hasLoadedSearchCache) {
+      setIsSearchLoading(false);
       return;
     }
 
@@ -736,8 +771,9 @@ export default function Drivers() {
                     </div>
                     <span className="col-span-3 h-3 w-28 animate-pulse rounded-full bg-slate-900/70" />
                     <span className="col-span-2 h-3 w-20 animate-pulse rounded-full bg-slate-900/70" />
+                    <span className="col-span-1 h-6 w-16 animate-pulse rounded-full bg-slate-900/70" />
                     <span className="col-span-1 h-6 w-12 animate-pulse rounded-full bg-slate-900/70" />
-                    <span className="col-span-2 ml-auto h-3 w-16 animate-pulse rounded-full bg-slate-900/70" />
+                    <span className="col-span-1 ml-auto h-3 w-16 animate-pulse rounded-full bg-slate-900/70" />
                   </div>
                 ))}
               </div>
@@ -802,6 +838,16 @@ export default function Drivers() {
                     </span>
                     <span className="col-span-1 text-slate-400">
                       {driver.country || "—"}
+                    </span>
+                    <span className="col-span-1">
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-xs ${
+                          statusStyles[driver.status] ||
+                          "border-slate-700 text-slate-400"
+                        }`}
+                      >
+                        {driver.status === "active" ? "Active" : "Inactive"}
+                      </span>
                     </span>
                     <span className="col-span-1">
                       <span
