@@ -46,7 +46,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { useAppSelector } from "../store/hooks";
+import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { fetchUsers } from "../store/slices/usersSlice";
+import { removeUserUnreadCounts, setUnreadCountForUser } from "../store/slices/chatUnreadSlice";
+import { subscribeUnreadCount as subscribeRegularChatUnread } from "../services/chatAPI";
+import { subscribeUnreadCount as subscribeMaintenanceChatUnread } from "../services/maintenanceChatAPI";
 import {
   Bell,
   Folder,
@@ -88,6 +92,7 @@ const menuSections = [
 ];
 
 export default function Sidebar() {
+  const dispatch = useAppDispatch();
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -115,6 +120,72 @@ export default function Sidebar() {
     },
   ]);
   const unreadCount = useMemo(() => notifications.length, [notifications]);
+  const { users, hasLoaded, loading } = useAppSelector((state) => state.users);
+  const unreadUnsubscribeRefs = useRef({});
+
+  function getUserId(user) {
+    return (
+      user?.userid ??
+      user?.userId ??
+      user?.contactId ??
+      user?.contactid ??
+      user?.uid ??
+      user?.id ??
+      null
+    );
+  }
+
+  useEffect(() => {
+    if (!hasLoaded && !loading) {
+      dispatch(fetchUsers({ page: 1, limit: -1 }));
+    }
+  }, [dispatch, hasLoaded, loading]);
+
+  useEffect(() => {
+    if (!users?.length) return;
+
+    users.forEach((user) => {
+      const userId = getUserId(user);
+      if (!userId || unreadUnsubscribeRefs.current[userId]) return;
+
+      const unsubscribeRegular = subscribeRegularChatUnread(user, (count) => {
+        dispatch(setUnreadCountForUser({ userId, chatType: "regular", count }));
+      });
+
+      const unsubscribeMaintenance = subscribeMaintenanceChatUnread(userId, (count) => {
+        dispatch(setUnreadCountForUser({ userId, chatType: "maintenance", count }));
+      });
+
+      unreadUnsubscribeRefs.current[userId] = {
+        regular: unsubscribeRegular,
+        maintenance: unsubscribeMaintenance,
+      };
+    });
+
+    return () => {
+      const currentUserIds = new Set(users.map(getUserId).filter(Boolean));
+
+      Object.keys(unreadUnsubscribeRefs.current).forEach((userId) => {
+        if (currentUserIds.has(userId)) return;
+
+        const unsubscribes = unreadUnsubscribeRefs.current[userId];
+        if (unsubscribes?.regular) unsubscribes.regular();
+        if (unsubscribes?.maintenance) unsubscribes.maintenance();
+        delete unreadUnsubscribeRefs.current[userId];
+        dispatch(removeUserUnreadCounts(userId));
+      });
+    };
+  }, [users, dispatch]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(unreadUnsubscribeRefs.current).forEach((unsubscribes) => {
+        if (unsubscribes?.regular) unsubscribes.regular();
+        if (unsubscribes?.maintenance) unsubscribes.maintenance();
+      });
+      unreadUnsubscribeRefs.current = {};
+    };
+  }, []);
 
   // Get unread data from Redux - badge shows number of users with unseen messages, not total messages
   const { unreadCountsByUser } = useAppSelector((state) => state.chatUnread);
