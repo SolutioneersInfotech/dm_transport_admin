@@ -128,7 +128,7 @@ export default function Sidebar() {
   }, [unreadCountsByUser]);
 
   const displayName = user?.name || user?.username || user?.userid || "Admin";
-  const userRole = user?.role || user?.userType || user?.designation || "Admin Panel";
+  const userRole = user?.role || user?.userType || user?.designation || "Admin";
   const displaySubtitle =
     user?.email && user.email !== displayName && user.email !== user?.userid
       ? user.email
