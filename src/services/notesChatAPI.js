@@ -212,7 +212,9 @@ export const deleteNotesMessage = async (messageId) => {
     return;
   }
 
-  await deleteDoc(doc(firestore, "messages", messageId));
+  const { firestore: adminFirestore } = await ensureAdminUploadServices();
+
+  await deleteDoc(doc(adminFirestore, "messages", messageId));
 };
 
 export const updateNotesMessagePriority = async (messageId, priorityValue) => {
@@ -220,7 +222,9 @@ export const updateNotesMessagePriority = async (messageId, priorityValue) => {
     return;
   }
 
-  await updateDoc(doc(firestore, "messages", messageId), {
+  const { firestore: adminFirestore } = await ensureAdminUploadServices();
+
+  await updateDoc(doc(adminFirestore, "messages", messageId), {
     priority: priorityValue,
   });
 };
@@ -230,9 +234,10 @@ export const addReaction = async ({ messageId, emoji, userId }) => {
     return;
   }
 
-  const messageRef = doc(firestore, "messages", messageId);
+  const { firestore: adminFirestore } = await ensureAdminUploadServices();
+  const messageRef = doc(adminFirestore, "messages", messageId);
 
-  await runTransaction(firestore, async (transaction) => {
+  await runTransaction(adminFirestore, async (transaction) => {
     const snapshot = await transaction.get(messageRef);
     const data = snapshot.data() ?? {};
     const reactions = { ...(data.reactions ?? {}) };
