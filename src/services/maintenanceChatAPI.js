@@ -185,6 +185,18 @@ export function subscribeMessages(userid, onChange) {
   return unsubscribe;
 }
 
+/**
+ * Subscribe to the latest message for a specific maintenance thread.
+ * @param {string|object} userid
+ * @param {(message: object|null) => void} onChange
+ * @returns {function} Unsubscribe function
+ */
+export function subscribeLastMessage(userid, onChange) {
+  return subscribeMessages(userid, (messages) => {
+    onChange(messages.length ? messages[messages.length - 1] : null);
+  });
+}
+
 export async function sendMessage(userid, text, adminUser = getAdminUser()) {
   const resolvedUserId = resolveUserId(userid);
   if (!resolvedUserId) {
