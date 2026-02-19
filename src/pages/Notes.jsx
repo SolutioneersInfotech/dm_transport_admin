@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Angry,
+  Paperclip,
   Heart,
   Laugh,
   Smile,
@@ -638,9 +639,10 @@ export default function Notes() {
                 variant="outline"
                 size="sm"
                 onClick={() => setAttachmentMenuOpen((prev) => !prev)}
-                className="rounded-full border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-100"
+                className="rounded-full border border-gray-200 bg-white px-3 py-2 text-gray-900 hover:bg-gray-100"
+                aria-label="Attachment options"
               >
-                + Attachment
+                <Paperclip className="h-4 w-4" />
               </Button>
               {attachmentMenuOpen && (
                 <div className="absolute left-0 bottom-12 z-20 w-40 rounded-lg border border-gray-700 bg-[#161b22] py-2 text-sm">
