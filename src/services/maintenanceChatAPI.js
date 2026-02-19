@@ -2,7 +2,6 @@ import {
   get,
   onValue,
   push,
-  query,
   ref,
   remove,
   set,
@@ -21,6 +20,27 @@ function getToken() {
 
 function getAdminUser() {
   return JSON.parse(localStorage.getItem("adminUser"));
+}
+
+function normalizeUserId(value) {
+  if (value === null || value === undefined) return null;
+  const cleaned = String(value).trim();
+  return cleaned || null;
+}
+
+function resolveUserId(chatTarget) {
+  if (chatTarget && typeof chatTarget === "object") {
+    const candidate =
+      chatTarget.userid ??
+      chatTarget.userId ??
+      chatTarget.uid ??
+      chatTarget.id ??
+      null;
+
+    return normalizeUserId(candidate);
+  }
+
+  return normalizeUserId(chatTarget);
 }
 
 function normalizeMessage(messageId, msg) {
@@ -103,11 +123,16 @@ export async function fetchUsersForChat() {
  * @returns {Promise<{messages: Array}>}
  */
 export async function fetchMessages(userid, messageLimit = 10) {
+  const resolvedUserId = resolveUserId(userid);
+  if (!resolvedUserId) {
+    return { messages: [] };
+  }
+
   // FIX: Fetch all messages and sort by timestamp to get the actual most recent
   // Firebase key order is not timestamp order, so we need to sort all messages
   // to ensure we get the most recent messages correctly
   
-  const messagesRef = ref(database, `${ADMIN_MAINTENANCE_PATH}/${userid}`);
+  const messagesRef = ref(database, `${ADMIN_MAINTENANCE_PATH}/${resolvedUserId}`);
   
   const snapshot = await get(messagesRef);
   const messagesObject = snapshot.exists() ? snapshot.val() : {};
@@ -135,8 +160,14 @@ export async function fetchMessages(userid, messageLimit = 10) {
  * @returns {function} Unsubscribe function
  */
 export function subscribeMessages(userid, onChange) {
+  const resolvedUserId = resolveUserId(userid);
+  if (!resolvedUserId) {
+    onChange([]);
+    return () => {};
+  }
+
   // Fetch all messages without limit to ensure no messages are missed
-  const messagesRef = ref(database, `${ADMIN_MAINTENANCE_PATH}/${userid}`);
+  const messagesRef = ref(database, `${ADMIN_MAINTENANCE_PATH}/${resolvedUserId}`);
 
   const unsubscribe = onValue(messagesRef, (snapshot) => {
     const messagesObject = snapshot.exists() ? snapshot.val() : {};
@@ -155,8 +186,13 @@ export function subscribeMessages(userid, onChange) {
 }
 
 export async function sendMessage(userid, text, adminUser = getAdminUser()) {
+  const resolvedUserId = resolveUserId(userid);
+  if (!resolvedUserId) {
+    throw new Error("Missing userid for maintenance chat message.");
+  }
+
   const messageId = push(
-    ref(database, `${ADMIN_MAINTENANCE_PATH}/${userid}`)
+    ref(database, `${ADMIN_MAINTENANCE_PATH}/${resolvedUserId}`)
   ).key;
 
   if (!messageId) {
@@ -169,7 +205,7 @@ export async function sendMessage(userid, text, adminUser = getAdminUser()) {
     content: { message: text, attachmentUrl: "" },
     status: 0,
     type: 0,
-    contactId: userid,
+    contactId: resolvedUserId,
     sendername: adminUser?.userid || "Admin",
     replyTo: null,
   };
@@ -181,11 +217,11 @@ export async function sendMessage(userid, text, adminUser = getAdminUser()) {
 
   await Promise.all([
     set(
-      ref(database, `${ADMIN_MAINTENANCE_PATH}/${userid}/${messageId}`),
+      ref(database, `${ADMIN_MAINTENANCE_PATH}/${resolvedUserId}/${messageId}`),
       payload
     ),
     set(
-      ref(database, `${USER_MAINTENANCE_PATH}/${userid}/maintenance/${messageId}`),
+      ref(database, `${USER_MAINTENANCE_PATH}/${resolvedUserId}/maintenance/${messageId}`),
       userPayload
     ),
   ]);
@@ -194,27 +230,37 @@ export async function sendMessage(userid, text, adminUser = getAdminUser()) {
 }
 
 export async function deleteChatHistory(userid) {
+  const resolvedUserId = resolveUserId(userid);
+  if (!resolvedUserId) {
+    return { success: true };
+  }
+
   await Promise.all([
-    remove(ref(database, `${ADMIN_MAINTENANCE_PATH}/${userid}`)),
-    remove(ref(database, `${USER_MAINTENANCE_PATH}/${userid}/maintenance`)),
+    remove(ref(database, `${ADMIN_MAINTENANCE_PATH}/${resolvedUserId}`)),
+    remove(ref(database, `${USER_MAINTENANCE_PATH}/${resolvedUserId}/maintenance`)),
   ]);
 
   return { success: true };
 }
 
 export async function deleteSpecificMessage(messageId, userid) {
+  const resolvedUserId = resolveUserId(userid);
+  if (!resolvedUserId || !messageId) {
+    return { success: true };
+  }
+
   const deletes = [
     remove(
-      ref(database, `${ADMIN_MAINTENANCE_PATH}/${userid}/${messageId}`)
+      ref(database, `${ADMIN_MAINTENANCE_PATH}/${resolvedUserId}/${messageId}`)
     ),
   ];
 
-  if (userid) {
+  if (resolvedUserId) {
     deletes.push(
       remove(
         ref(
           database,
-          `${USER_MAINTENANCE_PATH}/${userid}/maintenance/${messageId}`
+          `${USER_MAINTENANCE_PATH}/${resolvedUserId}/maintenance/${messageId}`
         )
       )
     );
@@ -228,7 +274,12 @@ export async function deleteSpecificMessage(messageId, userid) {
 // Mark messages as seen/read for the current admin only (per-admin seen)
 export async function markMessagesAsSeen(userid) {
   try {
-    const messagesRef = ref(database, `${ADMIN_MAINTENANCE_PATH}/${userid}`);
+    const resolvedUserId = resolveUserId(userid);
+    if (!resolvedUserId) {
+      return { success: true };
+    }
+
+    const messagesRef = ref(database, `${ADMIN_MAINTENANCE_PATH}/${resolvedUserId}`);
     const snapshot = await get(messagesRef);
 
     if (!snapshot.exists()) {
@@ -244,7 +295,7 @@ export async function markMessagesAsSeen(userid) {
       const msg = messagesObject[messageId];
       if (msg.type !== 1) return;
       if (isSeenByCurrentAdmin(msg)) return;
-      const messagePath = `${ADMIN_MAINTENANCE_PATH}/${userid}/${messageId}`;
+      const messagePath = `${ADMIN_MAINTENANCE_PATH}/${resolvedUserId}/${messageId}`;
       updateData[`${messagePath}/seenByAdmins/${adminId}`] = seenTimestamp;
       updateData[`${messagePath}/seenAt`] = seenTimestamp;
       updateData[`${messagePath}/seenBy`] = adminId;
@@ -254,7 +305,7 @@ export async function markMessagesAsSeen(userid) {
       await update(ref(database), updateData);
     }
 
-    const lastSeenRef = ref(database, `chat/admin/maintenance/lastSeen/${userid}`);
+    const lastSeenRef = ref(database, `chat/admin/maintenance/lastSeen/${resolvedUserId}`);
     await set(lastSeenRef, {
       timestamp: seenTimestamp,
       adminId: adminId,
@@ -270,7 +321,12 @@ export async function markMessagesAsSeen(userid) {
 // Get unread message count for the current admin only (per-admin)
 export async function getUnreadCount(userid) {
   try {
-    const messagesRef = ref(database, `${ADMIN_MAINTENANCE_PATH}/${userid}`);
+    const resolvedUserId = resolveUserId(userid);
+    if (!resolvedUserId) {
+      return 0;
+    }
+
+    const messagesRef = ref(database, `${ADMIN_MAINTENANCE_PATH}/${resolvedUserId}`);
     const snapshot = await get(messagesRef);
 
     if (!snapshot.exists()) {
@@ -295,7 +351,13 @@ export async function getUnreadCount(userid) {
 
 // Subscribe to unread count for the current admin only (per-admin)
 export function subscribeUnreadCount(userid, onChange) {
-  const messagesRef = ref(database, `${ADMIN_MAINTENANCE_PATH}/${userid}`);
+  const resolvedUserId = resolveUserId(userid);
+  if (!resolvedUserId) {
+    onChange(0);
+    return () => {};
+  }
+
+  const messagesRef = ref(database, `${ADMIN_MAINTENANCE_PATH}/${resolvedUserId}`);
 
   const unsubscribe = onValue(messagesRef, (snapshot) => {
     if (!snapshot.exists()) {
