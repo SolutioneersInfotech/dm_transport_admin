@@ -185,7 +185,7 @@ export default function Drivers() {
   const [photoError, setPhotoError] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
   const [uploadedPhone, setUploadedPhone] = useState("");
-  const [detailsWidth, setDetailsWidth] = useState(360);
+  const [detailsWidth, setDetailsWidth] = useState(425);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [isSearchLoading, setIsSearchLoading] = useState(false);
@@ -922,7 +922,7 @@ export default function Drivers() {
 
         {!isInitialLoading && (
           <aside
-            className="relative flex w-full max-w-full flex-none flex-col gap-4 self-start overflow-auto rounded-m border border-slate-800 bg-slate-950/60 p-7 xl:min-w-[300px]"
+            className="relative flex w-full max-w-full flex-none flex-col gap-4 self-start overflow-auto rounded-m border border-slate-800 bg-slate-950/60 p-7 xl:min-w-[320px]"
             style={{ width: detailsWidth, maxWidth: "100%" }}
           >
             <div
