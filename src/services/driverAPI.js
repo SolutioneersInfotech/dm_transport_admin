@@ -81,7 +81,7 @@ function normalizeDriverResponse(data) {
   return { users: Array.isArray(users) ? users : [], pagination };
 }
 
-export async function fetchDrivers({ page = 1, limit = 20, search = "" } = {}) {
+export async function fetchDrivers({ page = 1, limit = 100, search = "" } = {}) {
   const token = localStorage.getItem("adminToken");
   const params = new URLSearchParams({
     page: String(page),

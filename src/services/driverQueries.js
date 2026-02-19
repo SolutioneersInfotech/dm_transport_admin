@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchDriverCount, fetchDrivers } from "./driverAPI";
 
-export function useDriversQuery({ page = 1, limit = 20, search = "" } = {}) {
+export function useDriversQuery({ page = 1, limit = 100, search = "" } = {}) {
   return useQuery({
     queryKey: ["drivers", page, limit, search],
     queryFn: () => fetchDrivers({ page, limit, search }),
