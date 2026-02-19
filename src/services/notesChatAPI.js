@@ -1,15 +1,11 @@
 import {
   addDoc,
   collection,
-  deleteDoc,
-  doc,
   getFirestore,
   onSnapshot,
   orderBy,
   query,
-  runTransaction,
   serverTimestamp,
-  updateDoc,
 } from "firebase/firestore";
 import { getApps, initializeApp } from "firebase/app";
 import { getAuth, signInWithCustomToken } from "firebase/auth";
@@ -76,36 +72,61 @@ async function ensureAdminUploadServices() {
 }
 
 
-async function getAuthDebugContext() {
-  try {
-    const services = await ensureAdminUploadServices();
-    const user = services.auth.currentUser;
 
-    if (!user) {
-      return { uid: null, role: null };
+async function sendNotesMutationRequest(attempts) {
+  const adminToken = localStorage.getItem("adminToken");
+
+  if (!adminToken) {
+    throw new Error("Missing admin token for notes mutation.");
+  }
+
+  const normalizedAttempts = attempts.map((attempt) =>
+    typeof attempt === "string"
+      ? { path: attempt, method: "POST", body: undefined }
+      : {
+          path: attempt.path,
+          method: attempt.method || "POST",
+          body: attempt.body,
+        }
+  );
+
+  const tried = [];
+
+  for (const attempt of normalizedAttempts) {
+    const normalizedPath = attempt.path.startsWith("/")
+      ? attempt.path
+      : `/${attempt.path}`;
+    const url = `${ADMIN_BASE_URL}${normalizedPath}`;
+
+    const response = await fetch(url, {
+      method: attempt.method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: attempt.body ? JSON.stringify(attempt.body) : undefined,
+    });
+
+    const text = await response.text();
+    const data = parseResponseText(text);
+
+    if (response.ok) {
+      return data;
     }
 
-    const tokenResult = await user.getIdTokenResult(true);
-    return {
-      uid: user.uid,
-      role: tokenResult?.claims?.role ?? null,
-    };
-  } catch {
-    return { uid: null, role: null };
+    tried.push(`${attempt.method} ${normalizedPath} (${response.status})`);
+
+    if (![404, 405].includes(response.status)) {
+      const message =
+        data?.message ||
+        data?.error ||
+        text ||
+        `Failed notes mutation on ${attempt.method} ${normalizedPath}`;
+      throw new Error(message);
+    }
   }
-}
 
-function buildNotesPermissionError(operation, debugContext, originalError) {
-  const details = [
-    `[Notes] ${operation} failed with Firestore PERMISSION_DENIED.`,
-    `uid=${debugContext?.uid || "unknown"}`,
-    `role=${debugContext?.role || "missing"}`,
-    "Backend/Firestore rules likely block this write for current auth claims.",
-  ].join(" ");
-
-  const error = new Error(details);
-  error.cause = originalError;
-  return error;
+  throw new Error(`Notes mutation endpoint not found/method not allowed. Tried: ${tried.join(", ")}`);
 }
 
 function getAdminUser() {
@@ -245,18 +266,16 @@ export const deleteNotesMessage = async (messageId) => {
     return;
   }
 
-  const { firestore: adminFirestore } = await ensureAdminUploadServices();
+  const payload = {
+    id: messageId,
+    messageId,
+  };
 
-  try {
-    await deleteDoc(doc(adminFirestore, "messages", messageId));
-  } catch (error) {
-    if (error?.code === "permission-denied") {
-      const debugContext = await getAuthDebugContext();
-      throw buildNotesPermissionError("deleteNotesMessage", debugContext, error);
-    }
-
-    throw error;
-  }
+  await sendNotesMutationRequest([
+    { path: `/admin/notes/message/${messageId}`, method: "DELETE" },
+    { path: "/admin/deletenotesmessage", method: "DELETE", body: payload },
+    { path: "/admin/deletenotesmessage", method: "POST", body: payload },
+  ]);
 };
 
 export const updateNotesMessagePriority = async (messageId, priorityValue) => {
@@ -264,24 +283,19 @@ export const updateNotesMessagePriority = async (messageId, priorityValue) => {
     return;
   }
 
-  const { firestore: adminFirestore } = await ensureAdminUploadServices();
+  const payload = {
+    id: messageId,
+    messageId,
+    priority: priorityValue,
+  };
 
-  try {
-    await updateDoc(doc(adminFirestore, "messages", messageId), {
-      priority: priorityValue,
-    });
-  } catch (error) {
-    if (error?.code === "permission-denied") {
-      const debugContext = await getAuthDebugContext();
-      throw buildNotesPermissionError(
-        "updateNotesMessagePriority",
-        debugContext,
-        error
-      );
-    }
-
-    throw error;
-  }
+  await sendNotesMutationRequest([
+    { path: "/admin/notes/message/priority", method: "PATCH", body: payload },
+    { path: "/admin/notes/message/priority", method: "PUT", body: payload },
+    { path: "/admin/updatenotesmessagepriority", method: "PATCH", body: payload },
+    { path: "/admin/updatenotesmessagepriority", method: "PUT", body: payload },
+    { path: "/admin/updatenotesmessagepriority", method: "POST", body: payload },
+  ]);
 };
 
 export const addReaction = async ({ messageId, emoji, userId }) => {
@@ -289,34 +303,21 @@ export const addReaction = async ({ messageId, emoji, userId }) => {
     return;
   }
 
-  const { firestore: adminFirestore } = await ensureAdminUploadServices();
-  const messageRef = doc(adminFirestore, "messages", messageId);
+  const payload = {
+    id: messageId,
+    messageId,
+    reaction: emoji,
+    emoji,
+    userId,
+  };
 
-  try {
-    await runTransaction(adminFirestore, async (transaction) => {
-      const snapshot = await transaction.get(messageRef);
-      const data = snapshot.data() ?? {};
-      const reactions = { ...(data.reactions ?? {}) };
-      const currentUsers = Array.isArray(reactions[emoji])
-        ? [...reactions[emoji]]
-        : [];
-
-      if (!currentUsers.includes(userId)) {
-        currentUsers.push(userId);
-      }
-
-      reactions[emoji] = currentUsers;
-
-      transaction.update(messageRef, { reactions });
-    });
-  } catch (error) {
-    if (error?.code === "permission-denied") {
-      const debugContext = await getAuthDebugContext();
-      throw buildNotesPermissionError("addReaction", debugContext, error);
-    }
-
-    throw error;
-  }
+  await sendNotesMutationRequest([
+    { path: "/admin/notes/reaction", method: "POST", body: payload },
+    { path: "/admin/notes/reaction", method: "PATCH", body: payload },
+    { path: "/admin/updatenotesreaction", method: "POST", body: payload },
+    { path: "/admin/updatenotesreaction", method: "PUT", body: payload },
+    { path: "/admin/updatenotesreaction", method: "PATCH", body: payload },
+  ]);
 };
 
 export const uploadNotesAttachment = async (file, type) => {
