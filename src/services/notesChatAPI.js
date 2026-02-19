@@ -7,7 +7,6 @@ import {
   onSnapshot,
   orderBy,
   query,
-  runTransaction,
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
@@ -92,6 +91,30 @@ function parseResponseText(text) {
     return { message: text };
   }
 }
+
+const apiClient = {
+  async post(path, body) {
+    const adminToken = localStorage.getItem("adminToken");
+    const response = await fetch(`${ADMIN_BASE_URL}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const text = await response.text();
+    const data = parseResponseText(text);
+    if (!response.ok) {
+      const message =
+        data?.message || data?.error || text || "Request failed.";
+      throw new Error(message);
+    }
+
+    return data;
+  },
+};
 
 async function sendNotesMessageViaBackend(payload) {
   const adminToken = localStorage.getItem("adminToken");
@@ -230,23 +253,10 @@ export const addReaction = async ({ messageId, emoji, userId }) => {
     return;
   }
 
-  const messageRef = doc(firestore, "messages", messageId);
-
-  await runTransaction(firestore, async (transaction) => {
-    const snapshot = await transaction.get(messageRef);
-    const data = snapshot.data() ?? {};
-    const reactions = { ...(data.reactions ?? {}) };
-    const currentUsers = Array.isArray(reactions[emoji])
-      ? [...reactions[emoji]]
-      : [];
-
-    if (!currentUsers.includes(userId)) {
-      currentUsers.push(userId);
-    }
-
-    reactions[emoji] = currentUsers;
-
-    transaction.update(messageRef, { reactions });
+  await apiClient.post("/admin/notes/reaction", {
+    messageId,
+    emoji,
+    userId,
   });
 };
 
