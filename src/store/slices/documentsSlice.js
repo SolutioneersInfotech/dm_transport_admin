@@ -144,6 +144,7 @@ export const fetchDocumentCount = createAsyncThunk(
 
       const res = await fetch(url, {
         method: "GET",
+        cache: "force-cache",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -396,7 +397,7 @@ const documentsSlice = createSlice({
         state.total = action.payload.total;
         state.error = null;
         state.lastFetched = Date.now();
-        state.totalDocuments = action.payload.totalDocuments;
+        state.totalDocuments = action.payload.total;
       })
       .addCase(fetchDocuments.rejected, (state, action) => {
         state.loading = false;
@@ -430,6 +431,8 @@ const documentsSlice = createSlice({
         state.countsLoading = false;
         state.documentCounts = action.payload.counts;
         state.countsTotal = action.payload.total;
+        state.total = action.payload.total;
+        state.totalDocuments = action.payload.total;
         state.countsError = null;
         state.lastCountsFetched = Date.now();
       })
