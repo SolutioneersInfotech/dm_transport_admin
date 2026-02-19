@@ -81,7 +81,7 @@ export default function Documents() {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [selectedDocIds, setSelectedDocIds] = useState(new Set());
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [previewWidth, setPreviewWidth] = useState(480);
+  const [previewWidth, setPreviewWidth] = useState(620);
   const [isMarkingAsSeen, setIsMarkingAsSeen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isBulkDownloading, setIsBulkDownloading] = useState(false);
@@ -90,6 +90,7 @@ export default function Documents() {
   const [flagReason, setFlagReason] = useState("");
   const observerTarget = useRef(null);
   const isResizingRef = useRef(false);
+  const resizePointerOffsetRef = useRef(0);
   const layoutRef = useRef(null);
   const tableScrollRef = useRef(null);
   const [skeletonRows, setSkeletonRows] = useState(12);
@@ -189,11 +190,12 @@ export default function Documents() {
       if (!isResizingRef.current || !layoutRef.current) return;
       const rect = layoutRef.current.getBoundingClientRect();
       const minWidth = 320;
-      const minTableWidth = 420;
+      const minTableWidth = 360;
       const maxWidth = Math.max(minWidth, rect.width - minTableWidth);
+      const pointerAdjustedX = event.clientX - resizePointerOffsetRef.current;
       const nextWidth = Math.min(
         maxWidth,
-        Math.max(minWidth, rect.right - event.clientX)
+        Math.max(minWidth, rect.right - pointerAdjustedX)
       );
       setPreviewWidth(nextWidth);
     };
@@ -217,12 +219,17 @@ export default function Documents() {
   }, []);
 
   const handleResizeStart = useCallback((event) => {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || !layoutRef.current) return;
     event.preventDefault();
+
+    const rect = layoutRef.current.getBoundingClientRect();
+    const dividerX = rect.right - previewWidth;
+    resizePointerOffsetRef.current = event.clientX - dividerX;
+
     isResizingRef.current = true;
     document.body.style.cursor = "ew-resize";
     document.body.style.userSelect = "none";
-  }, []);
+  }, [previewWidth]);
 
   const [search, setSearch] = useState("");
   const [searchDebounced, setSearchDebounced] = useState("");
@@ -1465,11 +1472,11 @@ export default function Documents() {
           {/* 📄 PREVIEW CONTAINER - Hidden on mobile, shown in drawer */}
           {isPreviewOpen && selectedDoc && (
             <div
-              className="hidden lg:flex lg:flex-none min-w-[320px] max-w-[70%] flex-col bg-[#161b22] relative overflow-auto"
-              style={{ width: previewWidth, maxWidth: "70%" }}
+              className="hidden lg:flex lg:flex-none min-w-[320px] max-w-[75%] flex-col bg-[#161b22] relative overflow-auto"
+              style={{ width: previewWidth, maxWidth: "75%" }}
             >
               <div
-                className="absolute left-0 top-0 h-full w-2 cursor-ew-resize"
+                className="absolute left-0 top-0 h-full w-3 -translate-x-1/2 cursor-ew-resize"
                 role="separator"
                 aria-orientation="vertical"
                 onMouseDown={handleResizeStart}
