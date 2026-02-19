@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
-import { format as formatDate } from "date-fns";
+import { format as formatDate, isValid } from "date-fns";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { fetchDocumentCount, fetchDocuments, fetchMoreDocuments, resetPagination, updateDocument, deleteDocumentThunk, deleteDocumentsThunk } from "../store/slices/documentsSlice";
 import DocumentPreviewContent from "../components/DocumentPreviewContent";
@@ -34,6 +34,9 @@ import { toast } from "sonner";
 import { buildDocumentDownloadName, getDocumentTypeLabel } from "../utils/documentDownloadName";
 
 const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
+const ALL_DOCUMENTS_START_DATE = "1970-01-01";
+
+const isValidDateValue = (value) => value instanceof Date && isValid(value);
 
 // Last 60 Days
 function getDefaultDates() {
@@ -74,6 +77,7 @@ export default function Documents() {
     lastFetchParams,
     lastFetched,
     countsTotal,
+    countsLoading,
   } = useAppSelector((state) => state.documents);
   const { users } = useAppSelector((state) => state.users);
   const documentDropDownRef = useRef(null);
@@ -362,13 +366,26 @@ export default function Documents() {
     return isTypeFilterLoading && isSelected && activeTypeFilterValue === filterValue;
   }, [activeTypeFilterValue, isTypeFilterLoading]);
 
+  const hasCustomDateRange = useMemo(
+    () => isValidDateValue(dateRange?.from) && isValidDateValue(dateRange?.to),
+    [dateRange]
+  );
+
   const startDate = useMemo(() => {
-    return dateRange?.from ? formatLocalDate(dateRange.from) : undefined;
-  }, [dateRange]);
+    if (hasCustomDateRange) {
+      return formatLocalDate(dateRange.from);
+    }
+
+    return ALL_DOCUMENTS_START_DATE;
+  }, [dateRange, hasCustomDateRange]);
 
   const endDate = useMemo(() => {
-    return dateRange?.to ? formatLocalDate(dateRange.to) : undefined;
-  }, [dateRange]);
+    if (hasCustomDateRange) {
+      return formatLocalDate(dateRange.to);
+    }
+
+    return formatLocalDate(new Date());
+  }, [dateRange, hasCustomDateRange]);
 
   const currentFetchArgs = useMemo(
     () => ({
@@ -505,10 +522,9 @@ export default function Documents() {
   const filteredDocuments = allDocuments;
 
   function resetDates() {
-    const { start, end } = defaultDates;
     setDateRange({
-      from: new Date(start),
-      to: new Date(end),
+      from: undefined,
+      to: undefined,
     });
   }
 
@@ -631,6 +647,20 @@ export default function Documents() {
   };
 
   const showSkeleton = loading && !isManualRefreshing && filteredDocuments?.length === 0;
+  const displayedTotalDocuments = useMemo(() => {
+    if (countsLoading) return null;
+
+    if (typeof countsTotal === "number") {
+      return countsTotal;
+    }
+
+    if (typeof total === "number") {
+      return total;
+    }
+
+    return filteredDocuments?.length || 0;
+  }, [countsLoading, countsTotal, total, filteredDocuments]);
+
   useEffect(() => {
     function handleClickOutside(event) {
       if (
@@ -729,7 +759,6 @@ export default function Documents() {
   }, [handleLoadMore]);
 
   useEffect(() => {
-    if (!startDate || !endDate) return;
     const pollIntervalMs = 30 * 1000;
 
     const pollCounts = () => {
@@ -1084,10 +1113,7 @@ export default function Documents() {
             triggerWidthClassName="w-[260px] sm:w-[320px]"
             labelClassName="text-center"
           />
-          {dateRange?.from &&
-            dateRange?.to &&
-            (formatLocalDate(dateRange.from) !== defaultDates.start ||
-              formatLocalDate(dateRange.to) !== defaultDates.end) && (
+          {hasCustomDateRange && (
             <Button
               variant="ghost"
               size="sm"
@@ -1451,21 +1477,26 @@ export default function Documents() {
             </TableBody>
               </Table>
 
-              {!loading && (
-                <div className="mt-2 sticky bottom-0 items-center justify-between text-[10px] sm:text-xs text-gray-400 w-full bg-gray-900 p-1 sm:p-1.5 rounded-b-lg">
-                  <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+              <div className="mt-2 sticky bottom-0 items-center justify-between text-[10px] sm:text-xs text-gray-400 w-full bg-gray-900 p-1 sm:p-1.5 rounded-b-lg">
+                <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                  <span className="inline-flex items-center gap-1.5">
                     <span>
-                      Showing: <span className="font-semibold text-white">{filteredDocuments?.length || 0}</span> of{" "}
-                      <span className="font-semibold text-white">{total || filteredDocuments?.length || 0}</span> documents
+                      Showing: <span className="font-semibold text-white">{filteredDocuments?.length || 0}</span> of
                     </span>
-                    {selectedDocIds.size > 0 && (
-                      <span>
-                        Selected: <span className="font-semibold text-blue-400">{selectedDocIds.size}</span>
-                      </span>
+                    {displayedTotalDocuments === null ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-300" aria-label="Loading total document count" />
+                    ) : (
+                      <span className="font-semibold text-white">{displayedTotalDocuments}</span>
                     )}
-                  </div>
+                    <span>documents</span>
+                  </span>
+                  {selectedDocIds.size > 0 && (
+                    <span>
+                      Selected: <span className="font-semibold text-blue-400">{selectedDocIds.size}</span>
+                    </span>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           </div>
 
