@@ -164,6 +164,33 @@ export default function Notes() {
     }
   }, [messages]);
 
+  useEffect(() => {
+    if (!activeEmojiMenu) {
+      return;
+    }
+
+    const handleOutsideClick = (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      if (
+        target.closest('[data-reaction-menu]') ||
+        target.closest('[data-reaction-trigger]')
+      ) {
+        return;
+      }
+
+      setActiveEmojiMenu(null);
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [activeEmojiMenu]);
+
   const groupedMessages = useMemo(() => {
     const groups = [];
     messages.forEach((message) => {
@@ -448,20 +475,16 @@ export default function Notes() {
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  onClick={() =>
-                                    setActiveEmojiMenu(
-                                      activeEmojiMenu === message.id
-                                        ? null
-                                        : message.id
-                                    )
-                                  }
+                                  onClick={() => setActiveEmojiMenu(message.id)}
                                   className="rounded-full border border-gray-700 px-2 py-0.5 text-[11px] text-gray-200 h-auto"
                                   aria-label="Add reaction"
+                                  data-reaction-trigger
                                 >
-                                  <Smile className="h-3.5 w-3.5 text-yellow-300" />
+                                  <Smile className="h-3.5 w-3.5 fill-current stroke-[1.75] text-yellow-300" />
                                 </Button>
                                 {activeEmojiMenu === message.id && (
                                   <div
+                                    data-reaction-menu
                                     className={`absolute z-20 mt-2 flex gap-2 rounded-lg border border-gray-700 bg-[#161b22] p-2 shadow-lg ${
                                       isMine ? "right-0" : "left-0 ml-2"
                                     }`}
@@ -480,7 +503,7 @@ export default function Notes() {
                                         aria-label={reaction.label}
                                         title={reaction.label}
                                       >
-                                        <reaction.Icon className={`h-4 w-4 ${reaction.iconClass}`} />
+                                        <reaction.Icon className={`h-4 w-4 fill-current stroke-[1.75] ${reaction.iconClass}`} />
                                       </Button>
                                     ))}
                                   </div>
