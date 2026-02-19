@@ -18,13 +18,21 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 
 const REACTION_CHOICES = [
-  { key: "smile", label: "Smile", Icon: Smile, iconClass: "text-yellow-300" },
+  {
+    key: "smile",
+    label: "Smile",
+    Icon: Smile,
+    iconClass: "text-yellow-300",
+    filled: true,
+    strokeClass: "stroke-black",
+  },
   {
     key: "thumbs_up",
     label: "Thumbs up",
     Icon: ThumbsUp,
     iconClass: "text-blue-300",
     filled: true,
+    strokeClass: "stroke-blue-300",
   },
   {
     key: "heart",
@@ -32,9 +40,24 @@ const REACTION_CHOICES = [
     Icon: Heart,
     iconClass: "text-rose-300",
     filled: true,
+    strokeClass: "stroke-rose-300",
   },
-  { key: "laugh", label: "Laugh", Icon: Laugh, iconClass: "text-amber-300" },
-  { key: "angry", label: "Angry", Icon: Angry, iconClass: "text-red-300" },
+  {
+    key: "laugh",
+    label: "Laugh",
+    Icon: Laugh,
+    iconClass: "text-amber-300",
+    filled: true,
+    strokeClass: "stroke-black",
+  },
+  {
+    key: "angry",
+    label: "Angry",
+    Icon: Angry,
+    iconClass: "text-red-300",
+    filled: true,
+    strokeClass: "stroke-black",
+  },
 ];
 const PRIORITY_OPTIONS = [
   { label: "All", value: "all" },
@@ -126,13 +149,13 @@ function getReactionCount(reactions) {
   }, 0);
 }
 
-function renderReactionIcon(reaction, iconSizeClass = "h-5 w-5") {
+function renderReactionIcon(reaction, iconSizeClass = "h-6 w-6") {
   const IconComponent = reaction.Icon;
 
   return (
     <IconComponent
-      className={`${iconSizeClass} ${reaction.iconClass} ${
-        reaction.filled ? "fill-current stroke-[1.75]" : "stroke-[2.1]"
+      className={`${iconSizeClass} ${reaction.iconClass} ${reaction.strokeClass || ""} ${
+        reaction.filled ? "fill-current stroke-[1.6]" : "stroke-[2.1]"
       }`}
     />
   );
@@ -499,7 +522,7 @@ export default function Notes() {
                                   aria-label="Add reaction"
                                   data-reaction-trigger
                                 >
-                                  {renderReactionIcon(REACTION_CHOICES[0], "h-[18px] w-[18px]")}
+                                  {renderReactionIcon(REACTION_CHOICES[0], "h-[21px] w-[21px]")}
                                 </Button>
                                 {activeEmojiMenu === message.id && (
                                   <div
