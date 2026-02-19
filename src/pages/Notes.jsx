@@ -18,34 +18,23 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 
 const REACTION_CHOICES = [
-  {
-    key: "smile",
-    label: "Smile",
-    Icon: Smile,
-    iconClass: "text-black",
-    faceBgClass: "bg-yellow-300",
-  },
+  { key: "smile", label: "Smile", Icon: Smile, iconClass: "text-yellow-300" },
   {
     key: "thumbs_up",
     label: "Thumbs up",
     Icon: ThumbsUp,
     iconClass: "text-blue-300",
-  },
-  { key: "heart", label: "Heart", Icon: Heart, iconClass: "text-rose-300" },
-  {
-    key: "laugh",
-    label: "Laugh",
-    Icon: Laugh,
-    iconClass: "text-black",
-    faceBgClass: "bg-amber-300",
+    filled: true,
   },
   {
-    key: "angry",
-    label: "Angry",
-    Icon: Angry,
-    iconClass: "text-black",
-    faceBgClass: "bg-red-300",
+    key: "heart",
+    label: "Heart",
+    Icon: Heart,
+    iconClass: "text-rose-300",
+    filled: true,
   },
+  { key: "laugh", label: "Laugh", Icon: Laugh, iconClass: "text-amber-300" },
+  { key: "angry", label: "Angry", Icon: Angry, iconClass: "text-red-300" },
 ];
 const PRIORITY_OPTIONS = [
   { label: "All", value: "all" },
@@ -137,22 +126,14 @@ function getReactionCount(reactions) {
   }, 0);
 }
 
-function renderReactionIcon(reaction, iconSizeClass = "h-4 w-4") {
+function renderReactionIcon(reaction, iconSizeClass = "h-5 w-5") {
   const IconComponent = reaction.Icon;
-
-  if (reaction.faceBgClass) {
-    return (
-      <span
-        className={`inline-flex h-4 w-4 items-center justify-center rounded-full ${reaction.faceBgClass}`}
-      >
-        <IconComponent className={`h-3 w-3 ${reaction.iconClass} stroke-[2.1]`} />
-      </span>
-    );
-  }
 
   return (
     <IconComponent
-      className={`${iconSizeClass} ${reaction.iconClass} fill-current stroke-[1.75]`}
+      className={`${iconSizeClass} ${reaction.iconClass} ${
+        reaction.filled ? "fill-current stroke-[1.75]" : "stroke-[2.1]"
+      }`}
     />
   );
 }
@@ -518,7 +499,7 @@ export default function Notes() {
                                   aria-label="Add reaction"
                                   data-reaction-trigger
                                 >
-                                  {renderReactionIcon(REACTION_CHOICES[0], "h-3.5 w-3.5")}
+                                  {renderReactionIcon(REACTION_CHOICES[0], "h-[18px] w-[18px]")}
                                 </Button>
                                 {activeEmojiMenu === message.id && (
                                   <div
