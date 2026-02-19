@@ -119,6 +119,33 @@ function driverMatchesSearch(driver, searchTerm) {
   );
 }
 
+function formatDriverForDisplay(driver) {
+  return {
+    ...driver,
+    phone: formatPhone(driver.phone || driver.id),
+    lastSeenLabel: formatRelativeTime(driver.lastSeen),
+  };
+}
+
+function mergeDrivers(baseDrivers, incomingDrivers) {
+  const merged = [];
+  const seen = new Set();
+
+  const addDriver = (driver) => {
+    const key = driver.id || driver.phone;
+    if (key) {
+      if (seen.has(key)) return;
+      seen.add(key);
+    }
+    merged.push(driver);
+  };
+
+  baseDrivers.forEach(addDriver);
+  incomingDrivers.forEach(addDriver);
+
+  return merged;
+}
+
 const initialFormState = {
   name: "",
   email: "",
@@ -157,9 +184,10 @@ export default function Drivers() {
   const [submitError, setSubmitError] = useState("");
   const [isSearchLoading, setIsSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
-  const [searchCache, setSearchCache] = useState([]);
+  const [cachedSearchDrivers, setCachedSearchDrivers] = useState(null);
   const [hasLoadedSearchCache, setHasLoadedSearchCache] = useState(false);
   const [skeletonRows, setSkeletonRows] = useState(8);
+  const isFetchingLocalSearchRef = useRef(false);
   const isResizingRef = useRef(false);
   const sectionRef = useRef(null);
   const {
@@ -207,58 +235,55 @@ export default function Drivers() {
 
     let cancelled = false;
 
-    const hydrateSearchCache = async () => {
+    const applyLocalSearch = (sourceDrivers) => {
+      const filtered = sourceDrivers
+        .map(formatDriverForDisplay)
+        .filter((driver) => driverMatchesSearch(driver, activeSearch));
+
+      setDrivers(filtered);
+      setHasMore(false);
+      setPage(1);
+    };
+
+    const loadAllDriversForSearch = async () => {
+      if (isFetchingLocalSearchRef.current) return;
       try {
+        isFetchingLocalSearchRef.current = true;
         setIsSearchLoading(true);
         setSearchError("");
+
         const allDrivers = await fetchAllDrivers({ limit: 100 });
         if (cancelled) return;
 
-        const formattedDrivers = allDrivers.map(formatDriver);
-        setSearchCache((prev) => mergeUniqueDrivers(prev, formattedDrivers));
+        setCachedSearchDrivers(allDrivers);
         setHasLoadedSearchCache(true);
-
-        const filtered = formattedDrivers.filter((driver) =>
-          driverMatchesSearch(driver, activeSearch)
-        );
-        setDrivers(filtered);
-        setSelectedId(filtered[0]?.id ?? null);
+        applyLocalSearch(allDrivers);
       } catch {
         if (cancelled) return;
         setSearchError("Unable to load complete search results.");
       } finally {
+        isFetchingLocalSearchRef.current = false;
         if (!cancelled) {
           setIsSearchLoading(false);
         }
       }
     };
 
-    hydrateSearchCache();
+    if (hasLoadedSearchCache) {
+      applyLocalSearch(cachedSearchDrivers || []);
+      return;
+    }
+
+    loadAllDriversForSearch();
 
     return () => {
       cancelled = true;
     };
-  }, [debouncedSearch, hasLoadedSearchCache, searchCache]);
+  }, [debouncedSearch, cachedSearchDrivers, hasLoadedSearchCache]);
 
   useEffect(() => {
     if (!driverData) return;
-    const incoming = driverData.users.map(formatDriver);
-
-    const activeSearch = debouncedSearch.trim();
-    if (activeSearch) {
-      setSearchCache((prev) => {
-        const mergedCache = mergeUniqueDrivers(prev, incoming);
-        const supplementedMatches = mergedCache.filter((driver) =>
-          driverMatchesSearch(driver, activeSearch)
-        );
-        setDrivers(supplementedMatches);
-        return mergedCache;
-      });
-      setHasMore(false);
-      return;
-    }
-
-    setSearchCache((prev) => mergeUniqueDrivers(prev, incoming));
+    const incoming = driverData.users.map(formatDriverForDisplay);
 
     const pagination = driverData.pagination || {};
     const derivedHasMore =
@@ -268,13 +293,16 @@ export default function Drivers() {
         : incoming.length === limit);
     setHasMore(Boolean(derivedHasMore));
 
-    if (page === 1) {
-      setDrivers(incoming);
-      return;
-    }
-
     setDrivers((prev) => {
-      return mergeUniqueDrivers(prev, incoming);
+      if (debouncedSearch.trim()) {
+        return mergeDrivers(prev, incoming);
+      }
+
+      if (page === 1) {
+        return incoming;
+      }
+
+      return mergeDrivers(prev, incoming);
     });
   }, [driverData, page, limit, debouncedSearch]);
 
@@ -562,6 +590,8 @@ export default function Drivers() {
 
       closeModal();
       setFormState(initialFormState);
+      setCachedSearchDrivers(null);
+      setHasLoadedSearchCache(false);
       setPage(1);
       await refetch();
     } catch (error) {
@@ -806,7 +836,7 @@ export default function Drivers() {
                     <span className="col-span-3 text-slate-300">
                       {driver.phone || "—"}
                     </span>
-                    <span className="col-span-2 text-slate-400">
+                    <span className="col-span-1 text-slate-400">
                       {driver.country || "—"}
                     </span>
                     <span className="col-span-1">
@@ -827,6 +857,16 @@ export default function Drivers() {
                         }`}
                       >
                         {driver.category || "—"}
+                      </span>
+                    </span>
+                    <span className="col-span-2">
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${
+                          statusStyles[driver.status] ||
+                          "border-slate-700 bg-slate-800 text-slate-200"
+                        }`}
+                      >
+                        {driver.status === "active" ? "Active" : "Inactive"}
                       </span>
                     </span>
                     <span className="col-span-1 text-right text-xs text-slate-400">
