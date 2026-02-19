@@ -167,13 +167,24 @@ export const subscribeNotesMessages = ({
               ? data.timestamp.toDate()
               : null;
 
+          let priorityValue = 0;
+
+          if (typeof data.priority === "number") {
+            priorityValue = data.priority;
+          } else if (typeof data.priority === "string") {
+            const parsed = Number(data.priority);
+            if (Number.isFinite(parsed)) {
+              priorityValue = parsed;
+            }
+          }
+
           return {
             id: docSnapshot.id,
             senderId: data.senderId ?? "",
             senderName: data.senderName ?? "",
             content: data.content ?? "",
             type: data.type ?? "text",
-            priority: typeof data.priority === "number" ? data.priority : 0,
+            priority: priorityValue,
             timestamp,
             reactions: data.reactions ?? {},
           };
@@ -243,8 +254,11 @@ export const updateNotesMessagePriority = async (messageId, priorityValue) => {
     return;
   }
 
+  const numericPriority =
+    typeof priorityValue === "number" ? priorityValue : Number(priorityValue);
+
   await updateDoc(doc(firestore, "messages", messageId), {
-    priority: priorityValue,
+    priority: numericPriority,
   });
 };
 
