@@ -1,10 +1,12 @@
 import {
   addDoc,
   collection,
+  doc,
   getFirestore,
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
 } from "firebase/firestore";
 import { getApps, initializeApp } from "firebase/app";
@@ -303,21 +305,37 @@ export const addReaction = async ({ messageId, emoji, userId }) => {
     return;
   }
 
-  const payload = {
-    id: messageId,
-    messageId,
-    reaction: emoji,
-    emoji,
-    userId,
-  };
+  const messageRef = doc(firestore, "messages", messageId);
 
-  await sendNotesMutationRequest([
-    { path: "/admin/notes/reaction", method: "POST", body: payload },
-    { path: "/admin/notes/reaction", method: "PATCH", body: payload },
-    { path: "/admin/updatenotesreaction", method: "POST", body: payload },
-    { path: "/admin/updatenotesreaction", method: "PUT", body: payload },
-    { path: "/admin/updatenotesreaction", method: "PATCH", body: payload },
-  ]);
+  // Toggle reaction in Firestore using old-compatible schema:
+  // reactions: { "😊": ["user1"], "👍": ["user2"] }
+  await runTransaction(firestore, async (transaction) => {
+    const snapshot = await transaction.get(messageRef);
+    const data = snapshot.data() ?? {};
+    const reactions = { ...(data.reactions ?? {}) };
+
+    const existingUsers = Array.isArray(reactions[emoji])
+      ? [...reactions[emoji]]
+      : [];
+
+    let nextUsers;
+
+    if (existingUsers.includes(userId)) {
+      // remove reaction
+      nextUsers = existingUsers.filter((id) => id !== userId);
+    } else {
+      // add reaction
+      nextUsers = [...existingUsers, userId];
+    }
+
+    if (!nextUsers.length) {
+      delete reactions[emoji];
+    } else {
+      reactions[emoji] = nextUsers;
+    }
+
+    transaction.update(messageRef, { reactions });
+  });
 };
 
 export const uploadNotesAttachment = async (file, type) => {

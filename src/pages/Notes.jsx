@@ -19,7 +19,7 @@ import { Input } from "../components/ui/input";
 
 const REACTION_CHOICES = [
   {
-    key: "smile",
+    key: "😊",
     label: "Smile",
     Icon: Smile,
     iconClass: "text-yellow-300",
@@ -27,7 +27,7 @@ const REACTION_CHOICES = [
     strokeClass: "stroke-black",
   },
   {
-    key: "thumbs_up",
+    key: "👍",
     label: "Thumbs up",
     Icon: ThumbsUp,
     iconClass: "text-blue-300",
@@ -35,7 +35,7 @@ const REACTION_CHOICES = [
     strokeClass: "stroke-blue-300",
   },
   {
-    key: "heart",
+    key: "❤️",
     label: "Heart",
     Icon: Heart,
     iconClass: "text-rose-300",
@@ -43,7 +43,7 @@ const REACTION_CHOICES = [
     strokeClass: "stroke-rose-300",
   },
   {
-    key: "laugh",
+    key: "😂",
     label: "Laugh",
     Icon: Laugh,
     iconClass: "text-amber-300",
@@ -51,14 +51,40 @@ const REACTION_CHOICES = [
     strokeClass: "stroke-black",
   },
   {
-    key: "angry",
-    label: "Angry",
+    key: "😢",
+    label: "Sad",
     Icon: Angry,
     iconClass: "text-red-300",
     filled: true,
     strokeClass: "stroke-black",
   },
 ];
+
+const LEGACY_REACTION_KEY_MAP = {
+  smile: "😊",
+  thumbs_up: "👍",
+  heart: "❤️",
+  laugh: "😂",
+  angry: "😢",
+};
+
+function normalizeReactions(rawReactions) {
+  if (!rawReactions) return {};
+
+  const normalized = {};
+
+  Object.entries(rawReactions).forEach(([rawKey, users]) => {
+    const emojiKey = LEGACY_REACTION_KEY_MAP[rawKey] ?? rawKey;
+    const list = Array.isArray(users) ? users : [];
+    if (!list.length) return;
+
+    if (!normalized[emojiKey]) normalized[emojiKey] = [];
+    normalized[emojiKey].push(...list);
+  });
+
+  return normalized;
+}
+
 const PRIORITY_OPTIONS = [
   { label: "All", value: "all" },
   { label: "High", value: "high" },
@@ -137,14 +163,9 @@ function getInitials(name) {
 }
 
 function getReactionCount(reactions) {
-  if (!reactions) {
-    return 0;
-  }
-
-  return Object.values(reactions).reduce((total, users) => {
-    if (Array.isArray(users)) {
-      return total + users.length;
-    }
+  const normalized = normalizeReactions(reactions);
+  return Object.values(normalized).reduce((total, users) => {
+    if (Array.isArray(users)) return total + users.length;
     return total;
   }, 0);
 }
@@ -427,6 +448,8 @@ export default function Notes() {
                       const priorityClass =
                         PRIORITY_COLORS[message.priority] ||
                         PRIORITY_COLORS[0];
+                      const normalizedReactions = normalizeReactions(message.reactions);
+                      const reactionEntries = Object.entries(normalizedReactions);
                       const reactionCount = getReactionCount(message.reactions);
 
                       return (
@@ -508,9 +531,29 @@ export default function Notes() {
                             >
                               <span>{formatTime(message.timestamp)}</span>
                               {reactionCount > 0 && (
-                                <span className="rounded-full bg-[#161b22] px-2 py-0.5 text-[11px] text-gray-200">
-                                  {reactionCount}
-                                </span>
+                                <div className="flex items-center gap-1">
+                                  {reactionEntries.map(([emojiKey, users]) => {
+                                    const count = Array.isArray(users) ? users.length : 0;
+                                    if (!count) return null;
+
+                                    const reactionMeta =
+                                      REACTION_CHOICES.find((r) => r.key === emojiKey) ?? null;
+
+                                    return (
+                                      <span
+                                        key={emojiKey}
+                                        className="flex items-center gap-1 rounded-full bg-[#161b22] px-2 py-0.5 text-[11px] text-gray-200"
+                                      >
+                                        {reactionMeta ? (
+                                          renderReactionIcon(reactionMeta, "h-[16px] w-[16px]")
+                                        ) : (
+                                          <span>{emojiKey}</span>
+                                        )}
+                                        <span>{count}</span>
+                                      </span>
+                                    );
+                                  })}
+                                </div>
                               )}
                               <div className="relative">
                                 <Button
