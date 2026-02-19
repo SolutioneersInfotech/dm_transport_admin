@@ -18,11 +18,16 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 
 const REACTION_CHOICES = [
-  { key: "smile", label: "Smile", Icon: Smile },
-  { key: "thumbs_up", label: "Thumbs up", Icon: ThumbsUp },
-  { key: "heart", label: "Heart", Icon: Heart },
-  { key: "laugh", label: "Laugh", Icon: Laugh },
-  { key: "angry", label: "Angry", Icon: Angry },
+  { key: "smile", label: "Smile", Icon: Smile, iconClass: "text-yellow-300" },
+  {
+    key: "thumbs_up",
+    label: "Thumbs up",
+    Icon: ThumbsUp,
+    iconClass: "text-blue-300",
+  },
+  { key: "heart", label: "Heart", Icon: Heart, iconClass: "text-rose-300" },
+  { key: "laugh", label: "Laugh", Icon: Laugh, iconClass: "text-amber-300" },
+  { key: "angry", label: "Angry", Icon: Angry, iconClass: "text-red-300" },
 ];
 const PRIORITY_OPTIONS = [
   { label: "All", value: "all" },
@@ -453,10 +458,14 @@ export default function Notes() {
                                   className="rounded-full border border-gray-700 px-2 py-0.5 text-[11px] text-gray-200 h-auto"
                                   aria-label="Add reaction"
                                 >
-                                  <Smile className="h-3.5 w-3.5" />
+                                  <Smile className="h-3.5 w-3.5 text-yellow-300" />
                                 </Button>
                                 {activeEmojiMenu === message.id && (
-                                  <div className="absolute right-0 z-20 mt-2 flex gap-2 rounded-lg border border-gray-700 bg-[#161b22] p-2">
+                                  <div
+                                    className={`absolute z-20 mt-2 flex gap-2 rounded-lg border border-gray-700 bg-[#161b22] p-2 shadow-lg ${
+                                      isMine ? "right-0" : "left-0 ml-2"
+                                    }`}
+                                  >
                                     {REACTION_CHOICES.map((reaction) => (
                                       <Button
                                         key={reaction.key}
@@ -471,7 +480,7 @@ export default function Notes() {
                                         aria-label={reaction.label}
                                         title={reaction.label}
                                       >
-                                        <reaction.Icon className="h-4 w-4" />
+                                        <reaction.Icon className={`h-4 w-4 ${reaction.iconClass}`} />
                                       </Button>
                                     ))}
                                   </div>
