@@ -75,6 +75,39 @@ async function ensureAdminUploadServices() {
   return authPromise;
 }
 
+
+async function getAuthDebugContext() {
+  try {
+    const services = await ensureAdminUploadServices();
+    const user = services.auth.currentUser;
+
+    if (!user) {
+      return { uid: null, role: null };
+    }
+
+    const tokenResult = await user.getIdTokenResult(true);
+    return {
+      uid: user.uid,
+      role: tokenResult?.claims?.role ?? null,
+    };
+  } catch {
+    return { uid: null, role: null };
+  }
+}
+
+function buildNotesPermissionError(operation, debugContext, originalError) {
+  const details = [
+    `[Notes] ${operation} failed with Firestore PERMISSION_DENIED.`,
+    `uid=${debugContext?.uid || "unknown"}`,
+    `role=${debugContext?.role || "missing"}`,
+    "Backend/Firestore rules likely block this write for current auth claims.",
+  ].join(" ");
+
+  const error = new Error(details);
+  error.cause = originalError;
+  return error;
+}
+
 function getAdminUser() {
   try {
     return JSON.parse(localStorage.getItem("adminUser"));
@@ -214,7 +247,16 @@ export const deleteNotesMessage = async (messageId) => {
 
   const { firestore: adminFirestore } = await ensureAdminUploadServices();
 
-  await deleteDoc(doc(adminFirestore, "messages", messageId));
+  try {
+    await deleteDoc(doc(adminFirestore, "messages", messageId));
+  } catch (error) {
+    if (error?.code === "permission-denied") {
+      const debugContext = await getAuthDebugContext();
+      throw buildNotesPermissionError("deleteNotesMessage", debugContext, error);
+    }
+
+    throw error;
+  }
 };
 
 export const updateNotesMessagePriority = async (messageId, priorityValue) => {
@@ -224,9 +266,22 @@ export const updateNotesMessagePriority = async (messageId, priorityValue) => {
 
   const { firestore: adminFirestore } = await ensureAdminUploadServices();
 
-  await updateDoc(doc(adminFirestore, "messages", messageId), {
-    priority: priorityValue,
-  });
+  try {
+    await updateDoc(doc(adminFirestore, "messages", messageId), {
+      priority: priorityValue,
+    });
+  } catch (error) {
+    if (error?.code === "permission-denied") {
+      const debugContext = await getAuthDebugContext();
+      throw buildNotesPermissionError(
+        "updateNotesMessagePriority",
+        debugContext,
+        error
+      );
+    }
+
+    throw error;
+  }
 };
 
 export const addReaction = async ({ messageId, emoji, userId }) => {
@@ -237,22 +292,31 @@ export const addReaction = async ({ messageId, emoji, userId }) => {
   const { firestore: adminFirestore } = await ensureAdminUploadServices();
   const messageRef = doc(adminFirestore, "messages", messageId);
 
-  await runTransaction(adminFirestore, async (transaction) => {
-    const snapshot = await transaction.get(messageRef);
-    const data = snapshot.data() ?? {};
-    const reactions = { ...(data.reactions ?? {}) };
-    const currentUsers = Array.isArray(reactions[emoji])
-      ? [...reactions[emoji]]
-      : [];
+  try {
+    await runTransaction(adminFirestore, async (transaction) => {
+      const snapshot = await transaction.get(messageRef);
+      const data = snapshot.data() ?? {};
+      const reactions = { ...(data.reactions ?? {}) };
+      const currentUsers = Array.isArray(reactions[emoji])
+        ? [...reactions[emoji]]
+        : [];
 
-    if (!currentUsers.includes(userId)) {
-      currentUsers.push(userId);
+      if (!currentUsers.includes(userId)) {
+        currentUsers.push(userId);
+      }
+
+      reactions[emoji] = currentUsers;
+
+      transaction.update(messageRef, { reactions });
+    });
+  } catch (error) {
+    if (error?.code === "permission-denied") {
+      const debugContext = await getAuthDebugContext();
+      throw buildNotesPermissionError("addReaction", debugContext, error);
     }
 
-    reactions[emoji] = currentUsers;
-
-    transaction.update(messageRef, { reactions });
-  });
+    throw error;
+  }
 };
 
 export const uploadNotesAttachment = async (file, type) => {
