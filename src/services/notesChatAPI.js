@@ -8,7 +8,6 @@ import {
   orderBy,
   query,
   serverTimestamp,
-  updateDoc,
 } from "firebase/firestore";
 import { getApps, initializeApp } from "firebase/app";
 import { getAuth, signInWithCustomToken } from "firebase/auth";
@@ -97,6 +96,28 @@ const apiClient = {
     const adminToken = localStorage.getItem("adminToken");
     const response = await fetch(`${ADMIN_BASE_URL}${path}`, {
       method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const text = await response.text();
+    const data = parseResponseText(text);
+    if (!response.ok) {
+      const message =
+        data?.message || data?.error || text || "Request failed.";
+      throw new Error(message);
+    }
+
+    return data;
+  },
+
+  async patch(path, body) {
+    const adminToken = localStorage.getItem("adminToken");
+    const response = await fetch(`${ADMIN_BASE_URL}${path}`, {
+      method: "PATCH",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${adminToken}`,
@@ -257,9 +278,19 @@ export const updateNotesMessagePriority = async (messageId, priorityValue) => {
   const numericPriority =
     typeof priorityValue === "number" ? priorityValue : Number(priorityValue);
 
-  await updateDoc(doc(firestore, "messages", messageId), {
-    priority: numericPriority,
-  });
+  try {
+    await apiClient.patch("/admin/notes/message/priority", {
+      messageId,
+      priority: numericPriority,
+    });
+  } catch (error) {
+    console.error("[Notes] Failed to update priority via backend", {
+      messageId,
+      priorityValue,
+      error,
+    });
+    throw error;
+  }
 };
 
 export const addReaction = async ({ messageId, emoji, userId }) => {
