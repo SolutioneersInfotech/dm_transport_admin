@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Angry,
+  Heart,
+  Laugh,
+  Smile,
+  ThumbsUp,
+} from "lucide-react";
+import {
   addReaction,
   deleteNotesMessage,
   sendNotesMessage,
@@ -10,7 +17,13 @@ import {
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 
-const EMOJI_CHOICES = ["😀", "👍", "❤️", "😂", "😡"];
+const REACTION_CHOICES = [
+  { key: "smile", label: "Smile", Icon: Smile },
+  { key: "thumbs_up", label: "Thumbs up", Icon: ThumbsUp },
+  { key: "heart", label: "Heart", Icon: Heart },
+  { key: "laugh", label: "Laugh", Icon: Laugh },
+  { key: "angry", label: "Angry", Icon: Angry },
+];
 const PRIORITY_OPTIONS = [
   { label: "All", value: "all" },
   { label: "High", value: "high" },
@@ -246,14 +259,14 @@ export default function Notes() {
     }
   };
 
-  const handleReaction = async (messageId, emoji) => {
+  const handleReaction = async (messageId, reactionKey) => {
     const userId = adminUser?.userid;
     if (!userId) {
       return;
     }
 
     try {
-      await addReaction({ messageId, emoji, userId });
+      await addReaction({ messageId, emoji: reactionKey, userId });
     } catch (error) {
       console.error("Failed to add reaction", error);
     }
@@ -438,24 +451,27 @@ export default function Notes() {
                                     )
                                   }
                                   className="rounded-full border border-gray-700 px-2 py-0.5 text-[11px] text-gray-200 h-auto"
+                                  aria-label="Add reaction"
                                 >
-                                  😊
+                                  <Smile className="h-3.5 w-3.5" />
                                 </Button>
                                 {activeEmojiMenu === message.id && (
                                   <div className="absolute right-0 z-20 mt-2 flex gap-2 rounded-lg border border-gray-700 bg-[#161b22] p-2">
-                                    {EMOJI_CHOICES.map((emoji) => (
+                                    {REACTION_CHOICES.map((reaction) => (
                                       <Button
-                                        key={emoji}
+                                        key={reaction.key}
                                         type="button"
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => {
-                                          handleReaction(message.id, emoji);
+                                          handleReaction(message.id, reaction.key);
                                           setActiveEmojiMenu(null);
                                         }}
-                                        className="text-base h-auto p-1"
+                                        className="h-auto p-1"
+                                        aria-label={reaction.label}
+                                        title={reaction.label}
                                       >
-                                        {emoji}
+                                        <reaction.Icon className="h-4 w-4" />
                                       </Button>
                                     ))}
                                   </div>
