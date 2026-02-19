@@ -244,6 +244,9 @@ export default function ChatWindow({ driver, chatApi }) {
   const [showFilePreview, setShowFilePreview] = useState(false);
   const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
   const [lightboxMedia, setLightboxMedia] = useState(null);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [deleteActionType, setDeleteActionType] = useState(null);
+  const [isDeleteInProgress, setIsDeleteInProgress] = useState(false);
   const buildChatMediaFileName = useCallback((url, sender, dateTime) => {
     const safeSender = String(sender || "unknown_sender")
       .trim()
@@ -594,25 +597,53 @@ export default function ChatWindow({ driver, chatApi }) {
   }
 
   /* ================= DELETE SELECTED ================= */
-  async function handleDeleteSelected() {
+  function handleDeleteSelected() {
     if (selected.length === 0) return;
-
-    for (let id of selected) {
-      await deleteSpecificMessage(id, driverId);
-    }
-
-    setMessages((prev) => prev.filter((m) => !selected.includes(m.msgId)));
-    setSelected([]);
+    setDeleteActionType("selected");
+    setIsDeleteConfirmOpen(true);
   }
 
   /* ================= DELETE ALL ================= */
-  async function handleDeleteAll() {
-    if (!window.confirm("Delete all messages?")) return;
-
-    await deleteChatHistory(driverId);
-    setMessages([]);
-    setSelected([]);
+  function handleDeleteAll() {
+    setDeleteActionType("all");
+    setIsDeleteConfirmOpen(true);
   }
+
+  async function handleConfirmDelete() {
+    if (!deleteActionType || isDeleteInProgress) return;
+
+    setIsDeleteInProgress(true);
+    try {
+      if (deleteActionType === "selected") {
+        const selectedMessageIds = [...selected];
+        for (const id of selectedMessageIds) {
+          await deleteSpecificMessage(id, driverId);
+        }
+        setMessages((prev) => prev.filter((m) => !selectedMessageIds.includes(m.msgId)));
+        setSelected([]);
+      }
+
+      if (deleteActionType === "all") {
+        await deleteChatHistory(driverId);
+        setMessages([]);
+        setSelected([]);
+        setSelectionMode(false);
+      }
+
+      setIsDeleteConfirmOpen(false);
+      setDeleteActionType(null);
+    } finally {
+      setIsDeleteInProgress(false);
+    }
+  }
+
+  const deleteConfirmTitle = deleteActionType === "selected" ? "Delete Selected Messages" : "Delete All Messages";
+  const deleteConfirmDescription =
+    deleteActionType === "selected"
+      ? selected.length === 1
+        ? "Would you like to delete selected message for everyone?"
+        : `Would you like to delete ${selected.length} selected messages for everyone?`
+      : "Would you like to delete all messages for everyone?";
 
   const emailText = driver?.email ? driver.email : "—";
   const phoneText = driver?.phone ? driver.phone : "—";
@@ -943,6 +974,55 @@ export default function ChatWindow({ driver, chatApi }) {
           </svg>
         </Button>
       </div>
+
+      {isDeleteConfirmOpen && (
+        <div className="fixed inset-0 z-[180] flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label="Delete confirmation dialog">
+          <div className="w-full max-w-md rounded-lg border border-[#2c3e52] bg-[#1c2530] p-6 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white">{deleteConfirmTitle}</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  if (isDeleteInProgress) return;
+                  setIsDeleteConfirmOpen(false);
+                  setDeleteActionType(null);
+                }}
+                className="text-gray-400 hover:text-white"
+                disabled={isDeleteInProgress}
+                aria-label="Close delete confirmation"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-300">{deleteConfirmDescription}</p>
+            <p className="text-xs text-gray-400">This action cannot be undone.</p>
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="border-gray-600 text-gray-800 hover:bg-[#2c3e52] hover:text-white"
+                onClick={() => {
+                  setIsDeleteConfirmOpen(false);
+                  setDeleteActionType(null);
+                }}
+                disabled={isDeleteInProgress}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="bg-red-600 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={handleConfirmDelete}
+                disabled={isDeleteInProgress}
+              >
+                {isDeleteInProgress ? "Deleting..." : "Delete"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showFilePreview && selectedFile && driverId && (
         <FilePreviewModal
