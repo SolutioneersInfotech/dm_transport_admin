@@ -436,6 +436,14 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   
   const selectedDriverId = getDriverId(selectedDriver);
 
+  useEffect(() => {
+    if (!isMaintenanceChat) return;
+    if (selectedDriverId) return;
+    if (!drivers.length) return;
+
+    onSelectDriver(drivers[0]);
+  }, [drivers, isMaintenanceChat, onSelectDriver, selectedDriverId]);
+
   return (
     <div className="h-full flex flex-col">
       {/* 🔍 SEARCH BAR (STICKY) */}
