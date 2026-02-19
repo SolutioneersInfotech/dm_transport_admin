@@ -187,6 +187,13 @@ export default function Drivers() {
   const searchCacheRef = useRef([]);
   const hasHydratedSearchCacheRef = useRef(false);
   const isHydratingSearchCacheRef = useRef(false);
+  const getCachedSearchDrivers = useCallback(
+    () => searchCacheRef.current,
+    []
+  );
+  const setCachedSearchDrivers = useCallback((nextDrivers) => {
+    searchCacheRef.current = nextDrivers;
+  }, []);
   const [skeletonRows, setSkeletonRows] = useState(8);
   const isFetchingLocalSearchRef = useRef(false);
   const isResizingRef = useRef(false);
@@ -221,7 +228,7 @@ export default function Drivers() {
       return;
     }
 
-    const cachedMatches = searchCacheRef.current.filter((driver) =>
+    const cachedMatches = getCachedSearchDrivers().filter((driver) =>
       driverMatchesSearch(driver, activeSearch)
     );
     setDrivers(cachedMatches);
@@ -246,10 +253,10 @@ export default function Drivers() {
 
         const formattedDrivers = allDrivers.map(formatDriver);
         const mergedCache = mergeUniqueDrivers(
-          searchCacheRef.current,
+          getCachedSearchDrivers(),
           formattedDrivers
         );
-        searchCacheRef.current = mergedCache;
+        setCachedSearchDrivers(mergedCache);
         hasHydratedSearchCacheRef.current = true;
 
         const supplementedMatches = mergedCache.filter((driver) =>
@@ -273,16 +280,16 @@ export default function Drivers() {
     return () => {
       cancelled = true;
     };
-  }, [debouncedSearch, cachedSearchDrivers, hasLoadedSearchCache]);
+  }, [debouncedSearch, getCachedSearchDrivers, setCachedSearchDrivers]);
 
   useEffect(() => {
     if (!driverData) return;
     const incoming = driverData.users.map(formatDriver);
-    searchCacheRef.current = mergeUniqueDrivers(searchCacheRef.current, incoming);
+    setCachedSearchDrivers(mergeUniqueDrivers(getCachedSearchDrivers(), incoming));
 
     const activeSearch = debouncedSearch.trim();
     if (activeSearch) {
-      const supplementedMatches = searchCacheRef.current.filter((driver) =>
+      const supplementedMatches = getCachedSearchDrivers().filter((driver) =>
         driverMatchesSearch(driver, activeSearch)
       );
       setDrivers(supplementedMatches);
@@ -305,7 +312,14 @@ export default function Drivers() {
     }
 
     setDrivers((prev) => mergeUniqueDrivers(prev, incoming));
-  }, [driverData, page, limit, debouncedSearch]);
+  }, [
+    driverData,
+    page,
+    limit,
+    debouncedSearch,
+    getCachedSearchDrivers,
+    setCachedSearchDrivers,
+  ]);
 
   useEffect(() => {
     if (drivers.length === 0) return;
