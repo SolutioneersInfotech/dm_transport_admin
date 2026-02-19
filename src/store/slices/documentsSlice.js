@@ -144,6 +144,7 @@ export const fetchDocumentCount = createAsyncThunk(
 
       const res = await fetch(url, {
         method: "GET",
+        cache: "force-cache",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,

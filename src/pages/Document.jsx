@@ -77,6 +77,7 @@ export default function Documents() {
     lastFetchParams,
     lastFetched,
     countsTotal,
+    countsLoading,
   } = useAppSelector((state) => state.documents);
   const { users } = useAppSelector((state) => state.users);
   const documentDropDownRef = useRef(null);
@@ -647,6 +648,8 @@ export default function Documents() {
 
   const showSkeleton = loading && !isManualRefreshing && filteredDocuments?.length === 0;
   const displayedTotalDocuments = useMemo(() => {
+    if (countsLoading) return null;
+
     if (typeof countsTotal === "number") {
       return countsTotal;
     }
@@ -656,7 +659,7 @@ export default function Documents() {
     }
 
     return filteredDocuments?.length || 0;
-  }, [countsTotal, total, filteredDocuments]);
+  }, [countsLoading, countsTotal, total, filteredDocuments]);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -1474,21 +1477,26 @@ export default function Documents() {
             </TableBody>
               </Table>
 
-              {!loading && (
-                <div className="mt-2 sticky bottom-0 items-center justify-between text-[10px] sm:text-xs text-gray-400 w-full bg-gray-900 p-1 sm:p-1.5 rounded-b-lg">
-                  <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+              <div className="mt-2 sticky bottom-0 items-center justify-between text-[10px] sm:text-xs text-gray-400 w-full bg-gray-900 p-1 sm:p-1.5 rounded-b-lg">
+                <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                  <span className="inline-flex items-center gap-1.5">
                     <span>
-                      Showing: <span className="font-semibold text-white">{filteredDocuments?.length || 0}</span> of{" "}
-                      <span className="font-semibold text-white">{displayedTotalDocuments}</span> documents
+                      Showing: <span className="font-semibold text-white">{filteredDocuments?.length || 0}</span> of
                     </span>
-                    {selectedDocIds.size > 0 && (
-                      <span>
-                        Selected: <span className="font-semibold text-blue-400">{selectedDocIds.size}</span>
-                      </span>
+                    {displayedTotalDocuments === null ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-300" aria-label="Loading total document count" />
+                    ) : (
+                      <span className="font-semibold text-white">{displayedTotalDocuments}</span>
                     )}
-                  </div>
+                    <span>documents</span>
+                  </span>
+                  {selectedDocIds.size > 0 && (
+                    <span>
+                      Selected: <span className="font-semibold text-blue-400">{selectedDocIds.size}</span>
+                    </span>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           </div>
 
