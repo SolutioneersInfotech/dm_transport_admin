@@ -12,7 +12,6 @@ const MaintenanceChat = () => {
         <ChatList
           onSelectDriver={setSelectedDriver}
           selectedDriver={selectedDriver}
-          chatApi={maintenanceChatAPI}
         />
       </div>
 

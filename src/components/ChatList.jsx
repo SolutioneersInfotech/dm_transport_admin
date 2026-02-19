@@ -2,16 +2,12 @@ import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
-import { fetchUsers, fetchMoreUsers, updateUserLastMessage } from "../store/slices/usersSlice";
-import { fetchMaintenanceUsers, updateMaintenanceUserLastMessage } from "../store/slices/maintenanceUsersSlice";
+import { fetchUsers, fetchMoreUsers } from "../store/slices/usersSlice";
+import { fetchMaintenanceUsers } from "../store/slices/maintenanceUsersSlice";
 import ChatListItem from "./ChatListItem";
 import SkeletonLoader from "./skeletons/Skeleton";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import {
-  fetchMessages as defaultFetchMessages,
-  subscribeLastMessage as defaultSubscribeLastMessage,
-} from "../services/chatAPI";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { Eye } from "lucide-react";
@@ -27,10 +23,7 @@ const statusColorClass = {
   seen: "text-emerald-400",
   unseen: "text-amber-400",
 };
-
-const fetchedUsersCache = new Set();
-
-const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
+const ChatList = ({ onSelectDriver, selectedDriver }) => {
   const dispatch = useAppDispatch();
   const location = useLocation();
   const isMaintenanceChat = location.pathname === "/maintenance-chat";
@@ -46,22 +39,12 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const limit = usersState.limit;
   const hasLoaded = isMaintenanceChat ? maintenanceUsersState.hasLoaded : usersState.hasLoaded;
 
-  const updateLastMessageAction = isMaintenanceChat ? updateMaintenanceUserLastMessage : updateUserLastMessage;
-  // console.log(users);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState([]); // Array of selected categories: ["F", "D", "C"]
   const [statusFilter, setStatusFilter] = useState("all"); // "all" | "seen" | "unseen"
   const [isStatusPopoverOpen, setIsStatusPopoverOpen] = useState(false);
   const observerTarget = useRef(null);
-  const [isFetchingMessages, setIsFetchingMessages] = useState(false);
-  const [unreadCounts, setUnreadCounts] = useState({});
-  const unsubscribeUnreadRefs = useRef({});
-  const unsubscribeLastMessageRefs = useRef({});
-
-  const fetchMessages = chatApi?.fetchMessages || defaultFetchMessages;
-  const subscribeUnreadCount = chatApi?.subscribeUnreadCount;
-  const subscribeLastMessage =
-    chatApi?.subscribeLastMessage || defaultSubscribeLastMessage;
+  const unreadCountsByUser = useAppSelector((state) => state.chatUnread.unreadCountsByUser);
 
   function getDriverId(driver) {
     const candidate =
@@ -137,228 +120,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     };
   }, [handleLoadMore, hasMore, loadingMore, loading]);
 
-  // Fetch last message for ALL users, then show sorted list (prevents reordering UX issue)
-  useEffect(() => {
-    if (!users?.length || !fetchMessages || loading) return;
-
-    const fetchAllLastMessages = async () => {
-      // Don't fetch if we're already fetching
-      if (isFetchingMessages) return;
-
-      // When list came from API (users have no last_chat_time), clear cache so we re-fetch and get correct order on refresh
-      const listNeedsHydration = users.some((u) => !u.last_chat_time);
-      if (listNeedsHydration) {
-        users.forEach((u) => {
-          const id = getDriverId(u);
-          if (id) fetchedUsersCache.delete(id);
-        });
-      }
-
-      // Find all users that need message fetching
-      const usersToFetch = users.filter((u) => {
-        const userId = getDriverId(u);
-        if (!userId) return false;
-
-        const hasMessageText =
-          typeof u.last_message === "string" && u.last_message.trim() !== "";
-        const hasLastChatTime = Boolean(u.last_chat_time);
-
-        if (fetchedUsersCache.has(userId)) {
-          return false;
-        }
-
-        return !(hasMessageText || hasLastChatTime);
-      });
-
-      if (usersToFetch.length === 0) {
-        // All users already have messages (from backend or cached), no need to show loading
-        return;
-      }
-
-      // Only block list rendering when we truly have no usable preview metadata.
-      const hasAnyPreviewData = users.some(
-        (u) => Boolean(u?.last_chat_time) || (u?.last_message || "").trim() !== ""
-      );
-      setIsFetchingMessages(!hasAnyPreviewData);
-
-      try {
-        // Fetch messages for ALL users in parallel - only fetch 1 message to get lastMessageTime
-        const fetchPromises = usersToFetch.map(async (u) => {
-          const userId = getDriverId(u);
-          if (!userId) return null;
-
-          try {
-            // Fetch only 1 message (just to get last message time) - fastest!
-            // FIX: fetchMessages now fetches 20 messages, sorts by timestamp, and returns the most recent
-            const { messages } = await fetchMessages(u, 1);
-            if (messages && messages.length > 0) {
-              // Messages are already sorted ascending by fetchMessages, so last element is most recent
-              const lastMessage = messages[messages.length - 1];
-              
-              // Get actual message text - check both content.message and message fields
-              let lastMessageText = lastMessage?.content?.message || 
-                                  lastMessage?.message || 
-                                  (lastMessage?.content ? "" : "");
-              
-              // If message is empty but there's an attachment, show "Attachment"
-              if (!lastMessageText || lastMessageText.trim() === "") {
-                const attachmentUrl = lastMessage?.content?.attachmentUrl || 
-                                     lastMessage?.attachmentUrl || 
-                                     "";
-                if (attachmentUrl && attachmentUrl.trim() !== "") {
-                  lastMessageText = "Attachment";
-                }
-              }
-              
-              const lastChatTime = lastMessage?.dateTime || null;
-
-              // Update Redux store with last message
-              dispatch(
-                updateLastMessageAction({
-                  userid: userId,
-                  lastMessage: lastMessageText,
-                  lastChatTime: lastChatTime,
-                })
-              );
-            } else {
-              // Even if no messages, mark as fetched
-              dispatch(
-                updateLastMessageAction({
-                  userid: userId,
-                  lastMessage: "",
-                  lastChatTime: null,
-                })
-              );
-            }
-            fetchedUsersCache.add(userId);
-          } catch (error) {
-            console.error(`Failed to fetch messages for user ${userId}:`, error);
-            // On error, still mark as fetched to avoid infinite retries
-            fetchedUsersCache.add(userId);
-            // Set empty values on error
-            dispatch(
-              updateLastMessageAction({
-                userid: userId,
-                lastMessage: "",
-                lastChatTime: null,
-              })
-            );
-          }
-        });
-
-        // Wait for ALL messages to be fetched
-        await Promise.all(fetchPromises);
-      } finally {
-        // All messages fetched and sorted - now show the list
-        setIsFetchingMessages(false);
-      }
-    };
-
-    fetchAllLastMessages();
-  }, [users, fetchMessages, dispatch, loading, isFetchingMessages, updateLastMessageAction]);
-
-
-
-  // Subscribe to latest-message updates so ordering refreshes for both driver and admin sends
-  useEffect(() => {
-    if (!subscribeLastMessage || !users?.length) return;
-
-    users.forEach((u) => {
-      const userId = getDriverId(u);
-      if (!userId) return;
-      if (unsubscribeLastMessageRefs.current[userId]) return;
-
-      const unsubscribe = subscribeLastMessage(u, (lastMessage) => {
-        let lastMessageText =
-          lastMessage?.content?.message ||
-          lastMessage?.message ||
-          (lastMessage?.content ? "" : "");
-
-        if (!lastMessageText || lastMessageText.trim() === "") {
-          const attachmentUrl =
-            lastMessage?.content?.attachmentUrl ||
-            lastMessage?.attachmentUrl ||
-            "";
-          if (attachmentUrl && attachmentUrl.trim() !== "") {
-            lastMessageText = "Attachment";
-          }
-        }
-
-        dispatch(
-          updateLastMessageAction({
-            userid: userId,
-            lastMessage: lastMessageText || "",
-            lastChatTime: lastMessage?.dateTime || null,
-          })
-        );
-      });
-
-      unsubscribeLastMessageRefs.current[userId] = unsubscribe;
-    });
-
-    const subscriptionsRef = unsubscribeLastMessageRefs.current;
-
-    return () => {
-      const currentUserIds = new Set(users.map((u) => getDriverId(u)).filter(Boolean));
-      Object.keys(subscriptionsRef).forEach((userId) => {
-        if (!currentUserIds.has(userId)) {
-          const unsubscribe = subscriptionsRef[userId];
-          if (unsubscribe) {
-            unsubscribe();
-            delete subscriptionsRef[userId];
-          }
-        }
-      });
-    };
-  }, [users, subscribeLastMessage, dispatch, updateLastMessageAction]);
-
   const showInitialLoader = loading && !hasLoaded && users.length === 0;
-
-  // Subscribe to unread counts for all users
-  useEffect(() => {
-    if (!subscribeUnreadCount || !users?.length) return;
-
-    // Subscribe to unread counts for each user
-    users.forEach((u) => {
-      const userId = getDriverId(u);
-      if (!userId) return;
-
-      // If already subscribed, skip
-      if (unsubscribeUnreadRefs.current[userId]) return;
-
-      // Subscribe to unread count changes
-      const unsubscribe = subscribeUnreadCount(u, (count) => {
-        setUnreadCounts((prev) => ({
-          ...prev,
-          [userId]: count,
-        }));
-      });
-
-      unsubscribeUnreadRefs.current[userId] = unsubscribe;
-    });
-
-    // Cleanup: unsubscribe from users that are no longer in the list
-    const subscriptionsRef = unsubscribeUnreadRefs.current;
-
-    return () => {
-      const currentUserIds = new Set(users.map((u) => getDriverId(u)).filter(Boolean));
-      Object.keys(subscriptionsRef).forEach((userId) => {
-        if (!currentUserIds.has(userId)) {
-          const unsubscribe = subscriptionsRef[userId];
-          if (unsubscribe) {
-            unsubscribe();
-            delete subscriptionsRef[userId];
-          }
-          // Remove from unread counts
-          setUnreadCounts((prev) => {
-            const next = { ...prev };
-            delete next[userId];
-            return next;
-          });
-        }
-      });
-    };
-  }, [users, subscribeUnreadCount]);
 
 
   // Transform users from Redux to drivers format
@@ -385,7 +147,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
           lastSeen: u.lastSeen || null,
           last_message: u.last_message || "",
           last_chat_time: u.last_chat_time || null,
-          unreadCount: unreadCounts[userId] || 0,
+          unreadCount: unreadCountsByUser[userId]?.[isMaintenanceChat ? "maintenance" : "regular"] || 0,
           category: u.category || null, // Include category field
         };
       })
@@ -402,7 +164,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
    
 
     return driversWithIds;
-  }, [users, unreadCounts]);
+  }, [users, unreadCountsByUser, isMaintenanceChat]);
 
   // Client-side filtering - filter by search, category, and seen/unseen
   const filtered = useMemo(() => {

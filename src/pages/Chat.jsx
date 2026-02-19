@@ -87,7 +87,6 @@ const Chat = () => {
         <ChatList
           onSelectDriver={handleSelectDriver}
           selectedDriver={selectedDriver}
-          chatApi={chatAPI}
         />
       </div>
 
