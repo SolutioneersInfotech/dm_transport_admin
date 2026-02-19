@@ -807,7 +807,12 @@ export default function ChatWindow({ driver, chatApi }) {
                 ? (msg.sendername ?? "You")
                 : (driver?.driver_name ?? msg.sendername ?? "Driver");
               const prevMsg = grouped[date][idx - 1];
-              const showSenderName = !prevMsg || prevMsg.type !== msg.type;
+              const sameType = prevMsg && prevMsg.type === msg.type;
+              const sameAdmin =
+                sameType &&
+                msg.type === 1 &&
+                (prevMsg.sendername ?? "") === (msg.sendername ?? "");
+              const showSenderName = !prevMsg || !sameType || !sameAdmin;
               const replyToMessage = msg.replyTo
                 ? messages.find((m) => m.msgId === msg.replyTo)
                 : null;
