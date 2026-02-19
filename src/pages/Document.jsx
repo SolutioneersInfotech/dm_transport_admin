@@ -646,6 +646,18 @@ export default function Documents() {
   };
 
   const showSkeleton = loading && !isManualRefreshing && filteredDocuments?.length === 0;
+  const displayedTotalDocuments = useMemo(() => {
+    if (typeof countsTotal === "number") {
+      return countsTotal;
+    }
+
+    if (typeof total === "number") {
+      return total;
+    }
+
+    return filteredDocuments?.length || 0;
+  }, [countsTotal, total, filteredDocuments]);
+
   useEffect(() => {
     function handleClickOutside(event) {
       if (
@@ -1467,7 +1479,7 @@ export default function Documents() {
                   <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                     <span>
                       Showing: <span className="font-semibold text-white">{filteredDocuments?.length || 0}</span> of{" "}
-                      <span className="font-semibold text-white">{total || filteredDocuments?.length || 0}</span> documents
+                      <span className="font-semibold text-white">{displayedTotalDocuments}</span> documents
                     </span>
                     {selectedDocIds.size > 0 && (
                       <span>
