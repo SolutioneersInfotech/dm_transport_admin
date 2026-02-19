@@ -110,7 +110,13 @@ function driverMatchesSearch(driver, searchTerm) {
   const terms = normalizedTerm.split(" ").filter(Boolean);
   if (!terms.length) return true;
 
-  const searchFields = [driver.name, driver.phone, driver.id, driver.location]
+  const searchFields = [
+    driver.name,
+    driver.phone,
+    driver.id,
+    driver.location,
+    driver.searchKeywords,
+  ]
     .map(normalizeSearchText)
     .filter(Boolean);
 
@@ -384,7 +390,10 @@ export default function Drivers() {
 
   const selectedDriver =
     drivers.find((driver) => driver.id === selectedId) ?? drivers[0];
-  const totalDrivers = driverCountData?.totalDrivers ?? null;
+  const hasActiveSearch = Boolean(search.trim());
+  const totalDrivers = hasActiveSearch
+    ? filteredDrivers.length
+    : driverCountData?.totalDrivers ?? null;
 
   const isInitialLoading = (isLoading || isSearchLoading) && drivers.length === 0;
 
@@ -605,8 +614,8 @@ export default function Drivers() {
 
       closeModal();
       setFormState(initialFormState);
-      setCachedSearchDrivers(null);
-      setHasLoadedSearchCache(false);
+      setCachedSearchDrivers([]);
+      hasHydratedSearchCacheRef.current = false;
       setPage(1);
       await refetch();
     } catch (error) {

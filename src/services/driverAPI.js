@@ -18,9 +18,19 @@ function mapDriver(user) {
         ? new Date(user.lastSeen)
         : null;
 
+  const combinedName = [
+    user?.name,
+    user?.driver_name,
+    user?.driverName,
+    [user?.firstName, user?.lastName].filter(Boolean).join(" "),
+    [user?.firstname, user?.lastname].filter(Boolean).join(" "),
+  ]
+    .map((value) => String(value || "").trim())
+    .find(Boolean);
+
   return {
     id: user?.userid || user?.userId || user?.phone || "",
-    name: user?.name || "",
+    name: combinedName || "",
     phone: user?.phone || "",
     country: user?.country || "",
     category: user?.category || "",
@@ -39,6 +49,18 @@ function mapDriver(user) {
       user?.avatar ||
       user?.image ||
       "",
+    searchKeywords: [
+      user?.name,
+      user?.driver_name,
+      user?.driverName,
+      user?.firstName,
+      user?.lastName,
+      user?.firstname,
+      user?.lastname,
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .join(" "),
   };
 }
 
