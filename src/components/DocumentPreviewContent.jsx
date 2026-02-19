@@ -78,6 +78,17 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     }
   };
 
+  const getPreferredPdfRenderMode = (pdfUrl) => {
+    if (!pdfUrl) return "native";
+    try {
+      const parsed = new URL(pdfUrl, window.location.origin);
+      // Cross-origin PDFs are the most common source of blank pages in hosted PDF.js viewer due CORS/I/O restrictions
+      return parsed.origin === window.location.origin ? "pdfjs" : "native";
+    } catch {
+      return "native";
+    }
+  };
+
   // Fetch document size via HEAD request (when doc URL is available)
   const docUrl = fullDoc?.document_url || selectedDoc?.document_url;
   useEffect(() => {

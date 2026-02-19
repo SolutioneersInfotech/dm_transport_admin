@@ -1,9 +1,7 @@
 import {
   get,
-  limitToLast,
   onValue,
   push,
-  query,
   ref,
   remove,
   set,
@@ -16,6 +14,10 @@ const USER_MIRROR_BASE = "chat/users";
 const FETCH_USERS_URL =
   "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin/fetchusers";
 
+function isDevMode() {
+  return typeof import.meta !== "undefined" && Boolean(import.meta?.env?.DEV);
+}
+
 function getToken() {
   return localStorage.getItem("adminToken");
 }
@@ -25,11 +27,9 @@ function getAdminUser() {
 }
 
 function normalizeMessage(messageId, msg) {
-  const rawDate = msg?.dateTime || msg?.datetime;
-  const date = rawDate ? new Date(rawDate) : new Date();
-  const dateTime = Number.isNaN(date.getTime())
-    ? new Date().toISOString()
-    : date.toISOString();
+  const rawDate = msg?.dateTime || msg?.datetime || "";
+  const parsedTime = parseDateTimeMs(rawDate);
+  const dateTime = parsedTime > 0 ? new Date(parsedTime).toISOString() : String(rawDate || "");
   const type =
     msg?.type === 0 ? 1 :
     msg?.type === 1 ? 0 :
@@ -55,10 +55,100 @@ function normalizeMessage(messageId, msg) {
   };
 }
 
+function parseDateTimeMs(rawDate) {
+  if (!rawDate) return 0;
+
+  const direct = new Date(rawDate).getTime();
+  if (!Number.isNaN(direct)) return direct;
+
+  const asString = String(rawDate).trim();
+  if (!asString) return 0;
+
+  let normalized = asString.includes(" ") ? asString.replace(" ", "T") : asString;
+  if (!/[zZ]|[+-]\d{2}:?\d{2}$/.test(normalized)) {
+    normalized = `${normalized}Z`;
+  }
+
+  const tolerant = new Date(normalized).getTime();
+  return Number.isNaN(tolerant) ? 0 : tolerant;
+}
+
+function normalizeContactId(value) {
+  if (value === null || value === undefined) return null;
+  const cleaned = String(value).trim().replace(/[+\s-]/g, "");
+  return cleaned || null;
+}
+
+function resolveUserId(chatTarget) {
+  if (chatTarget && typeof chatTarget === "object") {
+    const candidate =
+      chatTarget.userid ??
+      chatTarget.userId ??
+      chatTarget.uid ??
+      chatTarget.id ??
+      null;
+
+    return normalizeContactId(candidate);
+  }
+
+  return normalizeContactId(chatTarget);
+}
+
+function resolveContactId(chatTarget) {
+  if (chatTarget && typeof chatTarget === "object") {
+    const preferred = [
+      chatTarget.phoneNumber,
+      chatTarget.phone,
+      chatTarget.mobile,
+      chatTarget.contact,
+      chatTarget.whatsappNumber,
+    ];
+
+    for (const option of preferred) {
+      const normalized = normalizeContactId(option);
+      if (normalized) return normalized;
+    }
+  }
+
+  return resolveUserId(chatTarget);
+}
+
+function buildMessageDedupKey(message) {
+  if (message?.id) return `id:${message.id}`;
+
+  const dt = String(message?.dateTime || "");
+  const sender = String(message?.sendername || "");
+  const text = String(message?.content?.message ?? message?.message ?? "");
+  const type = String(message?.type ?? "");
+  const mediaUrl = String(message?.content?.attachmentUrl ?? message?.attachmentUrl ?? "");
+
+  return `fallback:${dt}|${sender}|${text}|${type}|${mediaUrl}`;
+}
+
+function mergeMessageObjects(primaryMessagesObject = {}, fallbackMessagesObject = {}) {
+  const mergedMap = new Map();
+
+  const addMessages = (messagesObject) => {
+    Object.entries(messagesObject || {}).forEach(([id, msg]) => {
+      const normalized = normalizeMessage(id, msg);
+      const dedupKey = buildMessageDedupKey(normalized);
+
+      if (!mergedMap.has(dedupKey)) {
+        mergedMap.set(dedupKey, normalized);
+      }
+    });
+  };
+
+  addMessages(primaryMessagesObject);
+  addMessages(fallbackMessagesObject);
+
+  return sortByDateTimeAsc(Array.from(mergedMap.values()));
+}
+
 function sortByDateTimeAsc(messages) {
   return messages.sort((a, b) => {
-    const left = a?.dateTime ? new Date(a.dateTime).getTime() : 0;
-    const right = b?.dateTime ? new Date(b.dateTime).getTime() : 0;
+    const left = parseDateTimeMs(a?.dateTime);
+    const right = parseDateTimeMs(b?.dateTime);
     return left - right;
   });
 }
@@ -91,22 +181,28 @@ export async function fetchUsersForChat() {
  * @param {number} messageLimit - Number of messages to fetch (default: 10)
  * @returns {Promise<{messages: Array}>}
  */
-export async function fetchMessages(userid, messageLimit = 10) {
-  // FIX: Fetch more messages and sort by timestamp to get the actual most recent
-  // limitToLast() uses Firebase key order, not timestamp order, so we need to sort
-  // Fetch more messages (20) to ensure we get the most recent even if keys are out of order
-  const messagesRef = query(
-    ref(database, `${ADMIN_GENERAL_PATH}/${userid}`)
-  );
-  
-  const snapshot = await get(messagesRef);
-  const messagesObject = snapshot.exists() ? snapshot.val() : {};
+export async function fetchMessages(chatTarget, messageLimit = 10) {
+  const userid = resolveUserId(chatTarget);
+  const contactId = resolveContactId(chatTarget);
+  if (!userid || !contactId) {
+    return { messages: [] };
+  }
 
-  // Sort all messages by dateTime to get the actual most recent
-  const messages = sortByDateTimeAsc(
-    Object.entries(messagesObject).map(([id, msg]) =>
-      normalizeMessage(id, msg)
-    )
+  const primaryPath = `${ADMIN_GENERAL_PATH}/${contactId}`;
+  const fallbackPath = `${USER_MIRROR_BASE}/${userid}/admin`;
+
+  if (isDevMode()) {
+    console.log("[chatAPI] fetchMessages", { userid, contactId, primaryPath, fallbackPath });
+  }
+
+  const [primarySnapshot, fallbackSnapshot] = await Promise.all([
+    get(ref(database, primaryPath)),
+    get(ref(database, fallbackPath)),
+  ]);
+
+  const messages = mergeMessageObjects(
+    primarySnapshot.exists() ? primarySnapshot.val() : {},
+    fallbackSnapshot.exists() ? fallbackSnapshot.val() : {}
   );
 
   // If we only need 1 message, return just the most recent (last in sorted array)
@@ -125,23 +221,41 @@ export async function fetchMessages(userid, messageLimit = 10) {
  * @returns {function} Unsubscribe function
  */
 export function subscribeMessages(userid, onChange) {
-  // Fetch all messages without limit to ensure no messages are missed
-  const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
+  const resolvedUserId = resolveUserId(userid);
+  const contactId = resolveContactId(userid);
+  if (!resolvedUserId || !contactId) {
+    onChange([]);
+    return () => {};
+  }
 
-  const unsubscribe = onValue(messagesRef, (snapshot) => {
-    const messagesObject = snapshot.exists() ? snapshot.val() : {};
-    
-    // Normalize and sort all messages by dateTime
-    const messages = sortByDateTimeAsc(
-      Object.entries(messagesObject || {}).map(([id, msg]) =>
-        normalizeMessage(id, msg)
-      )
-    );
+  const primaryPath = `${ADMIN_GENERAL_PATH}/${contactId}`;
+  const fallbackPath = `${USER_MIRROR_BASE}/${resolvedUserId}/admin`;
 
-    onChange(messages);
+  if (isDevMode()) {
+    console.log("[chatAPI] subscribeMessages", { userid: resolvedUserId, contactId, primaryPath, fallbackPath });
+  }
+
+  let primaryMessagesObject = {};
+  let fallbackMessagesObject = {};
+
+  const emit = () => {
+    onChange(mergeMessageObjects(primaryMessagesObject, fallbackMessagesObject));
+  };
+
+  const unsubscribePrimary = onValue(ref(database, primaryPath), (snapshot) => {
+    primaryMessagesObject = snapshot.exists() ? snapshot.val() : {};
+    emit();
   });
 
-  return unsubscribe;
+  const unsubscribeFallback = onValue(ref(database, fallbackPath), (snapshot) => {
+    fallbackMessagesObject = snapshot.exists() ? snapshot.val() : {};
+    emit();
+  });
+
+  return () => {
+    unsubscribePrimary();
+    unsubscribeFallback();
+  };
 }
 
 /**
@@ -152,27 +266,9 @@ export function subscribeMessages(userid, onChange) {
  * @returns {function} Unsubscribe function
  */
 export function subscribeLastMessage(userid, onChange) {
-  const messagesRef = query(
-    ref(database, `${ADMIN_GENERAL_PATH}/${userid}`),
-    limitToLast(30)
-  );
-
-  const unsubscribe = onValue(messagesRef, (snapshot) => {
-    if (!snapshot.exists()) {
-      onChange(null);
-      return;
-    }
-
-    const messages = sortByDateTimeAsc(
-      Object.entries(snapshot.val() || {}).map(([id, msg]) =>
-        normalizeMessage(id, msg)
-      )
-    );
-
+  return subscribeMessages(userid, (messages) => {
     onChange(messages.length ? messages[messages.length - 1] : null);
   });
-
-  return unsubscribe;
 }
 
 /**
@@ -184,8 +280,15 @@ export function subscribeLastMessage(userid, onChange) {
  * @param {string} [attachmentUrl] - Optional attachment download URL (image/video/document)
  * @returns {Promise<{message: object}>}
  */
-export async function sendMessage(userid, text, adminUser = getAdminUser(), replyToMsgId = null, attachmentUrl = "") {
-  const messageId = push(ref(database, `${ADMIN_GENERAL_PATH}/${userid}`)).key;
+export async function sendMessage(chatTarget, text, adminUser = getAdminUser(), replyToMsgId = null, attachmentUrl = "") {
+  const userid = resolveUserId(chatTarget);
+  const contactId = resolveContactId(chatTarget);
+
+  if (!userid || !contactId) {
+    throw new Error("Missing chat target id.");
+  }
+
+  const messageId = push(ref(database, `${ADMIN_GENERAL_PATH}/${contactId}`)).key;
 
   if (!messageId) {
     throw new Error("Unable to generate message id.");
@@ -201,7 +304,7 @@ export async function sendMessage(userid, text, adminUser = getAdminUser(), repl
     content: { message: messageText, attachmentUrl: attachment },
     status: 0,
     type: 0,
-    contactId: userid,
+    contactId,
     sendername: adminUser?.name || adminUser?.userid || "Admin",
     replyTo,
   };
@@ -211,10 +314,16 @@ export async function sendMessage(userid, text, adminUser = getAdminUser(), repl
     type: 1,
   };
 
-  await Promise.all([
-    set(ref(database, `${ADMIN_GENERAL_PATH}/${userid}/${messageId}`), payload),
-    set(ref(database, `${USER_MIRROR_BASE}/${userid}/admin/${messageId}`), userPayload),
-  ]);
+  const writes = [
+    set(ref(database, `${ADMIN_GENERAL_PATH}/${contactId}/${messageId}`), payload),
+    set(ref(database, `${USER_MIRROR_BASE}/${contactId}/admin/${messageId}`), userPayload),
+  ];
+
+  if (userid !== contactId) {
+    writes.push(set(ref(database, `${USER_MIRROR_BASE}/${userid}/admin/${messageId}`), userPayload));
+  }
+
+  await Promise.all(writes);
 
   return { message: payload };
 }
@@ -272,9 +381,15 @@ function isSeenByCurrentAdmin(msg) {
  * @param {string} userid - User ID
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-export async function markMessagesAsSeen(userid) {
+export async function markMessagesAsSeen(chatTarget) {
   try {
-    const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
+    const userid = resolveUserId(chatTarget);
+    const contactId = resolveContactId(chatTarget);
+    if (!userid || !contactId) {
+      return { success: true };
+    }
+
+    const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${contactId}`);
     const snapshot = await get(messagesRef);
 
     if (!snapshot.exists()) {
@@ -291,7 +406,7 @@ export async function markMessagesAsSeen(userid) {
       const msg = messagesObject[messageId];
       if (msg.type !== 1) return;
       if (isSeenByCurrentAdmin(msg)) return;
-      const messagePath = `${ADMIN_GENERAL_PATH}/${userid}/${messageId}`;
+      const messagePath = `${ADMIN_GENERAL_PATH}/${contactId}/${messageId}`;
       updateData[`${messagePath}/seenByAdmins/${adminId}`] = seenTimestamp;
       updateData[`${messagePath}/seenAt`] = seenTimestamp;
       updateData[`${messagePath}/seenBy`] = adminId;
@@ -319,9 +434,14 @@ export async function markMessagesAsSeen(userid) {
  * @param {string} userid - User ID
  * @returns {Promise<number>}
  */
-export async function getUnreadCount(userid) {
+export async function getUnreadCount(chatTarget) {
   try {
-    const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
+    const contactId = resolveContactId(chatTarget);
+    if (!contactId) {
+      return { unreadCount: 0 };
+    }
+
+    const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${contactId}`);
     const snapshot = await get(messagesRef);
 
     if (!snapshot.exists()) {
@@ -350,8 +470,14 @@ export async function getUnreadCount(userid) {
  * @param {function} onChange - Callback function called when unread count changes
  * @returns {function} Unsubscribe function
  */
-export function subscribeUnreadCount(userid, onChange) {
-  const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
+export function subscribeUnreadCount(chatTarget, onChange) {
+  const contactId = resolveContactId(chatTarget);
+  if (!contactId) {
+    onChange(0);
+    return () => {};
+  }
+
+  const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${contactId}`);
 
   const unsubscribe = onValue(messagesRef, (snapshot) => {
     if (!snapshot.exists()) {
