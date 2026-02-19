@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Angry,
+  Heart,
+  Laugh,
+  Smile,
+  ThumbsUp,
+} from "lucide-react";
+import {
   addReaction,
   deleteNotesMessage,
   sendNotesMessage,
@@ -10,7 +17,48 @@ import {
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 
-const EMOJI_CHOICES = ["😀", "👍", "❤️", "😂", "😡"];
+const REACTION_CHOICES = [
+  {
+    key: "smile",
+    label: "Smile",
+    Icon: Smile,
+    iconClass: "text-yellow-300",
+    filled: true,
+    strokeClass: "stroke-black",
+  },
+  {
+    key: "thumbs_up",
+    label: "Thumbs up",
+    Icon: ThumbsUp,
+    iconClass: "text-blue-300",
+    filled: true,
+    strokeClass: "stroke-blue-300",
+  },
+  {
+    key: "heart",
+    label: "Heart",
+    Icon: Heart,
+    iconClass: "text-rose-300",
+    filled: true,
+    strokeClass: "stroke-rose-300",
+  },
+  {
+    key: "laugh",
+    label: "Laugh",
+    Icon: Laugh,
+    iconClass: "text-amber-300",
+    filled: true,
+    strokeClass: "stroke-black",
+  },
+  {
+    key: "angry",
+    label: "Angry",
+    Icon: Angry,
+    iconClass: "text-red-300",
+    filled: true,
+    strokeClass: "stroke-black",
+  },
+];
 const PRIORITY_OPTIONS = [
   { label: "All", value: "all" },
   { label: "High", value: "high" },
@@ -101,6 +149,18 @@ function getReactionCount(reactions) {
   }, 0);
 }
 
+function renderReactionIcon(reaction, iconSizeClass = "h-6 w-6") {
+  const IconComponent = reaction.Icon;
+
+  return (
+    <IconComponent
+      className={`${iconSizeClass} ${reaction.iconClass} ${reaction.strokeClass || ""} ${
+        reaction.filled ? "fill-current stroke-[1.6]" : "stroke-[2.1]"
+      }`}
+    />
+  );
+}
+
 export default function Notes() {
   const [messages, setMessages] = useState([]);
   const [priorityFilter, setPriorityFilter] = useState("all");
@@ -145,6 +205,33 @@ export default function Notes() {
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
   }, [messages]);
+
+  useEffect(() => {
+    if (!activeEmojiMenu) {
+      return;
+    }
+
+    const handleOutsideClick = (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      if (
+        target.closest('[data-reaction-menu]') ||
+        target.closest('[data-reaction-trigger]')
+      ) {
+        return;
+      }
+
+      setActiveEmojiMenu(null);
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [activeEmojiMenu]);
 
   const groupedMessages = useMemo(() => {
     const groups = [];
@@ -246,14 +333,14 @@ export default function Notes() {
     }
   };
 
-  const handleReaction = async (messageId, emoji) => {
+  const handleReaction = async (messageId, reactionKey) => {
     const userId = adminUser?.userid;
     if (!userId) {
       return;
     }
 
     try {
-      await addReaction({ messageId, emoji, userId });
+      await addReaction({ messageId, emoji: reactionKey, userId });
     } catch (error) {
       console.error("Failed to add reaction", error);
     }
@@ -430,32 +517,35 @@ export default function Notes() {
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  onClick={() =>
-                                    setActiveEmojiMenu(
-                                      activeEmojiMenu === message.id
-                                        ? null
-                                        : message.id
-                                    )
-                                  }
+                                  onClick={() => setActiveEmojiMenu(message.id)}
                                   className="rounded-full border border-gray-700 px-2 py-0.5 text-[11px] text-gray-200 h-auto"
+                                  aria-label="Add reaction"
+                                  data-reaction-trigger
                                 >
-                                  😊
+                                  {renderReactionIcon(REACTION_CHOICES[0], "h-[21px] w-[21px]")}
                                 </Button>
                                 {activeEmojiMenu === message.id && (
-                                  <div className="absolute right-0 z-20 mt-2 flex gap-2 rounded-lg border border-gray-700 bg-[#161b22] p-2">
-                                    {EMOJI_CHOICES.map((emoji) => (
+                                  <div
+                                    data-reaction-menu
+                                    className={`absolute z-20 mt-2 flex gap-2 rounded-lg border border-gray-700 bg-[#161b22] p-2 shadow-lg ${
+                                      isMine ? "right-0" : "left-0 ml-2"
+                                    }`}
+                                  >
+                                    {REACTION_CHOICES.map((reaction) => (
                                       <Button
-                                        key={emoji}
+                                        key={reaction.key}
                                         type="button"
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => {
-                                          handleReaction(message.id, emoji);
+                                          handleReaction(message.id, reaction.key);
                                           setActiveEmojiMenu(null);
                                         }}
-                                        className="text-base h-auto p-1"
+                                        className="h-auto p-1"
+                                        aria-label={reaction.label}
+                                        title={reaction.label}
                                       >
-                                        {emoji}
+                                        {renderReactionIcon(reaction)}
                                       </Button>
                                     ))}
                                   </div>
