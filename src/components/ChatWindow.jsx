@@ -188,7 +188,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
-import { Copy, Download, Mail, Paperclip, Phone, Trash2, X } from "lucide-react";
+import { ChevronDown, Copy, Download, Mail, Paperclip, Phone, Trash2, X } from "lucide-react";
 import {
   subscribeMessages as defaultSubscribeMessages,
   sendMessage as defaultSendMessage,
@@ -786,17 +786,18 @@ export default function ChatWindow({ driver, chatApi }) {
         )}
 
       {/* ================= MESSAGE AREA (WhatsApp-like bg) ================= */}
-      <div
-        ref={messagesContainerRef}
-        className={`flex-1 overflow-y-auto chat-list-scroll space-y-6 bg-[#0b141a] chat-bg-pattern ${selectionMode ? "pl-2 pr-4 pt-4 pb-4" : "p-4"}`}
-      >
-        {Object.keys(grouped).length === 0 && (
-          <p className="text-center text-[#8696a0] text-sm mt-6">
-            No messages yet
-          </p>
-        )}
+      <div className="relative flex-1 flex flex-col min-h-0">
+        <div
+          ref={messagesContainerRef}
+          className={`flex-1 overflow-y-auto chat-list-scroll space-y-6 bg-[#0b141a] chat-bg-pattern ${selectionMode ? "pl-2 pr-4 pt-4 pb-4" : "p-4"}`}
+        >
+          {Object.keys(grouped).length === 0 && (
+            <p className="text-center text-[#8696a0] text-sm mt-6">
+              No messages yet
+            </p>
+          )}
 
-        {Object.keys(grouped).map((date) => (
+          {Object.keys(grouped).map((date) => (
           <div key={date}>
             <div className="text-center text-[#8696a0] text-xs my-2">{date}</div>
             {grouped[date].map((msg, idx) => {
@@ -875,7 +876,16 @@ export default function ChatWindow({ driver, chatApi }) {
             })}
           </div>
         ))}
-        <div ref={bottomRef} />
+          <div ref={bottomRef} />
+        </div>
+        <button
+          type="button"
+          onClick={() => scrollToBottom("smooth")}
+          className="absolute bottom-4 right-4 rounded-full bg-[#1f6feb] p-2.5 text-white shadow-lg hover:bg-[#1a63d6] focus:outline-none focus:ring-2 focus:ring-[#1f6feb] focus:ring-offset-2 focus:ring-offset-[#0b141a] z-10"
+          aria-label="Scroll to bottom"
+        >
+          <ChevronDown className="w-5 h-5" />
+        </button>
       </div>
       {replyTo && (
   <div className="px-4 py-2 border-t border-[#2c3e52] bg-[#1c2530] flex items-center justify-between">
