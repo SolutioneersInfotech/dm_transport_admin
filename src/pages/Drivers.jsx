@@ -184,8 +184,9 @@ export default function Drivers() {
   const [submitError, setSubmitError] = useState("");
   const [isSearchLoading, setIsSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
-  const [cachedSearchDrivers, setCachedSearchDrivers] = useState(null);
-  const [hasLoadedSearchCache, setHasLoadedSearchCache] = useState(false);
+  const searchCacheRef = useRef([]);
+  const hasHydratedSearchCacheRef = useRef(false);
+  const isHydratingSearchCacheRef = useRef(false);
   const [skeletonRows, setSkeletonRows] = useState(8);
   const isFetchingLocalSearchRef = useRef(false);
   const isResizingRef = useRef(false);
@@ -220,33 +221,21 @@ export default function Drivers() {
       return;
     }
 
-    const cachedMatches = searchCache.filter((driver) =>
+    const cachedMatches = searchCacheRef.current.filter((driver) =>
       driverMatchesSearch(driver, activeSearch)
     );
-    if (cachedMatches.length > 0 || hasLoadedSearchCache) {
-      setDrivers(cachedMatches);
-      setSelectedId(cachedMatches[0]?.id ?? null);
-    }
+    setDrivers(cachedMatches);
+    setSelectedId(cachedMatches[0]?.id ?? null);
+    setHasMore(false);
 
-    if (hasLoadedSearchCache) {
-      setIsSearchLoading(false);
+    if (hasHydratedSearchCacheRef.current || isHydratingSearchCacheRef.current) {
       return;
     }
 
     let cancelled = false;
+    isHydratingSearchCacheRef.current = true;
 
-    const applyLocalSearch = (sourceDrivers) => {
-      const filtered = sourceDrivers
-        .map(formatDriverForDisplay)
-        .filter((driver) => driverMatchesSearch(driver, activeSearch));
-
-      setDrivers(filtered);
-      setHasMore(false);
-      setPage(1);
-    };
-
-    const loadAllDriversForSearch = async () => {
-      if (isFetchingLocalSearchRef.current) return;
+    const hydrateSearchCache = async () => {
       try {
         isFetchingLocalSearchRef.current = true;
         setIsSearchLoading(true);
@@ -255,26 +244,31 @@ export default function Drivers() {
         const allDrivers = await fetchAllDrivers({ limit: 100 });
         if (cancelled) return;
 
-        setCachedSearchDrivers(allDrivers);
-        setHasLoadedSearchCache(true);
-        applyLocalSearch(allDrivers);
+        const formattedDrivers = allDrivers.map(formatDriver);
+        const mergedCache = mergeUniqueDrivers(
+          searchCacheRef.current,
+          formattedDrivers
+        );
+        searchCacheRef.current = mergedCache;
+        hasHydratedSearchCacheRef.current = true;
+
+        const supplementedMatches = mergedCache.filter((driver) =>
+          driverMatchesSearch(driver, activeSearch)
+        );
+        setDrivers(supplementedMatches);
+        setSelectedId(supplementedMatches[0]?.id ?? null);
       } catch {
         if (cancelled) return;
         setSearchError("Unable to load complete search results.");
       } finally {
-        isFetchingLocalSearchRef.current = false;
+        isHydratingSearchCacheRef.current = false;
         if (!cancelled) {
           setIsSearchLoading(false);
         }
       }
     };
 
-    if (hasLoadedSearchCache) {
-      applyLocalSearch(cachedSearchDrivers || []);
-      return;
-    }
-
-    loadAllDriversForSearch();
+    hydrateSearchCache();
 
     return () => {
       cancelled = true;
@@ -283,7 +277,19 @@ export default function Drivers() {
 
   useEffect(() => {
     if (!driverData) return;
-    const incoming = driverData.users.map(formatDriverForDisplay);
+    const incoming = driverData.users.map(formatDriver);
+    searchCacheRef.current = mergeUniqueDrivers(searchCacheRef.current, incoming);
+
+    const activeSearch = debouncedSearch.trim();
+    if (activeSearch) {
+      const supplementedMatches = searchCacheRef.current.filter((driver) =>
+        driverMatchesSearch(driver, activeSearch)
+      );
+      setDrivers(supplementedMatches);
+      setSelectedId(supplementedMatches[0]?.id ?? null);
+      setHasMore(false);
+      return;
+    }
 
     const pagination = driverData.pagination || {};
     const derivedHasMore =
@@ -293,17 +299,12 @@ export default function Drivers() {
         : incoming.length === limit);
     setHasMore(Boolean(derivedHasMore));
 
-    setDrivers((prev) => {
-      if (debouncedSearch.trim()) {
-        return mergeDrivers(prev, incoming);
-      }
+    if (page === 1) {
+      setDrivers(incoming);
+      return;
+    }
 
-      if (page === 1) {
-        return incoming;
-      }
-
-      return mergeDrivers(prev, incoming);
-    });
+    setDrivers((prev) => mergeUniqueDrivers(prev, incoming));
   }, [driverData, page, limit, debouncedSearch]);
 
   useEffect(() => {
@@ -857,16 +858,6 @@ export default function Drivers() {
                         }`}
                       >
                         {driver.category || "—"}
-                      </span>
-                    </span>
-                    <span className="col-span-2">
-                      <span
-                        className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${
-                          statusStyles[driver.status] ||
-                          "border-slate-700 bg-slate-800 text-slate-200"
-                        }`}
-                      >
-                        {driver.status === "active" ? "Active" : "Inactive"}
                       </span>
                     </span>
                     <span className="col-span-1 text-right text-xs text-slate-400">
