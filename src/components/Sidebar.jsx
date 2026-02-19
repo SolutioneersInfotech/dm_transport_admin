@@ -127,6 +127,13 @@ export default function Sidebar() {
     return Object.values(unreadCountsByUser || {}).filter((c) => (c?.maintenance || 0) > 0).length;
   }, [unreadCountsByUser]);
 
+  const displayName = user?.name || user?.username || user?.userid || "Admin";
+  const userRole = user?.role || user?.userType || user?.designation || "Admin Panel";
+  const displaySubtitle =
+    user?.email && user.email !== displayName && user.email !== user?.userid
+      ? user.email
+      : userRole;
+
   // Create menu sections with dynamic badges (number of users with unseen, not total unseen)
   const menuSectionsWithBadges = useMemo(() => {
     return menuSections.map((section) => ({
@@ -363,10 +370,10 @@ export default function Sidebar() {
           {!isCollapsed && (
             <div className="flex-1">
               <p className="text-sm font-semibold">
-                {user?.name || user?.username || user?.userid || "Admin"}
+                {displayName}
               </p>
               <p className="text-xs text-slate-400">
-                {user?.email || user?.userid || "admin@dmtransport.io"}
+                {displaySubtitle}
               </p>
             </div>
           )}
