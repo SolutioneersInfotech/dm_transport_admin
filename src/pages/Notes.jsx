@@ -560,7 +560,7 @@ export default function Notes() {
                                   aria-label="Add reaction"
                                   data-reaction-trigger
                                 >
-                                  {renderReactionIcon(REACTION_CHOICES[0], "h-[21px] w-[21px]")}
+                                  React
                                 </Button>
                                 {activeEmojiMenu === message.id && (
                                   <div
