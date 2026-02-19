@@ -119,6 +119,33 @@ function driverMatchesSearch(driver, searchTerm) {
   );
 }
 
+function formatDriverForDisplay(driver) {
+  return {
+    ...driver,
+    phone: formatPhone(driver.phone || driver.id),
+    lastSeenLabel: formatRelativeTime(driver.lastSeen),
+  };
+}
+
+function mergeDrivers(baseDrivers, incomingDrivers) {
+  const merged = [];
+  const seen = new Set();
+
+  const addDriver = (driver) => {
+    const key = driver.id || driver.phone;
+    if (key) {
+      if (seen.has(key)) return;
+      seen.add(key);
+    }
+    merged.push(driver);
+  };
+
+  baseDrivers.forEach(addDriver);
+  incomingDrivers.forEach(addDriver);
+
+  return merged;
+}
+
 const initialFormState = {
   name: "",
   email: "",
@@ -168,6 +195,7 @@ export default function Drivers() {
     searchCacheRef.current = nextDrivers;
   }, []);
   const [skeletonRows, setSkeletonRows] = useState(8);
+  const isFetchingLocalSearchRef = useRef(false);
   const isResizingRef = useRef(false);
   const sectionRef = useRef(null);
   const {
@@ -216,6 +244,7 @@ export default function Drivers() {
 
     const hydrateSearchCache = async () => {
       try {
+        isFetchingLocalSearchRef.current = true;
         setIsSearchLoading(true);
         setSearchError("");
 
@@ -576,6 +605,8 @@ export default function Drivers() {
 
       closeModal();
       setFormState(initialFormState);
+      setCachedSearchDrivers(null);
+      setHasLoadedSearchCache(false);
       setPage(1);
       await refetch();
     } catch (error) {
@@ -820,7 +851,7 @@ export default function Drivers() {
                     <span className="col-span-3 text-slate-300">
                       {driver.phone || "—"}
                     </span>
-                    <span className="col-span-2 text-slate-400">
+                    <span className="col-span-1 text-slate-400">
                       {driver.country || "—"}
                     </span>
                     <span className="col-span-1">
