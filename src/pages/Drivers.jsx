@@ -76,6 +76,33 @@ function normalizeSearchText(value = "") {
     .trim();
 }
 
+function formatDriver(driver) {
+  return {
+    ...driver,
+    phone: formatPhone(driver.phone || driver.id),
+    lastSeenLabel: formatRelativeTime(driver.lastSeen),
+  };
+}
+
+function mergeUniqueDrivers(...driverGroups) {
+  const merged = [];
+  const seen = new Set();
+
+  driverGroups.flat().forEach((driver) => {
+    const key = driver.id || driver.phone;
+    if (!key) {
+      merged.push(driver);
+      return;
+    }
+
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push(driver);
+  });
+
+  return merged;
+}
+
 function driverMatchesSearch(driver, searchTerm) {
   const normalizedTerm = normalizeSearchText(searchTerm);
   if (!normalizedTerm) return true;
@@ -130,6 +157,16 @@ export default function Drivers() {
   const [submitError, setSubmitError] = useState("");
   const [isSearchLoading, setIsSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
+  const searchCacheRef = useRef([]);
+  const hasHydratedSearchCacheRef = useRef(false);
+  const isHydratingSearchCacheRef = useRef(false);
+  const getCachedSearchDrivers = useCallback(
+    () => searchCacheRef.current,
+    []
+  );
+  const setCachedSearchDrivers = useCallback((nextDrivers) => {
+    searchCacheRef.current = nextDrivers;
+  }, []);
   const [skeletonRows, setSkeletonRows] = useState(8);
   const isResizingRef = useRef(false);
   const sectionRef = useRef(null);
@@ -156,11 +193,6 @@ export default function Drivers() {
   }, [search]);
 
   useEffect(() => {
-    setDrivers([]);
-    setSelectedId(null);
-  }, [debouncedSearch]);
-
-  useEffect(() => {
     const activeSearch = debouncedSearch.trim();
     if (!activeSearch) {
       setIsSearchLoading(false);
@@ -168,52 +200,74 @@ export default function Drivers() {
       return;
     }
 
-    let cancelled = false;
+    const cachedMatches = getCachedSearchDrivers().filter((driver) =>
+      driverMatchesSearch(driver, activeSearch)
+    );
+    setDrivers(cachedMatches);
+    setSelectedId(cachedMatches[0]?.id ?? null);
+    setHasMore(false);
 
-    const loadAllDriversForSearch = async () => {
+    if (hasHydratedSearchCacheRef.current || isHydratingSearchCacheRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+    isHydratingSearchCacheRef.current = true;
+
+    const hydrateSearchCache = async () => {
       try {
         setIsSearchLoading(true);
         setSearchError("");
+
         const allDrivers = await fetchAllDrivers({ limit: 100 });
         if (cancelled) return;
 
-        const formatted = allDrivers.map((driver) => ({
-          ...driver,
-          phone: formatPhone(driver.phone || driver.id),
-          lastSeenLabel: formatRelativeTime(driver.lastSeen),
-        }));
+        const formattedDrivers = allDrivers.map(formatDriver);
+        const mergedCache = mergeUniqueDrivers(
+          getCachedSearchDrivers(),
+          formattedDrivers
+        );
+        setCachedSearchDrivers(mergedCache);
+        hasHydratedSearchCacheRef.current = true;
 
-        const filtered = formatted.filter((driver) =>
+        const supplementedMatches = mergedCache.filter((driver) =>
           driverMatchesSearch(driver, activeSearch)
         );
-
-        setDrivers(filtered);
-        setHasMore(false);
-        setPage(1);
+        setDrivers(supplementedMatches);
+        setSelectedId(supplementedMatches[0]?.id ?? null);
       } catch {
         if (cancelled) return;
         setSearchError("Unable to load complete search results.");
       } finally {
+        isHydratingSearchCacheRef.current = false;
         if (!cancelled) {
           setIsSearchLoading(false);
         }
       }
     };
 
-    loadAllDriversForSearch();
+    hydrateSearchCache();
 
     return () => {
       cancelled = true;
     };
-  }, [debouncedSearch]);
+  }, [debouncedSearch, getCachedSearchDrivers, setCachedSearchDrivers]);
 
   useEffect(() => {
-    if (!driverData || debouncedSearch.trim()) return;
-    const incoming = driverData.users.map((driver) => ({
-      ...driver,
-      phone: formatPhone(driver.phone || driver.id),
-      lastSeenLabel: formatRelativeTime(driver.lastSeen),
-    }));
+    if (!driverData) return;
+    const incoming = driverData.users.map(formatDriver);
+    setCachedSearchDrivers(mergeUniqueDrivers(getCachedSearchDrivers(), incoming));
+
+    const activeSearch = debouncedSearch.trim();
+    if (activeSearch) {
+      const supplementedMatches = getCachedSearchDrivers().filter((driver) =>
+        driverMatchesSearch(driver, activeSearch)
+      );
+      setDrivers(supplementedMatches);
+      setSelectedId(supplementedMatches[0]?.id ?? null);
+      setHasMore(false);
+      return;
+    }
 
     const pagination = driverData.pagination || {};
     const derivedHasMore =
@@ -228,25 +282,15 @@ export default function Drivers() {
       return;
     }
 
-    setDrivers((prev) => {
-      const merged = [];
-      const seen = new Set();
-
-      const addDriver = (driver) => {
-        const key = driver.id || driver.phone;
-        if (key) {
-          if (seen.has(key)) return;
-          seen.add(key);
-        }
-        merged.push(driver);
-      };
-
-      prev.forEach(addDriver);
-      incoming.forEach(addDriver);
-
-      return merged;
-    });
-  }, [driverData, page, limit, debouncedSearch]);
+    setDrivers((prev) => mergeUniqueDrivers(prev, incoming));
+  }, [
+    driverData,
+    page,
+    limit,
+    debouncedSearch,
+    getCachedSearchDrivers,
+    setCachedSearchDrivers,
+  ]);
 
   useEffect(() => {
     if (drivers.length === 0) return;
@@ -711,8 +755,9 @@ export default function Drivers() {
                     </div>
                     <span className="col-span-3 h-3 w-28 animate-pulse rounded-full bg-slate-900/70" />
                     <span className="col-span-2 h-3 w-20 animate-pulse rounded-full bg-slate-900/70" />
+                    <span className="col-span-1 h-6 w-16 animate-pulse rounded-full bg-slate-900/70" />
                     <span className="col-span-1 h-6 w-12 animate-pulse rounded-full bg-slate-900/70" />
-                    <span className="col-span-2 ml-auto h-3 w-16 animate-pulse rounded-full bg-slate-900/70" />
+                    <span className="col-span-1 ml-auto h-3 w-16 animate-pulse rounded-full bg-slate-900/70" />
                   </div>
                 ))}
               </div>
@@ -781,6 +826,16 @@ export default function Drivers() {
                     <span className="col-span-1">
                       <span
                         className={`rounded-full border px-2 py-0.5 text-xs ${
+                          statusStyles[driver.status] ||
+                          "border-slate-700 text-slate-400"
+                        }`}
+                      >
+                        {driver.status === "active" ? "Active" : "Inactive"}
+                      </span>
+                    </span>
+                    <span className="col-span-1">
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-xs ${
                           categoryStyles[driver.category] ||
                           "border-slate-700 text-slate-400"
                         }`}
@@ -788,7 +843,7 @@ export default function Drivers() {
                         {driver.category || "—"}
                       </span>
                     </span>
-                    <span className="col-span-2 text-right text-xs text-slate-400">
+                    <span className="col-span-1 text-right text-xs text-slate-400">
                       {driver.lastSeenLabel ?? driver.lastSeen ?? "—"}
                     </span>
                   </button>
