@@ -55,7 +55,6 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   const [isSendingAcknowledgement, setIsSendingAcknowledgement] = useState(false);
   const [isPdfLoading, setIsPdfLoading] = useState(true);
   const [pdfObjectUrl, setPdfObjectUrl] = useState("");
-  const [pdfRenderMode, setPdfRenderMode] = useState("pdfjs");
   const [pdfLoadError, setPdfLoadError] = useState("");
   const [docSizeMb, setDocSizeMb] = useState(null);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -170,13 +169,11 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     if (!currentUrl || extFromUrl !== "pdf") {
       setPdfLoadError("");
       setPdfObjectUrl("");
-      setPdfRenderMode("pdfjs");
       setIsPdfLoading(false);
       return;
     }
 
     setPdfLoadError("");
-    setPdfRenderMode("pdfjs");
     setIsPdfLoading(true);
 
     (async () => {
@@ -208,7 +205,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   }, [fullDoc?.document_url, selectedDoc?.document_url]);
 
 
-  // Prevent indefinite loader and auto-fallback from PDF.js to native viewer
+  // Prevent indefinite loader when embedded PDF renderer does not emit load events
   useEffect(() => {
     const currentUrl = fullDoc?.document_url || selectedDoc?.document_url;
     const extFromUrl = currentUrl?.split("?")[0]?.split(".").pop()?.toLowerCase();
@@ -216,17 +213,12 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     if (extFromUrl !== "pdf" || !isPdfLoading) return;
 
     const timeoutId = window.setTimeout(() => {
-      if (pdfRenderMode === "pdfjs" && pdfObjectUrl) {
-        setPdfRenderMode("native");
-        return;
-      }
-
       setIsPdfLoading(false);
       setPdfLoadError((prev) => prev || "PDF preview is taking longer than expected. Use Open PDF if needed.");
     }, 10000);
 
     return () => window.clearTimeout(timeoutId);
-  }, [fullDoc?.document_url, selectedDoc?.document_url, pdfRenderMode, pdfObjectUrl, isPdfLoading]);
+  }, [fullDoc?.document_url, selectedDoc?.document_url, isPdfLoading]);
 
   const loadAcknowledgements = async () => {
     setIsLoadingAcknowledgements(true);
@@ -260,13 +252,9 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
   const isPDF = ext === "pdf";
   const isImage = ["jpg", "jpeg", "png", "webp", "gif"].includes(ext);
-  const pdfJsViewerUrl = url
-    ? `${url}${url.includes("#") ? "&" : "#"}toolbar=1&navpanes=0&scrollbar=1`
-    : "";
-  const nativePdfUrl = pdfObjectUrl
+  const pdfPreviewUrl = pdfObjectUrl
     ? `${pdfObjectUrl}#toolbar=1&navpanes=0&scrollbar=1`
     : "";
-  const pdfPreviewUrl = pdfRenderMode === "pdfjs" ? pdfJsViewerUrl : nativePdfUrl;
 
   if (loading) {
     return (
@@ -786,10 +774,6 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                     title="PDF Preview"
                     onLoad={() => setIsPdfLoading(false)}
                     onError={() => {
-                      if (pdfRenderMode === "pdfjs" && nativePdfUrl) {
-                        setPdfRenderMode("native");
-                        return;
-                      }
                       setPdfLoadError("Unable to render PDF preview");
                       setIsPdfLoading(false);
                     }}
