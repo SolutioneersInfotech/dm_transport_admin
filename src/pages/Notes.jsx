@@ -262,6 +262,31 @@ export default function Notes() {
     };
   }, [activeEmojiMenu]);
 
+  useEffect(() => {
+    if (!activePriorityMenu) {
+      return;
+    }
+
+    const handleOutsideClick = (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      if (
+        target.closest("[data-priority-menu]") ||
+        target.closest("[data-priority-trigger]")
+      ) {
+        return;
+      }
+
+      setActivePriorityMenu(null);
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, [activePriorityMenu]);
+
   const groupedMessages = useMemo(() => {
     const groups = [];
     messages.forEach((message) => {
@@ -390,7 +415,14 @@ export default function Notes() {
 
   const handlePriorityChange = async (messageId, value) => {
     try {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId ? { ...msg, priority: value } : msg
+        )
+      );
+
       await updateNotesMessagePriority(messageId, value);
+
       setActivePriorityMenu(null);
     } catch (error) {
       console.error("Failed to update priority", error);
@@ -613,11 +645,15 @@ export default function Notes() {
                                         )
                                       }
                                       className="rounded-full border border-gray-700 px-2 py-0.5 text-[11px] text-gray-200 h-auto"
+                                      data-priority-trigger
                                     >
                                       ...
                                     </Button>
                                     {activePriorityMenu === message.id && (
-                                      <div className="absolute right-0 z-20 mt-2 w-32 rounded-lg border border-gray-700 bg-[#161b22] py-1 text-xs">
+                                      <div
+                                        className="absolute right-0 z-20 mt-2 w-32 rounded-lg border border-gray-700 bg-[#161b22] py-1 text-xs"
+                                        data-priority-menu
+                                      >
                                         <Button
                                           type="button"
                                           variant="ghost"
