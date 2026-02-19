@@ -261,7 +261,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   const isPDF = ext === "pdf";
   const isImage = ["jpg", "jpeg", "png", "webp", "gif"].includes(ext);
   const pdfJsViewerUrl = url
-    ? `https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(url)}`
+    ? `${url}${url.includes("#") ? "&" : "#"}toolbar=1&navpanes=0&scrollbar=1`
     : "";
   const nativePdfUrl = pdfObjectUrl
     ? `${pdfObjectUrl}#toolbar=1&navpanes=0&scrollbar=1`
