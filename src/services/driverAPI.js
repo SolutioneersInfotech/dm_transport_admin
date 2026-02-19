@@ -123,10 +123,11 @@ export async function fetchAllDrivers({ limit = 100 } = {}) {
 
     if (typeof apiHasMore === "boolean") {
       hasMore = apiHasMore;
-    } else if (Number.isFinite(totalPages)) {
-      hasMore = currentPage < totalPages;
     } else {
-      hasMore = users.length === limit;
+      const hasAnotherFullPage = users.length === limit;
+      const hasMoreByTotalPages =
+        Number.isFinite(totalPages) && currentPage < totalPages;
+      hasMore = hasAnotherFullPage || hasMoreByTotalPages;
     }
 
     page += 1;
