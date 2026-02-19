@@ -553,14 +553,14 @@ export default function Notes() {
                               <div className="relative">
                                 <Button
                                   type="button"
-                                  variant="outline"
+                                  variant="ghost"
                                   size="sm"
                                   onClick={() => setActiveEmojiMenu(message.id)}
-                                  className="rounded-full border border-gray-700 px-2 py-0.5 text-[11px] text-gray-200 h-auto"
+                                  className="text-xs text-blue-300 hover:text-blue-200 h-auto px-2 py-1"
                                   aria-label="Add reaction"
                                   data-reaction-trigger
                                 >
-                                  {renderReactionIcon(REACTION_CHOICES[0], "h-[21px] w-[21px]")}
+                                  React
                                 </Button>
                                 {activeEmojiMenu === message.id && (
                                   <div
