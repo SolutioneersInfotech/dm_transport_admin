@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
-import { format as formatDate } from "date-fns";
+import { format as formatDate, isValid } from "date-fns";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { fetchDocumentCount, fetchDocuments, fetchMoreDocuments, resetPagination, updateDocument, deleteDocumentThunk, deleteDocumentsThunk } from "../store/slices/documentsSlice";
 import DocumentPreviewContent from "../components/DocumentPreviewContent";
@@ -34,6 +34,9 @@ import { toast } from "sonner";
 import { buildDocumentDownloadName, getDocumentTypeLabel } from "../utils/documentDownloadName";
 
 const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
+const ALL_DOCUMENTS_START_DATE = "1970-01-01";
+
+const isValidDateValue = (value) => value instanceof Date && isValid(value);
 
 // Last 60 Days
 function getDefaultDates() {
@@ -362,13 +365,26 @@ export default function Documents() {
     return isTypeFilterLoading && isSelected && activeTypeFilterValue === filterValue;
   }, [activeTypeFilterValue, isTypeFilterLoading]);
 
+  const hasCustomDateRange = useMemo(
+    () => isValidDateValue(dateRange?.from) && isValidDateValue(dateRange?.to),
+    [dateRange]
+  );
+
   const startDate = useMemo(() => {
-    return dateRange?.from ? formatLocalDate(dateRange.from) : undefined;
-  }, [dateRange]);
+    if (hasCustomDateRange) {
+      return formatLocalDate(dateRange.from);
+    }
+
+    return ALL_DOCUMENTS_START_DATE;
+  }, [dateRange, hasCustomDateRange]);
 
   const endDate = useMemo(() => {
-    return dateRange?.to ? formatLocalDate(dateRange.to) : undefined;
-  }, [dateRange]);
+    if (hasCustomDateRange) {
+      return formatLocalDate(dateRange.to);
+    }
+
+    return formatLocalDate(new Date());
+  }, [dateRange, hasCustomDateRange]);
 
   const currentFetchArgs = useMemo(
     () => ({
@@ -505,10 +521,9 @@ export default function Documents() {
   const filteredDocuments = allDocuments;
 
   function resetDates() {
-    const { start, end } = defaultDates;
     setDateRange({
-      from: new Date(start),
-      to: new Date(end),
+      from: undefined,
+      to: undefined,
     });
   }
 
@@ -729,7 +744,6 @@ export default function Documents() {
   }, [handleLoadMore]);
 
   useEffect(() => {
-    if (!startDate || !endDate) return;
     const pollIntervalMs = 30 * 1000;
 
     const pollCounts = () => {
@@ -1084,10 +1098,7 @@ export default function Documents() {
             triggerWidthClassName="w-[260px] sm:w-[320px]"
             labelClassName="text-center"
           />
-          {dateRange?.from &&
-            dateRange?.to &&
-            (formatLocalDate(dateRange.from) !== defaultDates.start ||
-              formatLocalDate(dateRange.to) !== defaultDates.end) && (
+          {hasCustomDateRange && (
             <Button
               variant="ghost"
               size="sm"
