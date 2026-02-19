@@ -597,6 +597,13 @@ export default function ChatWindow({ driver, chatApi }) {
   async function handleDeleteSelected() {
     if (selected.length === 0) return;
 
+    const confirmMessage =
+      selected.length === 1
+        ? "Would you like to delete selected message for everyone?"
+        : `Would you like to delete ${selected.length} selected messages for everyone?`;
+
+    if (!window.confirm(confirmMessage)) return;
+
     for (let id of selected) {
       await deleteSpecificMessage(id, driverId);
     }
