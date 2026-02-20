@@ -95,16 +95,9 @@ const Chat = () => {
       <div className="flex-1 h-full overflow-hidden min-w-0">
         <AnimatePresence mode="wait">
           {selectedDriver ? (
-            <motion.div
-              key={selectedDriver.userid ?? selectedDriver.id ?? "chat"}
-              className="h-full"
-              initial={{ opacity: 0, x: 16 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 16 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-            >
+            <div key={selectedDriver.userid ?? selectedDriver.id ?? "chat"} className="h-full">
               <ChatWindow driver={selectedDriver} chatApi={chatAPI} />
-            </motion.div>
+            </div>
           ) : (
             <motion.div
               key="placeholder"

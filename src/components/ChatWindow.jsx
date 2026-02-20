@@ -199,7 +199,7 @@ import {
 import ChatMessageBubble from "./ChatMessageBubble";
 import FilePreviewModal from "./FilePreviewModal";
 import { groupMessagesByDate } from "../utils/groupMessages";
-import ChatWindowSkeleton from "./skeletons/ChatWindowSkeleton";
+import ConversationListShimmer from "./skeletons/ConversationListShimmer";
 import { useAuth } from "../context/AuthContext";
 import { useAppDispatch } from "../store/hooks";
 import { updateUserLastMessage } from "../store/slices/usersSlice";
@@ -660,10 +660,6 @@ export default function ChatWindow({ driver, chatApi }) {
 
   /* ================= GROUP MESSAGES ================= */
   const grouped = groupMessagesByDate(messages);
-  /* ================= LOADER ================= */
-  if (loading) {
-    return <ChatWindowSkeleton />;
-  }
 
   return (
     <div className="relative flex flex-col h-full overflow-hidden bg-[#0b141a]">
@@ -785,19 +781,23 @@ export default function ChatWindow({ driver, chatApi }) {
           document.body
         )}
 
-      {/* ================= MESSAGE AREA (WhatsApp-like bg) ================= */}
+      {/* ================= MESSAGE AREA (fixed header above, fixed footer below) ================= */}
       <div className="relative flex-1 flex flex-col min-h-0">
-        <div
-          ref={messagesContainerRef}
-          className={`flex-1 overflow-y-auto chat-list-scroll space-y-6 bg-[#0b141a] chat-bg-pattern ${selectionMode ? "pl-2 pr-4 pt-4 pb-4" : "p-4"}`}
-        >
-          {Object.keys(grouped).length === 0 && (
-            <p className="text-center text-[#8696a0] text-sm mt-6">
-              No messages yet
-            </p>
-          )}
+        {loading ? (
+          <ConversationListShimmer />
+        ) : (
+          <>
+            <div
+              ref={messagesContainerRef}
+              className={`flex-1 overflow-y-auto chat-list-scroll space-y-6 bg-[#0b141a] chat-bg-pattern ${selectionMode ? "pl-2 pr-4 pt-4 pb-4" : "p-4"}`}
+            >
+              {Object.keys(grouped).length === 0 && (
+                <p className="text-center text-[#8696a0] text-sm mt-6">
+                  No messages yet
+                </p>
+              )}
 
-          {Object.keys(grouped).map((date) => (
+              {Object.keys(grouped).map((date) => (
           <div key={date}>
             <div className="text-center text-[#8696a0] text-xs my-2">{date}</div>
             {grouped[date].map((msg, idx) => {
@@ -876,18 +876,20 @@ export default function ChatWindow({ driver, chatApi }) {
             })}
           </div>
         ))}
-          <div ref={bottomRef} />
-        </div>
-        <button
-          type="button"
-          onClick={() => scrollToBottom("smooth")}
-          className="absolute bottom-4 right-4 rounded-full bg-[#1f6feb] p-2.5 text-white shadow-lg hover:bg-[#1a63d6] focus:outline-none focus:ring-2 focus:ring-[#1f6feb] focus:ring-offset-2 focus:ring-offset-[#0b141a] z-10"
-          aria-label="Scroll to bottom"
-        >
-          <ChevronDown className="w-5 h-5" />
-        </button>
+              <div ref={bottomRef} />
+            </div>
+            <button
+              type="button"
+              onClick={() => scrollToBottom("smooth")}
+              className="absolute bottom-4 right-4 rounded-full bg-[#1f6feb] p-2.5 text-white shadow-lg hover:bg-[#1a63d6] focus:outline-none focus:ring-2 focus:ring-[#1f6feb] focus:ring-offset-2 focus:ring-offset-[#0b141a] z-10"
+              aria-label="Scroll to bottom"
+            >
+              <ChevronDown className="w-5 h-5" />
+            </button>
+          </>
+        )}
       </div>
-      {replyTo && (
+      {!loading && replyTo && (
   <div className="px-4 py-2 border-t border-[#2c3e52] bg-[#1c2530] flex items-center justify-between">
     <div className="border-l-4 border-[#1f6feb] pl-3">
       <p className="text-xs font-semibold text-[#1f6feb]">
@@ -911,7 +913,14 @@ export default function ChatWindow({ driver, chatApi }) {
   </div>
 )}
 
-      {/* ================= INPUT BAR (WhatsApp-like) ================= */}
+      {/* ================= INPUT BAR (fixed footer; show shimmer when loading) ================= */}
+      {loading ? (
+        <div className="p-3 border-t border-[#2c3e52] bg-[#1c2530] sticky bottom-0 flex items-end gap-2">
+          <div className="h-9 w-9 rounded-full bg-[#243644] animate-pulse flex-shrink-0" />
+          <div className="flex-1 h-12 rounded-full bg-[#243644] animate-pulse max-w-[400px]" />
+          <div className="h-11 w-11 rounded-full bg-[#243644] animate-pulse flex-shrink-0" />
+        </div>
+      ) : (
       <div className="p-3 border-t border-[#2c3e52] bg-[#1c2530] sticky bottom-0 flex items-end gap-2">
         <input
           ref={fileInputRef}
@@ -989,6 +998,7 @@ export default function ChatWindow({ driver, chatApi }) {
           </svg>
         </Button>
       </div>
+      )}
 
       {isDeleteConfirmOpen && (
         <div className="fixed inset-0 z-[180] flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label="Delete confirmation dialog">
