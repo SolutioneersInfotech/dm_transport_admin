@@ -21,6 +21,7 @@ const permissionSections = [
   {
     title: "CTPAT",
     items: [
+      "CTPAT",
       "Delivery Proof",
       "Driver expense",
       "Load Image",
@@ -52,12 +53,26 @@ const permissionSections = [
   },
 ];
 
-const permissionDefaults = permissionSections
-  .flatMap((section) => section.items)
-  .reduce((acc, permission) => {
-    acc[permission] = true;
-    return acc;
-  }, {});
+const permissionDefaults = {
+  "Delivery Proof": false,
+  "Driver expense": false,
+  "Load Image": false,
+  "Stamp Paper": false,
+  "Pickup Doc": false,
+  "Repair and maintenance": false,
+  "DM Transport Trip Envelope": false,
+  "DM Trans Inc Trip Envelope": false,
+  "DM Transport City Worksheet": false,
+  "Fuel Receipt": false,
+  "Manage Drivers": false,
+  "View Drivers": false,
+  "Maintenance Chat": false,
+  "View Admin": false,
+  "Manage Admin": false,
+  Chat: false,
+  "Delete Multiple Users Chart": false,
+  CTPAT: false,
+};
 
 const permissionKeyMap = {
   CTPAT: "CTPAT",
@@ -80,10 +95,29 @@ const permissionKeyMap = {
   "Delete Multiple Users Chart": "delete_multiple_users_chart",
 };
 
-const buildPermissionsForAdmin = (name) => {
-  const seed = name.length % 2 === 0;
-  return Object.keys(permissionDefaults).reduce((acc, permission, index) => {
-    acc[permission] = seed ? index % 3 !== 0 : index % 4 !== 0;
+const permissionAliases = {
+  "Repair and maintenance": [
+    "repair_and_maintenance",
+    "repair_and_maintainance",
+    "repair_and_maintanance",
+    "repair_maintenance",
+  ],
+};
+
+const buildPermissionsFromRaw = (rawPermissions) => {
+  const list = Array.isArray(rawPermissions) ? rawPermissions : [];
+  const active = new Set(
+    list.map((permission) => String(permission || "").trim().toLowerCase())
+  );
+
+  return Object.keys(permissionDefaults).reduce((acc, label) => {
+    const key = permissionKeyMap[label] || label;
+    const aliases = permissionAliases[label] || [];
+    const candidateKeys = [key, ...aliases, label];
+
+    acc[label] = candidateKeys.some((candidate) =>
+      active.has(String(candidate || "").trim().toLowerCase())
+    );
     return acc;
   }, {});
 };
@@ -125,7 +159,7 @@ export default function Admins() {
   const [newAdminName, setNewAdminName] = useState("");
   const [newAdminPassword, setNewAdminPassword] = useState("");
   const [newAdminPermissions, setNewAdminPermissions] = useState(() =>
-    permissionSections[0].items.reduce((acc, permission) => {
+    Object.keys(permissionDefaults).reduce((acc, permission) => {
       acc[permission] = false;
       return acc;
     }, {})
@@ -156,7 +190,8 @@ export default function Admins() {
             setSelectedAdmin(cachedAdmins[0]?.name || "");
             setAdminPermissions(
               cachedAdmins.reduce((acc, admin) => {
-                acc[admin.name] = buildPermissionsForAdmin(admin.name);
+                const rawPerms = admin.raw?.permissions;
+                acc[admin.name] = buildPermissionsFromRaw(rawPerms);
                 return acc;
               }, {})
             );
@@ -175,7 +210,8 @@ export default function Admins() {
         setSelectedAdmin(normalized[0]?.name || "");
         setAdminPermissions(
           normalized.reduce((acc, admin) => {
-            acc[admin.name] = buildPermissionsForAdmin(admin.name);
+            const rawPerms = admin.raw?.permissions;
+            acc[admin.name] = buildPermissionsFromRaw(rawPerms);
             return acc;
           }, {})
         );
@@ -273,16 +309,13 @@ export default function Admins() {
       setAdmins((prev) => [createdAdmin, ...prev]);
       setAdminPermissions((prev) => ({
         ...prev,
-        [createdAdmin.name]: {
-          ...buildPermissionsForAdmin(createdAdmin.name),
-          ...newAdminPermissions,
-        },
+        [createdAdmin.name]: { ...permissionDefaults, ...newAdminPermissions },
       }));
       setSelectedAdmin(createdAdmin.name);
       setNewAdminName("");
       setNewAdminPassword("");
       setNewAdminPermissions(
-        permissionSections[0].items.reduce((acc, permission) => {
+        Object.keys(permissionDefaults).reduce((acc, permission) => {
           acc[permission] = false;
           return acc;
         }, {})
