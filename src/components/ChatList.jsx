@@ -41,6 +41,11 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const hasMore = isMaintenanceChat ? false : usersState.hasMore;
   const page = usersState.page;
   const limit = usersState.limit;
+  // Ensure we never use an invalid or cached -1 limit for pagination.
+  // Fallback to a sane default page size (e.g. 25) when limit is <= 0 or falsy.
+  const DEFAULT_PAGE_SIZE = 25;
+  const pageSize =
+    typeof limit === "number" && limit > 0 ? limit : DEFAULT_PAGE_SIZE;
   const hasLoaded = isMaintenanceChat ? maintenanceUsersState.hasLoaded : usersState.hasLoaded;
 
   const updateLastMessageAction = isMaintenanceChat ? updateMaintenanceUserLastMessage : updateUserLastMessage;
@@ -86,59 +91,47 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       }
     } else {
       if (!hasLoaded && !loading) {
-        dispatch(fetchUsers({ page: 1, limit }));
+        // Fetch a single, paginated first page using the safe pageSize.
+        dispatch(fetchUsers({ page: 1, limit: pageSize }));
       }
     }
-  }, [dispatch, isMaintenanceChat, hasLoaded, loading, limit]);
+  }, [dispatch, isMaintenanceChat, hasLoaded, loading, pageSize]);
 
   // Auto-load remaining regular-chat pages in the background so that
   // ordering becomes globally correct without requiring manual scroll.
   useEffect(() => {
-    // Only apply this to regular chat, not maintenance.
+    // Only apply this behavior to regular chat.
     if (isMaintenanceChat) return;
 
-    // Don't start auto-loading until the initial page has loaded.
+    // Wait until the first page has loaded.
     if (!hasLoaded || loading) return;
 
-    // If there are no more pages, nothing to do.
-    if (!hasMore) return;
+    // If there are no more pages or we're already loading more, do nothing.
+    if (!hasMore || loadingMore) return;
 
-    let cancelled = false;
-
-    const loadAllPagesSequentially = async () => {
-      // Use a local page tracker so we don't depend on stale `page` values
-      // across async calls.
-      let currentPage = page;
-      // Safety guard: hard cap on number of pages to prevent infinite loops
-      const MAX_EXTRA_PAGES = 50;
-      let pagesLoaded = 0;
-
-      while (!cancelled && hasMore && pagesLoaded < MAX_EXTRA_PAGES) {
-        const nextPage = currentPage + 1;
-
-        try {
-          // Trigger the next page load
-          await dispatch(fetchMoreUsers({ page: nextPage, limit })).unwrap();
-        } catch (error) {
+    // Schedule a single background page load.
+    const timeoutId = setTimeout(() => {
+      const nextPage = page + 1;
+      dispatch(fetchMoreUsers({ page: nextPage, limit: pageSize })).catch(
+        (error) => {
           console.error("Background fetchMoreUsers failed:", error);
-          break;
         }
-
-        // Update local state trackers
-        currentPage = nextPage;
-        pagesLoaded += 1;
-
-        // Small delay to avoid blocking the main thread with a tight loop
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
-    };
-
-    loadAllPagesSequentially();
+      );
+    }, 50);
 
     return () => {
-      cancelled = true;
+      clearTimeout(timeoutId);
     };
-  }, [dispatch, isMaintenanceChat, hasLoaded, loading, hasMore, page, limit]);
+  }, [
+    dispatch,
+    isMaintenanceChat,
+    hasLoaded,
+    loading,
+    hasMore,
+    loadingMore,
+    page,
+    pageSize,
+  ]);
 
   // Infinite scroll observer - prevent duplicate calls
   const isLoadingRef = useRef(false);
@@ -147,11 +140,11 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     if (hasMore && !loadingMore && !loading && !isLoadingRef.current) {
       isLoadingRef.current = true;
       const nextPage = page + 1;
-      dispatch(fetchMoreUsers({ page: nextPage, limit })).finally(() => {
+      dispatch(fetchMoreUsers({ page: nextPage, limit: pageSize })).finally(() => {
         isLoadingRef.current = false;
       });
     }
-  }, [dispatch, hasMore, loadingMore, loading, page, limit]);
+  }, [dispatch, hasMore, loadingMore, loading, page, pageSize]);
 
   useEffect(() => {
     // Only set up observer if we have more to load and not currently loading
