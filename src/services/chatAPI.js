@@ -280,21 +280,18 @@ export function subscribeChatSummary(chatTarget, onChange) {
     return () => {};
   }
 
-  const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${contactId}`);
+  const primaryRef = ref(database, `${ADMIN_GENERAL_PATH}/${contactId}`);
+  const fallbackRef = ref(database, `${USER_MIRROR_BASE}/${resolvedUserId}/admin`);
 
-  const unsubscribe = onValue(messagesRef, (snapshot) => {
-    if (!snapshot.exists()) {
-      onChange({ lastMessage: null, unreadCount: 0 });
-      return;
-    }
+  let primaryMessagesObject = {};
+  let fallbackMessagesObject = {};
 
-    const messagesObject = snapshot.val() || {};
-
+  const emit = () => {
     let lastMessage = null;
     let lastTimestamp = 0;
     let unreadCount = 0;
 
-    Object.entries(messagesObject).forEach(([id, raw]) => {
+    Object.entries(primaryMessagesObject).forEach(([id, raw]) => {
       const msg = normalizeMessage(id, raw);
       if (!msg) return;
 
@@ -304,16 +301,41 @@ export function subscribeChatSummary(chatTarget, onChange) {
         lastMessage = msg;
       }
 
-      if (msg.type === 1 && !isSeenByCurrentAdmin(msg)) {
+      if (raw?.type === 1 && !isSeenByCurrentAdmin(raw)) {
         unreadCount++;
       }
     });
 
+    Object.entries(fallbackMessagesObject).forEach(([id, raw]) => {
+      const msg = normalizeMessage(id, raw);
+      if (!msg) return;
+
+      const ts = parseDateTimeMs(msg.dateTime);
+      if (ts >= lastTimestamp) {
+        lastTimestamp = ts;
+        lastMessage = msg;
+      }
+    });
+
     onChange({ lastMessage, unreadCount });
+  };
+
+  const unsubscribePrimary = onValue(primaryRef, (snapshot) => {
+    primaryMessagesObject = snapshot.exists() ? snapshot.val() : {};
+    emit();
   });
 
-  return unsubscribe;
+  const unsubscribeFallback = onValue(fallbackRef, (snapshot) => {
+    fallbackMessagesObject = snapshot.exists() ? snapshot.val() : {};
+    emit();
+  });
+
+  return () => {
+    unsubscribePrimary();
+    unsubscribeFallback();
+  };
 }
+
 
 /**
  * Send a message to a user

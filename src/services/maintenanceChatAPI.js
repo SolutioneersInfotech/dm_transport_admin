@@ -228,7 +228,7 @@ export function subscribeChatSummary(chatTarget, onChange) {
         lastMessage = msg;
       }
 
-      if (msg.type === 1 && !isSeenByCurrentAdmin(msg)) {
+      if (raw?.type === 1 && !isSeenByCurrentAdmin(raw)) {
         unreadCount++;
       }
     });
@@ -238,6 +238,7 @@ export function subscribeChatSummary(chatTarget, onChange) {
 
   return unsubscribe;
 }
+
 
 export async function sendMessage(userid, text, adminUser = getAdminUser()) {
   const resolvedUserId = resolveUserId(userid);
