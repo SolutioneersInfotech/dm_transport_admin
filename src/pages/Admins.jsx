@@ -4,6 +4,7 @@ import {
   ChevronRight,
   Plus,
   Save,
+  Loader2,
   Trash2,
   ShieldCheck,
   KeyRound
@@ -764,20 +765,24 @@ export default function Admins() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setIsChangePasswordOpen(true)}
-                    className="rounded-lg border border-slate-700 bg-slate-900 p-2 text-slate-300 transition hover:border-slate-500"
-                    aria-label="Change password"
-                  >
-                    <KeyRound className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
                     onClick={handleSavePermissions}
                     disabled={!selectedAdmin || !hasPermissionChanges || isSavingPermissions}
                     className="rounded-lg border border-slate-700 bg-slate-900 p-2 text-emerald-300 transition hover:border-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
                     aria-label="Save updated permissions"
                   >
-                    <Save className="h-4 w-4" />
+                    {isSavingPermissions ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsChangePasswordOpen(true)}
+                    className="rounded-lg border border-slate-700 bg-slate-900 p-2 text-slate-300 transition hover:border-slate-500"
+                    aria-label="Change password"
+                  >
+                    <KeyRound className="h-4 w-4" />
                   </button>
                   <button
                     type="button"
