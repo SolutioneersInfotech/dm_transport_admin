@@ -365,7 +365,7 @@ export default function ChatWindow({ driver, chatApi }) {
 
     // Mark messages as seen when chat window opens
     if (markMessagesAsSeen) {
-      markMessagesAsSeen(driver).catch((error) => {
+      markMessagesAsSeen(driverId).catch((error) => {
         console.error("Failed to mark messages as seen:", error);
       });
     }
@@ -373,13 +373,13 @@ export default function ChatWindow({ driver, chatApi }) {
     // Reset scroll flag when driver changes
     shouldScrollToBottomRef.current = true;
 
-    const unsubscribe = subscribeMessages(driver, (nextMessages) => {
+    const unsubscribe = subscribeMessages(driverId, (nextMessages) => {
       setMessages(nextMessages || []);
       setLoading(false);
       
       // Mark messages as seen after loading
       if (markMessagesAsSeen) {
-        markMessagesAsSeen(driver).catch((error) => {
+        markMessagesAsSeen(driverId).catch((error) => {
           console.error("Failed to mark messages as seen:", error);
         });
       }
@@ -390,7 +390,7 @@ export default function ChatWindow({ driver, chatApi }) {
         unsubscribe();
       }
     };
-  }, [driverId, driver, subscribeMessages, markMessagesAsSeen]);
+  }, [driverId, subscribeMessages, markMessagesAsSeen]);
 
   // Focus input when driver changes
   useEffect(() => {
