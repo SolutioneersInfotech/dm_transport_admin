@@ -85,7 +85,7 @@ const matchUserId = (user, targetUserId) => {
 // Async thunk for fetching initial users
 export const fetchUsers = createAsyncThunk(
   "users/fetchUsers",
-  async ({ page = 1, limit = -1, search = undefined } = {}, { rejectWithValue }) => {
+  async ({ page = 1, limit = 25, search = undefined } = {}, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem("adminToken");
       const url = fetchUsersRoute(page, limit, search);
