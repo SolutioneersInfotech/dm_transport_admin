@@ -86,13 +86,59 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       }
     } else {
       if (!hasLoaded && !loading) {
-        // Fetch ALL regular chat users so that ordering is correct globally
-        // as soon as the Chat page loads. Performance is protected by the
-        // current optimizations (no bulk fetchMessages, lightweight summary).
-        dispatch(fetchUsers({ page: 1, limit: -1 }));
+        dispatch(fetchUsers({ page: 1, limit }));
       }
     }
-  }, [dispatch, isMaintenanceChat, hasLoaded, loading]);
+  }, [dispatch, isMaintenanceChat, hasLoaded, loading, limit]);
+
+  // Auto-load remaining regular-chat pages in the background so that
+  // ordering becomes globally correct without requiring manual scroll.
+  useEffect(() => {
+    // Only apply this to regular chat, not maintenance.
+    if (isMaintenanceChat) return;
+
+    // Don't start auto-loading until the initial page has loaded.
+    if (!hasLoaded || loading) return;
+
+    // If there are no more pages, nothing to do.
+    if (!hasMore) return;
+
+    let cancelled = false;
+
+    const loadAllPagesSequentially = async () => {
+      // Use a local page tracker so we don't depend on stale `page` values
+      // across async calls.
+      let currentPage = page;
+      // Safety guard: hard cap on number of pages to prevent infinite loops
+      const MAX_EXTRA_PAGES = 50;
+      let pagesLoaded = 0;
+
+      while (!cancelled && hasMore && pagesLoaded < MAX_EXTRA_PAGES) {
+        const nextPage = currentPage + 1;
+
+        try {
+          // Trigger the next page load
+          await dispatch(fetchMoreUsers({ page: nextPage, limit })).unwrap();
+        } catch (error) {
+          console.error("Background fetchMoreUsers failed:", error);
+          break;
+        }
+
+        // Update local state trackers
+        currentPage = nextPage;
+        pagesLoaded += 1;
+
+        // Small delay to avoid blocking the main thread with a tight loop
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    };
+
+    loadAllPagesSequentially();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dispatch, isMaintenanceChat, hasLoaded, loading, hasMore, page, limit]);
 
   // Infinite scroll observer - prevent duplicate calls
   const isLoadingRef = useRef(false);
