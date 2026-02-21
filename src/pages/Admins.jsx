@@ -157,6 +157,9 @@ export default function Admins() {
   const [isDeletingAdmin, setIsDeletingAdmin] = useState(false);
   const [deleteAdminError, setDeleteAdminError] = useState("");
   const [adminPermissions, setAdminPermissions] = useState({});
+  const [savedAdminPermissions, setSavedAdminPermissions] = useState({});
+  const [isSavingPermissions, setIsSavingPermissions] = useState(false);
+  const [savePermissionsError, setSavePermissionsError] = useState("");
 
   useEffect(() => {
     let isMounted = true;
@@ -178,6 +181,13 @@ export default function Admins() {
                 return acc;
               }, {})
             );
+            setSavedAdminPermissions(
+              cachedAdmins.reduce((acc, admin) => {
+                const rawPerms = admin.raw?.permissions;
+                acc[admin.name] = buildPermissionsFromRaw(rawPerms);
+                return acc;
+              }, {})
+            );
             setIsLoading(false);
           }
         }
@@ -192,6 +202,13 @@ export default function Admins() {
         setAdmins(normalized);
         setSelectedAdmin(normalized[0]?.name || "");
         setAdminPermissions(
+          normalized.reduce((acc, admin) => {
+            const rawPerms = admin.raw?.permissions;
+            acc[admin.name] = buildPermissionsFromRaw(rawPerms);
+            return acc;
+          }, {})
+        );
+        setSavedAdminPermissions(
           normalized.reduce((acc, admin) => {
             const rawPerms = admin.raw?.permissions;
             acc[admin.name] = buildPermissionsFromRaw(rawPerms);
@@ -244,9 +261,16 @@ export default function Admins() {
   const permissions = selectedAdmin
     ? adminPermissions[selectedAdmin] || permissionDefaults
     : permissionDefaults;
+  const savedPermissions = selectedAdmin
+    ? savedAdminPermissions[selectedAdmin] || permissionDefaults
+    : permissionDefaults;
+  const hasPermissionChanges = Object.keys(permissionDefaults).some(
+    (permission) => Boolean(permissions?.[permission]) !== Boolean(savedPermissions?.[permission])
+  );
 
   const togglePermission = (permission) => {
     if (!selectedAdmin) return;
+    setSavePermissionsError("");
     setAdminPermissions((prev) => ({
       ...prev,
       [selectedAdmin]: {
@@ -291,6 +315,10 @@ export default function Admins() {
 
       setAdmins((prev) => [createdAdmin, ...prev]);
       setAdminPermissions((prev) => ({
+        ...prev,
+        [createdAdmin.name]: { ...permissionDefaults, ...newAdminPermissions },
+      }));
+      setSavedAdminPermissions((prev) => ({
         ...prev,
         [createdAdmin.name]: { ...permissionDefaults, ...newAdminPermissions },
       }));
@@ -364,12 +392,43 @@ export default function Admins() {
         delete next[selectedAdmin];
         return next;
       });
+      setSavedAdminPermissions((prev) => {
+        const next = { ...prev };
+        delete next[selectedAdmin];
+        return next;
+      });
       setSelectedAdmin("");
       setIsDeleteModalOpen(false);
     } catch (err) {
       setDeleteAdminError(err?.message || "Unable to delete admin right now.");
     } finally {
       setIsDeletingAdmin(false);
+    }
+  };
+
+  const handleSavePermissions = async () => {
+    if (!selectedAdmin || !hasPermissionChanges) return;
+    const permissionsForAdmin = adminPermissions[selectedAdmin] || permissionDefaults;
+    const permissions = Object.entries(permissionsForAdmin)
+      .filter(([, enabled]) => enabled)
+      .map(([label]) => permissionKeyMap[label] || label)
+      .filter(Boolean);
+    const userid = selectedAdminMeta?.raw?.userid || selectedAdmin;
+
+    try {
+      setIsSavingPermissions(true);
+      setSavePermissionsError("");
+      await updateAdmin({ permissions, userid });
+      setSavedAdminPermissions((prev) => ({
+        ...prev,
+        [selectedAdmin]: { ...permissionsForAdmin },
+      }));
+    } catch (err) {
+      setSavePermissionsError(
+        err?.message || "Unable to save permissions right now."
+      );
+    } finally {
+      setIsSavingPermissions(false);
     }
   };
 
@@ -707,9 +766,18 @@ export default function Admins() {
                     type="button"
                     onClick={() => setIsChangePasswordOpen(true)}
                     className="rounded-lg border border-slate-700 bg-slate-900 p-2 text-slate-300 transition hover:border-slate-500"
-                    aria-label="Save permissions"
+                    aria-label="Change password"
                   >
                     <KeyRound className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSavePermissions}
+                    disabled={!selectedAdmin || !hasPermissionChanges || isSavingPermissions}
+                    className="rounded-lg border border-slate-700 bg-slate-900 p-2 text-emerald-300 transition hover:border-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+                    aria-label="Save updated permissions"
+                  >
+                    <Save className="h-4 w-4" />
                   </button>
                   <button
                     type="button"
@@ -727,6 +795,9 @@ export default function Admins() {
                 <ShieldCheck className="h-4 w-4 text-slate-400" />
                 Permissions
               </div>
+              {savePermissionsError && (
+                <p className="mt-3 text-xs text-rose-300">{savePermissionsError}</p>
+              )}
 
               <div className="admin-scroll mt-4 flex-1 space-y-6 overflow-y-auto pr-1">
                 {permissionSections.map((section) => (
