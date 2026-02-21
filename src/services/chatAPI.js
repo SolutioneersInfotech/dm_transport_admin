@@ -271,6 +271,52 @@ export function subscribeLastMessage(userid, onChange) {
   });
 }
 
+export function subscribeChatSummary(chatTarget, onChange) {
+  const resolvedUserId = resolveUserId(chatTarget);
+  const contactId = resolveContactId(chatTarget);
+
+  if (!resolvedUserId || !contactId) {
+    onChange({ lastMessage: null, unreadCount: 0 });
+    return () => {};
+  }
+
+  const primaryRef = ref(database, `${ADMIN_GENERAL_PATH}/${contactId}`);
+
+  const unsubscribe = onValue(primaryRef, (snapshot) => {
+    if (!snapshot.exists()) {
+      onChange({ lastMessage: null, unreadCount: 0 });
+      return;
+    }
+
+    const messagesObject = snapshot.val() || {};
+
+    let lastMessage = null;
+    let lastTimestamp = 0;
+    let unreadCount = 0;
+
+    Object.entries(messagesObject).forEach(([id, raw]) => {
+      const msg = normalizeMessage(id, raw);
+      if (!msg) return;
+
+      const ts = parseDateTimeMs(msg.dateTime);
+      if (ts >= lastTimestamp) {
+        lastTimestamp = ts;
+        lastMessage = msg;
+      }
+
+      if (msg.type === 1 && !isSeenByCurrentAdmin(msg)) {
+        unreadCount++;
+      }
+    });
+
+    onChange({ lastMessage, unreadCount });
+  });
+
+  return unsubscribe;
+}
+
+
+
 /**
  * Send a message to a user
  * @param {string} userid - User ID
