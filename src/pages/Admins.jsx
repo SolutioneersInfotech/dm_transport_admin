@@ -85,7 +85,7 @@ const permissionKeyMap = {
   "DM Transport Trip Envelope": "dm_transport_trip_envelope",
   "DM Trans Inc Trip Envelope": "dm_trans_inc_trip_envelope",
   "DM Transport City Worksheet": "dm_transport_city_worksheet_trip_envelope",
-  "Fuel Receipt": "fuel_receipt",
+  "Fuel Receipt": "fuel_recipt",
   "Manage Drivers": "manage_drivers",
   "View Drivers": "view_drivers",
   "Maintenance Chat": "maintenance_chat",
