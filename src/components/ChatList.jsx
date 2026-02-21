@@ -86,10 +86,11 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       }
     } else {
       if (!hasLoaded && !loading) {
-        dispatch(fetchUsers({ page: 1, limit: -1 }));
+        // Use the paginated limit from Redux instead of fetching ALL users.
+        dispatch(fetchUsers({ page: 1, limit }));
       }
     }
-  }, [dispatch, isMaintenanceChat, hasLoaded, loading]);
+  }, [dispatch, isMaintenanceChat, hasLoaded, loading, limit]);
 
   // Infinite scroll observer - prevent duplicate calls
   const isLoadingRef = useRef(false);

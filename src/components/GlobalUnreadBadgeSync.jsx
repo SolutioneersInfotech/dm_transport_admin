@@ -32,7 +32,8 @@ export default function GlobalUnreadBadgeSync() {
 
   useEffect(() => {
     if (!hasLoaded && !loading) {
-      dispatch(fetchUsers({ page: 1, limit: -1 }));
+      // Use paginated fetch here; let ChatList / scroll load more as needed.
+      dispatch(fetchUsers({ page: 1 })); // will use default limit from fetchUsers thunk (25)
     }
 
     if (!maintenanceHasLoaded && !maintenanceLoading) {
