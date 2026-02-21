@@ -197,6 +197,48 @@ export function subscribeLastMessage(userid, onChange) {
   });
 }
 
+export function subscribeChatSummary(chatTarget, onChange) {
+  const resolvedUserId = resolveUserId(chatTarget);
+  if (!resolvedUserId) {
+    onChange({ lastMessage: null, unreadCount: 0 });
+    return () => {};
+  }
+
+  const messagesRef = ref(database, `${ADMIN_MAINTENANCE_PATH}/${resolvedUserId}`);
+
+  const unsubscribe = onValue(messagesRef, (snapshot) => {
+    if (!snapshot.exists()) {
+      onChange({ lastMessage: null, unreadCount: 0 });
+      return;
+    }
+
+    const messagesObject = snapshot.val() || {};
+
+    let lastMessage = null;
+    let lastTimestamp = 0;
+    let unreadCount = 0;
+
+    Object.entries(messagesObject).forEach(([id, raw]) => {
+      const msg = normalizeMessage(id, raw);
+      if (!msg) return;
+
+      const ts = msg.dateTime ? new Date(msg.dateTime).getTime() : 0;
+      if (ts >= lastTimestamp) {
+        lastTimestamp = ts;
+        lastMessage = msg;
+      }
+
+      if (msg.type === 1 && !isSeenByCurrentAdmin(msg)) {
+        unreadCount++;
+      }
+    });
+
+    onChange({ lastMessage, unreadCount });
+  });
+
+  return unsubscribe;
+}
+
 export async function sendMessage(userid, text, adminUser = getAdminUser()) {
   const resolvedUserId = resolveUserId(userid);
   if (!resolvedUserId) {
