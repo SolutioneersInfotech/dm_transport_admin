@@ -53,10 +53,12 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const [unreadCounts, setUnreadCounts] = useState({});
   const unsubscribeUnreadRefs = useRef({});
   const unsubscribeLastMessageRefs = useRef({});
+  const unsubscribeSummaryRefs = useRef({});
 
   const subscribeUnreadCount = chatApi?.subscribeUnreadCount;
   const subscribeLastMessage =
     chatApi?.subscribeLastMessage || defaultSubscribeLastMessage;
+  const subscribeChatSummary = chatApi?.subscribeChatSummary;
 
   function getDriverId(driver) {
     const candidate =
@@ -133,8 +135,81 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   }, [handleLoadMore, hasMore, loadingMore, loading]);
 
 
+  useEffect(() => {
+    // If chatApi doesn't provide subscribeChatSummary, skip this effect.
+    if (!subscribeChatSummary || !users?.length) return;
+
+    users.forEach((u) => {
+      const userId = getDriverId(u);
+      if (!userId) return;
+
+      if (unsubscribeSummaryRefs.current[userId]) return;
+
+      const unsubscribe = subscribeChatSummary(u, (summary) => {
+        const lastMessage = summary?.lastMessage || null;
+        const unreadCount = summary?.unreadCount ?? 0;
+
+        let lastMessageText =
+          lastMessage?.content?.message ||
+          lastMessage?.message ||
+          (lastMessage?.content ? "" : "");
+
+        if (!lastMessageText || lastMessageText.trim() === "") {
+          const attachmentUrl =
+            lastMessage?.content?.attachmentUrl ||
+            lastMessage?.attachmentUrl ||
+            "";
+          if (attachmentUrl && attachmentUrl.trim() !== "") {
+            lastMessageText = "Attachment";
+          }
+        }
+
+        const lastChatTime = lastMessage?.dateTime || null;
+
+        dispatch(
+          updateLastMessageAction({
+            userid: userId,
+            lastMessage: lastMessageText || "",
+            lastChatTime,
+          })
+        );
+
+        setUnreadCounts((prev) => ({
+          ...prev,
+          [userId]: unreadCount,
+        }));
+      });
+
+      unsubscribeSummaryRefs.current[userId] = unsubscribe;
+    });
+
+    return () => {
+      const currentUserIds = new Set(
+        users.map((u) => getDriverId(u)).filter(Boolean)
+      );
+
+      Object.keys(unsubscribeSummaryRefs.current).forEach((userId) => {
+        if (!currentUserIds.has(userId)) {
+          const unsubscribe = unsubscribeSummaryRefs.current[userId];
+          if (typeof unsubscribe === "function") {
+            unsubscribe();
+          }
+          delete unsubscribeSummaryRefs.current[userId];
+
+          setUnreadCounts((prev) => {
+            const next = { ...prev };
+            delete next[userId];
+            return next;
+          });
+        }
+      });
+    };
+  }, [users, subscribeChatSummary, dispatch, updateLastMessageAction]);
+
   // Subscribe to latest-message updates so ordering refreshes for both driver and admin sends
   useEffect(() => {
+    // If we have subscribeChatSummary, we skip this path.
+    if (subscribeChatSummary) return;
     if (!subscribeLastMessage || !users?.length) return;
 
     users.forEach((u) => {
@@ -158,11 +233,13 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
           }
         }
 
+        const lastChatTime = lastMessage?.dateTime || null;
+
         dispatch(
           updateLastMessageAction({
             userid: userId,
             lastMessage: lastMessageText || "",
-            lastChatTime: lastMessage?.dateTime || null,
+            lastChatTime: lastChatTime,
           })
         );
       });
@@ -173,7 +250,9 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     const subscriptionsRef = unsubscribeLastMessageRefs.current;
 
     return () => {
-      const currentUserIds = new Set(users.map((u) => getDriverId(u)).filter(Boolean));
+      const currentUserIds = new Set(
+        users.map((u) => getDriverId(u)).filter(Boolean)
+      );
       Object.keys(subscriptionsRef).forEach((userId) => {
         if (!currentUserIds.has(userId)) {
           const unsubscribe = subscriptionsRef[userId];
@@ -184,12 +263,14 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         }
       });
     };
-  }, [users, subscribeLastMessage, dispatch, updateLastMessageAction]);
+  }, [users, subscribeLastMessage, dispatch, updateLastMessageAction, subscribeChatSummary]);
 
   const showInitialLoader = loading && !hasLoaded && users.length === 0;
 
   // Subscribe to unread counts for all users
   useEffect(() => {
+    // If we have subscribeChatSummary, it already provides unreadCount.
+    if (subscribeChatSummary) return;
     if (!subscribeUnreadCount || !users?.length) return;
 
     // Subscribe to unread counts for each user
@@ -216,6 +297,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
 
     return () => {
       const currentUserIds = new Set(users.map((u) => getDriverId(u)).filter(Boolean));
+
       Object.keys(subscriptionsRef).forEach((userId) => {
         if (!currentUserIds.has(userId)) {
           const unsubscribe = subscriptionsRef[userId];
@@ -232,7 +314,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         }
       });
     };
-  }, [users, subscribeUnreadCount]);
+  }, [users, subscribeUnreadCount, subscribeChatSummary]);
 
 
   // Transform users from Redux to drivers format
