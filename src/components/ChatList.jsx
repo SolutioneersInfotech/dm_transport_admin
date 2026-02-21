@@ -41,6 +41,11 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const hasMore = isMaintenanceChat ? false : usersState.hasMore;
   const page = usersState.page;
   const limit = usersState.limit;
+  // Ensure we never use an invalid or cached -1 limit for pagination.
+  // Fallback to a sane default page size (e.g. 25) when limit is <= 0 or falsy.
+  const DEFAULT_PAGE_SIZE = 25;
+  const pageSize =
+    typeof limit === "number" && limit > 0 ? limit : DEFAULT_PAGE_SIZE;
   const hasLoaded = isMaintenanceChat ? maintenanceUsersState.hasLoaded : usersState.hasLoaded;
 
   const updateLastMessageAction = isMaintenanceChat ? updateMaintenanceUserLastMessage : updateUserLastMessage;
@@ -86,13 +91,47 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       }
     } else {
       if (!hasLoaded && !loading) {
-        // Fetch ALL regular chat users so that ordering is correct globally
-        // as soon as the Chat page loads. Performance is protected by the
-        // current optimizations (no bulk fetchMessages, lightweight summary).
-        dispatch(fetchUsers({ page: 1, limit: -1 }));
+        // Fetch a single, paginated first page using the safe pageSize.
+        dispatch(fetchUsers({ page: 1, limit: pageSize }));
       }
     }
-  }, [dispatch, isMaintenanceChat, hasLoaded, loading]);
+  }, [dispatch, isMaintenanceChat, hasLoaded, loading, pageSize]);
+
+  // Auto-load remaining regular-chat pages in the background so that
+  // ordering becomes globally correct without requiring manual scroll.
+  useEffect(() => {
+    // Only apply this behavior to regular chat.
+    if (isMaintenanceChat) return;
+
+    // Wait until the first page has loaded.
+    if (!hasLoaded || loading) return;
+
+    // If there are no more pages or we're already loading more, do nothing.
+    if (!hasMore || loadingMore) return;
+
+    // Schedule a single background page load.
+    const timeoutId = setTimeout(() => {
+      const nextPage = page + 1;
+      dispatch(fetchMoreUsers({ page: nextPage, limit: pageSize })).catch(
+        (error) => {
+          console.error("Background fetchMoreUsers failed:", error);
+        }
+      );
+    }, 50);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [
+    dispatch,
+    isMaintenanceChat,
+    hasLoaded,
+    loading,
+    hasMore,
+    loadingMore,
+    page,
+    pageSize,
+  ]);
 
   // Infinite scroll observer - prevent duplicate calls
   const isLoadingRef = useRef(false);
@@ -101,11 +140,11 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     if (hasMore && !loadingMore && !loading && !isLoadingRef.current) {
       isLoadingRef.current = true;
       const nextPage = page + 1;
-      dispatch(fetchMoreUsers({ page: nextPage, limit })).finally(() => {
+      dispatch(fetchMoreUsers({ page: nextPage, limit: pageSize })).finally(() => {
         isLoadingRef.current = false;
       });
     }
-  }, [dispatch, hasMore, loadingMore, loading, page, limit]);
+  }, [dispatch, hasMore, loadingMore, loading, page, pageSize]);
 
   useEffect(() => {
     // Only set up observer if we have more to load and not currently loading
