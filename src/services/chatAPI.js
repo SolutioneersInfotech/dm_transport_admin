@@ -271,6 +271,72 @@ export function subscribeLastMessage(userid, onChange) {
   });
 }
 
+export function subscribeChatSummary(chatTarget, onChange) {
+  const resolvedUserId = resolveUserId(chatTarget);
+  const contactId = resolveContactId(chatTarget);
+
+  if (!resolvedUserId || !contactId) {
+    onChange({ lastMessage: null, unreadCount: 0 });
+    return () => {};
+  }
+
+  const primaryRef = ref(database, `${ADMIN_GENERAL_PATH}/${contactId}`);
+  const fallbackRef = ref(database, `${USER_MIRROR_BASE}/${resolvedUserId}/admin`);
+
+  let primaryMessagesObject = {};
+  let fallbackMessagesObject = {};
+
+  const emit = () => {
+    let lastMessage = null;
+    let lastTimestamp = 0;
+    let unreadCount = 0;
+
+    Object.entries(primaryMessagesObject).forEach(([id, raw]) => {
+      const msg = normalizeMessage(id, raw);
+      if (!msg) return;
+
+      const ts = parseDateTimeMs(msg.dateTime);
+      if (ts >= lastTimestamp) {
+        lastTimestamp = ts;
+        lastMessage = msg;
+      }
+
+      if (raw?.type === 1 && !isSeenByCurrentAdmin(raw)) {
+        unreadCount++;
+      }
+    });
+
+    Object.entries(fallbackMessagesObject).forEach(([id, raw]) => {
+      const msg = normalizeMessage(id, raw);
+      if (!msg) return;
+
+      const ts = parseDateTimeMs(msg.dateTime);
+      if (ts >= lastTimestamp) {
+        lastTimestamp = ts;
+        lastMessage = msg;
+      }
+    });
+
+    onChange({ lastMessage, unreadCount });
+  };
+
+  const unsubscribePrimary = onValue(primaryRef, (snapshot) => {
+    primaryMessagesObject = snapshot.exists() ? snapshot.val() : {};
+    emit();
+  });
+
+  const unsubscribeFallback = onValue(fallbackRef, (snapshot) => {
+    fallbackMessagesObject = snapshot.exists() ? snapshot.val() : {};
+    emit();
+  });
+
+  return () => {
+    unsubscribePrimary();
+    unsubscribeFallback();
+  };
+}
+
+
 /**
  * Send a message to a user
  * @param {string} userid - User ID
