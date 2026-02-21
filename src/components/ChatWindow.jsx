@@ -185,7 +185,7 @@
 //   );
 // }
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
 import { ChevronDown, Copy, Download, Mail, Paperclip, Phone, Trash2, X } from "lucide-react";
@@ -329,6 +329,26 @@ export default function ChatWindow({ driver, chatApi }) {
     return numericOnly || null;
   })();
 
+  const messageSubscriptionTarget = useMemo(() => {
+    if (!driverId) return null;
+
+    return {
+      userid: driverId,
+      phoneNumber: driver?.phoneNumber ?? null,
+      phone: driver?.phone ?? null,
+      mobile: driver?.mobile ?? null,
+      contact: driver?.contact ?? null,
+      whatsappNumber: driver?.whatsappNumber ?? null,
+    };
+  }, [
+    driverId,
+    driver?.phoneNumber,
+    driver?.phone,
+    driver?.mobile,
+    driver?.contact,
+    driver?.whatsappNumber,
+  ]);
+
   const bottomRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const shouldScrollToBottomRef = useRef(true);
@@ -349,7 +369,7 @@ export default function ChatWindow({ driver, chatApi }) {
 
   /* ================= LOAD MESSAGES ================= */
   useEffect(() => {
-    if (!driverId) {
+    if (!driverId || !messageSubscriptionTarget) {
       setMessages([]);
       setSelected([]);
       setLoading(false);
@@ -365,7 +385,7 @@ export default function ChatWindow({ driver, chatApi }) {
 
     // Mark messages as seen when chat window opens
     if (markMessagesAsSeen) {
-      markMessagesAsSeen(driverId).catch((error) => {
+      markMessagesAsSeen(messageSubscriptionTarget).catch((error) => {
         console.error("Failed to mark messages as seen:", error);
       });
     }
@@ -373,13 +393,13 @@ export default function ChatWindow({ driver, chatApi }) {
     // Reset scroll flag when driver changes
     shouldScrollToBottomRef.current = true;
 
-    const unsubscribe = subscribeMessages(driverId, (nextMessages) => {
+    const unsubscribe = subscribeMessages(messageSubscriptionTarget, (nextMessages) => {
       setMessages(nextMessages || []);
       setLoading(false);
       
       // Mark messages as seen after loading
       if (markMessagesAsSeen) {
-        markMessagesAsSeen(driverId).catch((error) => {
+        markMessagesAsSeen(messageSubscriptionTarget).catch((error) => {
           console.error("Failed to mark messages as seen:", error);
         });
       }
@@ -390,7 +410,7 @@ export default function ChatWindow({ driver, chatApi }) {
         unsubscribe();
       }
     };
-  }, [driverId, subscribeMessages, markMessagesAsSeen]);
+  }, [driverId, messageSubscriptionTarget, subscribeMessages, markMessagesAsSeen]);
 
   // Focus input when driver changes
   useEffect(() => {
