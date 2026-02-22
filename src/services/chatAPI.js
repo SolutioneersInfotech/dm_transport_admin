@@ -304,7 +304,11 @@ export function subscribeChatSummary(chatTarget, onChange) {
         lastMessage = msg;
       }
 
-      if (msg.type === 1 && !isSeenByCurrentAdmin(msg)) {
+      // Use the RAW Firebase payload for unread detection so direction flags
+      // match markMessagesAsSeen and subscribeUnreadCount.
+      const rawType = typeof raw?.type === "number" ? raw.type : msg.type;
+
+      if (rawType === 1 && !isSeenByCurrentAdmin(raw)) {
         unreadCount++;
       }
     });

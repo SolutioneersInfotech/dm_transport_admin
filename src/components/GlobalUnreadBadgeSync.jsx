@@ -18,6 +18,22 @@ function getUserId(user) {
   );
 }
 
+function buildChatTargetFromUser(user) {
+  const userId = getUserId(user);
+  if (!userId) return null;
+
+  return {
+    userid: userId,
+    userId,
+    contactId: user?.contactId ?? user?.contactid ?? null,
+    phoneNumber: user?.phoneNumber ?? null,
+    phone: user?.phone ?? null,
+    mobile: user?.mobile ?? null,
+    contact: user?.contact ?? null,
+    whatsappNumber: user?.whatsappNumber ?? null,
+  };
+}
+
 export default function GlobalUnreadBadgeSync() {
   const dispatch = useAppDispatch();
   const { users, hasLoaded, loading } = useAppSelector((state) => state.users);
@@ -48,7 +64,10 @@ export default function GlobalUnreadBadgeSync() {
       const userId = getUserId(user);
       if (!userId || regularUnsubscribeRefs.current[userId]) return;
 
-      const unsubscribe = subscribeRegularChatUnread(userId, (count) => {
+      const chatTarget = buildChatTargetFromUser(user);
+      if (!chatTarget) return;
+
+      const unsubscribe = subscribeRegularChatUnread(chatTarget, (count) => {
         dispatch(setUnreadCountForUser({ userId, chatType: "regular", count }));
       });
 
