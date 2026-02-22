@@ -17,6 +17,7 @@ import {
 } from "../services/adminAPI";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { toast } from "sonner";
 
 const permissionSections = [
   {
@@ -424,6 +425,7 @@ export default function Admins() {
         ...prev,
         [selectedAdmin]: { ...permissionsForAdmin },
       }));
+      toast.success("Permissions updated successfully");
     } catch (err) {
       setSavePermissionsError(
         err?.message || "Unable to save permissions right now."
