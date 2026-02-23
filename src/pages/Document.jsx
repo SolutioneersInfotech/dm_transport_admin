@@ -32,6 +32,7 @@ import {
 } from "../components/ui/popover";
 import { toast } from "sonner";
 import { buildDocumentDownloadName, getDocumentTypeLabel } from "../utils/documentDownloadName";
+import { useAuth } from "../context/AuthContext";
 
 const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
 const ALL_DOCUMENTS_START_DATE = "1970-01-01";
@@ -48,23 +49,29 @@ function getDefaultDates() {
   return { from: past, to: start };
 }
 
-const FILTER_MAP = {
-  "Pickup Doc": "pick_up",
-  "Delivery Proof": "delivery",
-  "Load Image": "load_image",
-  "Fuel Receipt": "fuel_recipt",
-  "Stamp Paper": "paper_logs",
-  "Driver Expense": "driver_expense_sheet",
-  "DM Transport Trip Envelope": "dm_transport_trip_envelope",
-  "DM Trans Inc Trip Envelope": "dm_trans_inc_trip_envelope",
-  "DM Transport City Worksheet": "dm_transport_city_worksheet_trip_envelope",
-  "Repair and Maintenance": "trip_envelope",
-  "CTPAT": "CTPAT",
-};
+const FILTER_OPTIONS = [
+  { label: "Pickup Doc", filterValue: "pick_up", permissionKey: "pick_up" },
+  { label: "Delivery Proof", filterValue: "delivery", permissionKey: "delivery" },
+  { label: "Load Image", filterValue: "load_image", permissionKey: "load_image" },
+  { label: "Fuel Receipt", filterValue: "fuel_recipt", permissionKey: "fuel_recipt" },
+  { label: "Stamp Paper", filterValue: "paper_logs", permissionKey: "paper_logs" },
+  { label: "Driver Expense", filterValue: "driver_expense_sheet", permissionKey: "driver_expense_sheet" },
+  { label: "DM Transport Trip Envelope", filterValue: "dm_transport_trip_envelope", permissionKey: "dm_transport_trip_envelope" },
+  { label: "DM Trans Inc Trip Envelope", filterValue: "dm_trans_inc_trip_envelope", permissionKey: "dm_trans_inc_trip_envelope" },
+  { label: "DM Transport City Worksheet", filterValue: "dm_transport_city_worksheet_trip_envelope", permissionKey: "dm_transport_city_worksheet_trip_envelope" },
+  { label: "Repair and Maintenance", filterValue: "trip_envelope", permissionKey: "trip_envelope" },
+  { label: "CTPAT", filterValue: "CTPAT", permissionKey: "CTPAT" },
+];
+
+const FILTER_MAP = FILTER_OPTIONS.reduce((map, option) => {
+  map[option.label] = option.filterValue;
+  return map;
+}, {});
 
 export default function Documents() {
   const defaultDates = useMemo(() => getDefaultDates(), []);
   const dispatch = useAppDispatch();
+  const { user } = useAuth();
   const {
     documents: allDocuments,
     loading,
@@ -116,6 +123,26 @@ export default function Documents() {
   }));
 
   const [selectedFilters, setSelectedFilters] = useState([]); // Array of filter values
+  const hasDocumentPermissionRestrictions = Array.isArray(user?.permissions) && user.permissions.length > 0;
+
+  const availableFilterOptions = useMemo(() => {
+    if (!hasDocumentPermissionRestrictions) {
+      return FILTER_OPTIONS;
+    }
+
+    const activePermissions = new Set(user.permissions.map((permission) => String(permission).trim()));
+    return FILTER_OPTIONS.filter(({ permissionKey, filterValue, label }) =>
+      activePermissions.has(permissionKey) ||
+      activePermissions.has(filterValue) ||
+      activePermissions.has(label)
+    );
+  }, [hasDocumentPermissionRestrictions, user?.permissions]);
+
+  const availableFilterValues = useMemo(
+    () => availableFilterOptions.map((option) => option.filterValue),
+    [availableFilterOptions]
+  );
+
 
   const handleToggleFlag = useCallback(async (doc) => {
     if (!doc || isFlagUpdating) return;
@@ -359,8 +386,16 @@ export default function Documents() {
   // Convert document type filters to API format
   // These are sent as multiple "type" parameters
   const typeFilters = useMemo(() => {
-    return selectedFilters.length > 0 ? selectedFilters : [];
-  }, [selectedFilters]);
+    if (selectedFilters.length > 0) {
+      return selectedFilters;
+    }
+
+    if (hasDocumentPermissionRestrictions) {
+      return availableFilterValues;
+    }
+
+    return [];
+  }, [availableFilterValues, hasDocumentPermissionRestrictions, selectedFilters]);
 
   const shouldShowTypeFilterSpinner = useCallback((filterValue, isSelected) => {
     return isTypeFilterLoading && isSelected && activeTypeFilterValue === filterValue;
@@ -458,7 +493,7 @@ export default function Documents() {
     const statusParam = searchParams.get("status");
 
     // Handle single type from URL params (for backward compatibility)
-    if (typeParam) {
+    if (typeParam && availableFilterValues.includes(typeParam)) {
       setSelectedFilters([typeParam]);
     }
 
@@ -467,7 +502,13 @@ export default function Documents() {
     } else {
       setStatusFilter("all");
     }
-  }, [searchParams]);
+  }, [availableFilterValues, searchParams]);
+
+  useEffect(() => {
+    setSelectedFilters((prevFilters) =>
+      prevFilters.filter((filter) => availableFilterValues.includes(filter))
+    );
+  }, [availableFilterValues]);
 
   useEffect(() => {
     if (!isFlagFilterLoading) return;
@@ -518,8 +559,15 @@ export default function Documents() {
     setSelectedFilters((prev) => prev.filter((f) => f !== filterValue));
   };
 
-  // Use documents directly from API (filtering is done server-side)
-  const filteredDocuments = allDocuments;
+  // Keep visible documents aligned with current admin document permissions
+  const filteredDocuments = useMemo(() => {
+    if (!hasDocumentPermissionRestrictions) {
+      return allDocuments;
+    }
+
+    const allowedTypes = new Set(availableFilterValues);
+    return (allDocuments || []).filter((document) => allowedTypes.has(document?.type));
+  }, [allDocuments, availableFilterValues, hasDocumentPermissionRestrictions]);
 
   function resetDates() {
     setDateRange({
@@ -806,7 +854,7 @@ export default function Documents() {
                 {selectedFilters.length === 0
                   ? "Document Types"
                   : selectedFilters.length === 1
-                  ? Object.keys(FILTER_MAP).find((key) => FILTER_MAP[key] === selectedFilters[0]) || "1 selected"
+                  ? availableFilterOptions.find((option) => option.filterValue === selectedFilters[0])?.label || "1 selected"
                   : `${selectedFilters.length} selected`}
               </span>
               <ChevronDown className={`h-4 w-4 transition-transform ${showFilterTypeDropdown ? "rotate-180" : ""}`} />
@@ -824,12 +872,11 @@ export default function Documents() {
                     <div className="px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-700 mb-1">
                       Document Types
                     </div>
-                    {Object.keys(FILTER_MAP).map((item) => {
-                      const filterValue = FILTER_MAP[item];
+                    {availableFilterOptions.map(({ label, filterValue }) => {
                       const isSelected = selectedFilters.includes(filterValue);
                       return (
                         <button
-                          key={item}
+                          key={label}
                           onClick={() => {
                             toggleFilter(filterValue);
                           }}
@@ -847,7 +894,7 @@ export default function Documents() {
                                 <Check className="h-3 w-3 text-white" />
                               ))}
                           </span>
-                          <span className="relative z-0">{item}</span>
+                          <span className="relative z-0">{label}</span>
                           {shouldShowTypeFilterSpinner(filterValue, isSelected) && (
                             <span className="absolute inset-0 z-10 flex items-center justify-center rounded bg-black/50">
                               <Loader2 className="h-3.5 w-3.5 text-white animate-spin" />
@@ -866,9 +913,7 @@ export default function Documents() {
           {selectedFilters.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-2">
               {selectedFilters.map((filterValue) => {
-                const filterLabel = Object.keys(FILTER_MAP).find(
-                  (key) => FILTER_MAP[key] === filterValue
-                );
+                const filterLabel = availableFilterOptions.find((option) => option.filterValue === filterValue)?.label || filterValue;
                 return (
                   <div
                     key={filterValue}
@@ -896,12 +941,11 @@ export default function Documents() {
 
         {/* Desktop: Filter Options as Chips */}
         <div className="hidden sm:flex flex-wrap gap-1.5 sm:gap-2">
-          {Object.keys(FILTER_MAP).map((item) => {
-            const filterValue = FILTER_MAP[item];
+          {availableFilterOptions.map(({ label, filterValue }) => {
             const isSelected = selectedFilters.includes(filterValue);
             return (
               <Button
-                key={item}
+                key={label}
                 onClick={() => toggleFilter(filterValue)}
                 variant={isSelected ? "default" : "outline"}
                 size="sm"
@@ -911,7 +955,7 @@ export default function Documents() {
                     : "border-gray-600 bg-[#161b22] text-gray-300 hover:bg-[#1d232a]"
                 }`}
               >
-                <span className="relative z-0">{item}</span>
+                <span className="relative z-0">{label}</span>
                 {shouldShowTypeFilterSpinner(filterValue, isSelected) && (
                   <span className="absolute inset-0 z-10 flex items-center justify-center rounded-full bg-black/50">
                     <Loader2 className="h-3.5 w-3.5 text-white animate-spin" />
@@ -1056,7 +1100,7 @@ export default function Documents() {
                     const isSelected = selectedFilters.includes(filterValue);
                     return (
                       <button
-                        key={item}
+                        key={label}
                         onClick={() => toggleFilter(filterValue)}
                         className={`w-full text-left px-4 py-2 text-sm hover:bg-[#1d232a] transition-colors flex items-center gap-2 ${
                           isSelected ? "text-[#1f6feb] bg-[#1d232a]" : "text-gray-300"
