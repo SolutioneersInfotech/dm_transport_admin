@@ -36,7 +36,7 @@ function App() {
           {/* 404 - Catch all route */}
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
-        <Toaster position="top-right" richColors />
+        <Toaster position="top-right" richColors theme="dark" />
       </BrowserRouter>
     </AuthProvider>
   );
