@@ -19,7 +19,7 @@ import { Input } from "../components/ui/input";
 
 const permissionSections = [
   {
-    title: "CTPAT",
+    title: "Document Management",
     items: [
       "CTPAT",
       "Delivery Proof",
@@ -28,11 +28,6 @@ const permissionSections = [
       "Stamp Paper",
       "Pickup Doc",
       "Repair and maintenance",
-    ],
-  },
-  {
-    title: "Operational Forms",
-    items: [
       "DM Transport Trip Envelope",
       "DM Trans Inc Trip Envelope",
       "DM Transport City Worksheet",
@@ -75,7 +70,7 @@ const permissionDefaults = {
 };
 
 const permissionKeyMap = {
-  CTPAT: "CTPAT",
+  "CTPAT": "CTPAT",
   "Delivery Proof": "delivery",
   "Driver expense": "driver_expense_sheet",
   "Load Image": "load_image",
