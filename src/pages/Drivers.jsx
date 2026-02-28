@@ -14,6 +14,7 @@ import {
   UploadCloud,
   KeyRound,
   Pencil,
+  Circle,
   Trash2,
 } from "lucide-react";
 import { useDriverCountQuery, useDriversQuery } from "../services/driverQueries";
@@ -806,10 +807,16 @@ export default function Drivers() {
 
     try {
       await deleteDriver(userid);
-      setDrivers((prev) =>
-        prev.filter((driver) => driver.id !== selectedDriver.id && driver.id !== userid)
-      );
+
+      const deletedIds = new Set([selectedDriver.id, userid].filter(Boolean));
+      const removeDeletedDriver = (driver) => !deletedIds.has(driver?.id);
+
+      setDrivers((prev) => prev.filter(removeDeletedDriver));
+      setCachedSearchDrivers(getCachedSearchDrivers().filter(removeDeletedDriver));
       setSelectedId(null);
+
+      setPage(1);
+      await refetch();
     } catch (error) {
       setSubmitError(error?.message || "Failed to delete driver.");
     } finally {
