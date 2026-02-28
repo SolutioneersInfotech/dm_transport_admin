@@ -604,7 +604,8 @@ export default function Drivers() {
     setSubmitError("");
 
     try {
-      const imageUrl = photoUrl || selectedDriver?.image || null;
+      const imageUrl =
+        activeModal === "add" ? photoUrl || null : photoUrl || selectedDriver?.image || null;
 
       if (activeModal === "add") {
         await createDriver({
@@ -1256,6 +1257,9 @@ export default function Drivers() {
                     {isSubmitting ? "Updating..." : "Change Password"}
                   </button>
                 </div>
+                {submitError && (
+                  <p className="text-center text-sm text-rose-300">{submitError}</p>
+                )}
               </div>
             ) : (
               <div className="space-y-6 px-6 py-6">
