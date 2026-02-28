@@ -4,12 +4,20 @@ import { AnimatePresence, motion } from "framer-motion";
 import ChatList from "../components/ChatList";
 import ChatWindow from "../components/ChatWindow";
 import * as chatAPI from "../services/chatAPI";
+import { useChatListQuery, useChatMessagesQuery } from "../services/chatQueries";
 import { useAppSelector } from "../store/hooks";
 
 const Chat = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedDriver, setSelectedDriver] = useState(null);
+  const [refreshSignal, setRefreshSignal] = useState(0);
   const { users } = useAppSelector((state) => state.users);
+  const activeChatId = selectedDriver ? getUserId(selectedDriver) : null;
+
+  const { refetch: refetchChatList } = useChatListQuery();
+  const { refetch: refetchChatMessages } = useChatMessagesQuery(selectedDriver, {
+    enabled: Boolean(activeChatId),
+  });
 
   // Helper function to get user ID from various possible fields
   function getUserId(user) {
@@ -80,6 +88,34 @@ const Chat = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, users]);
 
+  useEffect(() => {
+    function refreshActiveChat() {
+      refetchChatList();
+      if (activeChatId) {
+        refetchChatMessages();
+      }
+      setRefreshSignal((prev) => prev + 1);
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        refreshActiveChat();
+      }
+    }
+
+    function handleFocus() {
+      refreshActiveChat();
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [refetchChatList, refetchChatMessages, activeChatId]);
+
   return (
     <div className="flex w-full h-full bg-[#0d1117] text-white overflow-hidden">
       {/* LEFT CHAT LIST (FIXED WIDTH + STICKY) */}
@@ -96,7 +132,7 @@ const Chat = () => {
         <AnimatePresence mode="wait">
           {selectedDriver ? (
             <div key={selectedDriver.userid ?? selectedDriver.id ?? "chat"} className="h-full">
-              <ChatWindow driver={selectedDriver} chatApi={chatAPI} />
+              <ChatWindow driver={selectedDriver} chatApi={chatAPI} refreshSignal={refreshSignal} />
             </div>
           ) : (
             <motion.div
