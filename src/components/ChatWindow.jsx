@@ -247,6 +247,7 @@ export default function ChatWindow({ driver, chatApi }) {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [deleteActionType, setDeleteActionType] = useState(null);
   const [isDeleteInProgress, setIsDeleteInProgress] = useState(false);
+  const [isAtBottom, setIsAtBottom] = useState(true);
   const buildChatMediaFileName = useCallback((url, sender, dateTime) => {
     const safeSender = String(sender || "unknown_sender")
       .trim()
@@ -382,6 +383,7 @@ export default function ChatWindow({ driver, chatApi }) {
     setSelectionMode(false);
     setContextMenu(null);
     setReplyTo(null);
+    setIsAtBottom(true);
 
     // Mark messages as seen when chat window opens
     if (markMessagesAsSeen) {
@@ -458,6 +460,15 @@ export default function ChatWindow({ driver, chatApi }) {
       });
     });
   }, []);
+
+  const updateIsAtBottom = useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+
+    const threshold = 24;
+    const distanceFromBottom = el.scrollHeight - (el.scrollTop + el.clientHeight);
+    setIsAtBottom(distanceFromBottom <= threshold);
+  }, []);
   
 
   // Scroll to bottom when messages change (after initial load or new messages)
@@ -467,6 +478,14 @@ export default function ChatWindow({ driver, chatApi }) {
     scrollToBottom("auto");
     shouldScrollToBottomRef.current = false;
   }, [messages.length, scrollToBottom]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      updateIsAtBottom();
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [messages.length, updateIsAtBottom]);
   
 
   function toggleSelect(msgId) {
@@ -809,6 +828,7 @@ export default function ChatWindow({ driver, chatApi }) {
           <>
             <div
               ref={messagesContainerRef}
+              onScroll={updateIsAtBottom}
               className={`flex-1 overflow-y-auto chat-list-scroll space-y-6 bg-[#0b141a] chat-bg-pattern ${selectionMode ? "pl-2 pr-4 pt-4 pb-4" : "p-4"}`}
             >
               {Object.keys(grouped).length === 0 && (
@@ -898,14 +918,16 @@ export default function ChatWindow({ driver, chatApi }) {
         ))}
               <div ref={bottomRef} />
             </div>
-            <button
-              type="button"
-              onClick={() => scrollToBottom("smooth")}
-              className="absolute bottom-4 right-4 rounded-full bg-[#1f6feb] p-2.5 text-white shadow-lg hover:bg-[#1a63d6] focus:outline-none focus:ring-2 focus:ring-[#1f6feb] focus:ring-offset-2 focus:ring-offset-[#0b141a] z-10"
-              aria-label="Scroll to bottom"
-            >
-              <ChevronDown className="w-5 h-5" />
-            </button>
+            {!isAtBottom && (
+              <button
+                type="button"
+                onClick={() => scrollToBottom("smooth")}
+                className="absolute bottom-4 right-4 rounded-full border border-[#1f6feb] bg-transparent p-2.5 text-[#6ca8ff] shadow-lg hover:bg-[#1f6feb]/15 focus:outline-none focus:ring-2 focus:ring-[#1f6feb] focus:ring-offset-2 focus:ring-offset-[#0b141a] z-10"
+                aria-label="Scroll to bottom"
+              >
+                <ChevronDown className="w-5 h-5" />
+              </button>
+            )}
           </>
         )}
       </div>
