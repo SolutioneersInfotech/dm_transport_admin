@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   Search,
   Phone,
@@ -16,6 +15,7 @@ import {
   KeyRound,
   Pencil,
   Circle,
+  Trash2,
 } from "lucide-react";
 import { useDriverCountQuery, useDriversQuery } from "../services/driverQueries";
 import { fetchAllDrivers } from "../services/driverAPI";
@@ -23,8 +23,11 @@ import {
   createDriver,
   updateDriver,
   deactivateDriver,
+  deleteDriver,
 } from "../services/driverCreateAPI";
 import { uploadDriverProfilePhoto } from "../services/driverPhotoUpload";
+import { getShowMaintenanceChat, setShowMaintenanceChat } from "../services/driverConfigAPI";
+import { sendMessage as sendChatMessage } from "../services/chatAPI";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
@@ -171,7 +174,6 @@ const initialFormState = {
 };
 
 export default function Drivers() {
-  const navigate = useNavigate();
   const [drivers, setDrivers] = useState([]);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -197,6 +199,7 @@ export default function Drivers() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [passwordSubmitError, setPasswordSubmitError] = useState("");
+  const [quickMessage, setQuickMessage] = useState("");
   const [isSearchLoading, setIsSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
   const searchCacheRef = useRef([]);
@@ -465,16 +468,60 @@ export default function Drivers() {
     return () => observer.disconnect();
   }, [handleLoadMore]);
 
-  function toggleMaintenanceChat() {
+  useEffect(() => {
     if (!selectedDriver) return;
+
+    let cancelled = false;
+
+    async function syncMaintenanceFlag() {
+      try {
+        const value = await getShowMaintenanceChat(selectedDriver);
+        if (cancelled) return;
+
+        setDrivers((prev) =>
+          prev.map((driver) =>
+            driver.id === selectedDriver.id
+              ? { ...driver, maintenanceChat: value }
+              : driver
+          )
+        );
+      } catch (error) {
+        console.error("Failed to sync maintenanceChat config:", error);
+      }
+    }
+
+    syncMaintenanceFlag();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDriver?.id, selectedDriver?.phone]);
+
+  async function toggleMaintenanceChat() {
+    if (!selectedDriver) return;
+
+    const nextValue = !selectedDriver.maintenanceChat;
 
     setDrivers((prev) =>
       prev.map((driver) =>
         driver.id === selectedDriver.id
-          ? { ...driver, maintenanceChat: !driver.maintenanceChat }
+          ? { ...driver, maintenanceChat: nextValue }
           : driver
       )
     );
+
+    try {
+      await setShowMaintenanceChat(selectedDriver, nextValue);
+    } catch (error) {
+      console.error("Failed to update maintenanceChat config:", error);
+      setDrivers((prev) =>
+        prev.map((driver) =>
+          driver.id === selectedDriver.id
+            ? { ...driver, maintenanceChat: !nextValue }
+            : driver
+        )
+      );
+    }
   }
 
   // Helper function to get user ID from driver object
@@ -491,17 +538,18 @@ export default function Drivers() {
     );
   }
 
-  // Navigate to chat page with driver's user ID
-  function handleChatWithDriver() {
+
+  async function handleQuickMessageSend() {
     if (!selectedDriver) return;
-    
-    const userId = getUserId(selectedDriver);
-    if (!userId) {
-      console.error("Cannot navigate to chat: Driver user ID not found");
-      return;
+    const text = quickMessage.trim();
+    if (!text) return;
+
+    try {
+      await sendChatMessage(selectedDriver, text);
+      setQuickMessage("");
+    } catch (error) {
+      console.error("Failed to send quick message to driver:", error);
     }
-    
-    navigate(`/chat?userid=${userId}`);
   }
 
   function openModal(type) {
@@ -735,6 +783,36 @@ export default function Drivers() {
       setSubmitError(
         error?.message || "Failed to update driver activation status."
       );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleDeleteDriver() {
+    if (!selectedDriver) return;
+
+    const userid = getUserId(selectedDriver);
+    if (!userid) {
+      console.error("Cannot delete driver: missing userid");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Are you sure you want to permanently delete this driver?"
+    );
+    if (!confirmed) return;
+
+    setIsSubmitting(true);
+    setSubmitError("");
+
+    try {
+      await deleteDriver(userid);
+      setDrivers((prev) =>
+        prev.filter((driver) => driver.id !== selectedDriver.id && driver.id !== userid)
+      );
+      setSelectedId(null);
+    } catch (error) {
+      setSubmitError(error?.message || "Failed to delete driver.");
     } finally {
       setIsSubmitting(false);
     }
@@ -1155,6 +1233,38 @@ export default function Drivers() {
                 </div>
               </div>
 
+              {/* Quick message to driver */}
+              <div className="mt-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                <p className="text-sm font-semibold text-slate-100 mb-2">
+                  Message driver
+                </p>
+                <p className="text-xs text-slate-500 mb-3">
+                  Send a quick message to this driver. It will appear in the general chat thread.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={quickMessage}
+                    onChange={(e) => setQuickMessage(e.target.value)}
+                    placeholder="Type message to send to driver..."
+                    className="flex-1 rounded-full border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleQuickMessageSend}
+                    disabled={!quickMessage.trim() || !selectedDriver}
+                    className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
+                      !quickMessage.trim() || !selectedDriver
+                        ? "cursor-not-allowed border border-slate-800 text-slate-500 bg-slate-900"
+                        : "border border-sky-500/60 bg-sky-500/10 text-sky-100 hover:border-sky-400 hover:bg-sky-500/20"
+                    }`}
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    Send
+                  </button>
+                </div>
+              </div>
+
               <div className="grid gap-3">
                 <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
@@ -1176,45 +1286,56 @@ export default function Drivers() {
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={handleChatWithDriver}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-500"
-                  >
-                    <MessageCircle className="h-4 w-4" />
-                    Message driver
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleToggleActivation}
-                    disabled={isSubmitting}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-full border border-rose-500/60 bg-rose-500/10 px-4 py-2 text-sm text-rose-200 transition hover:border-rose-400 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <Ban className="h-4 w-4" />
-                    {isDriverInactive(selectedDriver)
-                      ? "Activate"
-                      : "Deactivate"}
-                  </button>
-                </div>
+                <div className="mt-4 space-y-3">
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={() => openModal("edit")}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-full border border-slate-700 bg-slate-900/60 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-500"
+                    >
+                      <Pencil className="h-4 w-4" />
+                      Edit driver
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openModal("password");
+                      }}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-full border border-slate-700 bg-slate-900/60 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-500"
+                    >
+                      <KeyRound className="h-4 w-4" />
+                      Change password
+                    </button>
+                  </div>
 
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={() => openModal("edit")}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-500"
-                  >
-                    <Pencil className="h-4 w-4" />
-                    Edit driver
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openModal("password")}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-500"
-                  >
-                    <KeyRound className="h-4 w-4" />
-                    Change password
-                  </button>
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={handleToggleActivation}
+                      disabled={isSubmitting}
+                      className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2 text-sm transition ${
+                        selectedDriver?.status === "inactive" || selectedDriver?.isDeactivated
+                          ? "border border-emerald-500/60 bg-emerald-500/10 text-emerald-200 hover:border-emerald-400"
+                          : "border border-rose-500/60 bg-rose-500/10 text-rose-200 hover:border-rose-400"
+                      } disabled:cursor-not-allowed disabled:opacity-60`}
+                    >
+                      <Ban className="h-4 w-4" />
+                      {selectedDriver?.status === "inactive" || selectedDriver?.isDeactivated
+                        ? "Activate Driver"
+                        : "Deactivate Driver"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleDeleteDriver}
+                      disabled={isSubmitting}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-full border border-red-600/70 bg-red-600/10 px-4 py-2 text-sm text-red-200 transition hover:border-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete Driver
+                    </button>
+                  </div>
                 </div>
               </div>
             </>

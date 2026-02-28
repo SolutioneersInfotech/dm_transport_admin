@@ -91,3 +91,32 @@ export async function deactivateDriver({ userId, isDeactivated }) {
 
   return data;
 }
+
+export async function deleteDriver(userid) {
+  const token = localStorage.getItem("adminToken");
+  const response = await fetch(`${BASE_URL}/admin/deleteuser`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ userid }),
+  });
+
+  const text = await response.text();
+  let data;
+
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { message: text };
+  }
+
+  if (!response.ok) {
+    const message =
+      data?.message || data?.error || text || "Failed to delete driver.";
+    throw new Error(message);
+  }
+
+  return data;
+}
