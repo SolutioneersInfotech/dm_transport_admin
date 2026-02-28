@@ -28,6 +28,8 @@ import {
 import { uploadDriverProfilePhoto } from "../services/driverPhotoUpload";
 import { getShowMaintenanceChat, setShowMaintenanceChat } from "../services/driverConfigAPI";
 import { sendMessage as sendChatMessage } from "../services/chatAPI";
+import { useAppDispatch } from "../store/hooks";
+import { updateUserLastMessage } from "../store/slices/usersSlice";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
@@ -174,6 +176,7 @@ const initialFormState = {
 };
 
 export default function Drivers() {
+  const dispatch = useAppDispatch();
   const [drivers, setDrivers] = useState([]);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -545,7 +548,48 @@ export default function Drivers() {
     if (!text) return;
 
     try {
-      await sendChatMessage(selectedDriver, text);
+      const response = await sendChatMessage(selectedDriver, text);
+      const sentAt = response?.message?.dateTime || new Date().toISOString();
+      const selectedDriverId = selectedDriver.id || selectedDriver.phone;
+
+      setDrivers((prev) =>
+        prev.map((driver) =>
+          (driver.id || driver.phone) === selectedDriverId
+            ? {
+                ...driver,
+                last_message: text,
+                last_chat_time: sentAt,
+                lastSeen: new Date(sentAt),
+                lastSeenLabel: "Just now",
+              }
+            : driver
+        )
+      );
+      setCachedSearchDrivers(
+        getCachedSearchDrivers().map((driver) =>
+          (driver.id || driver.phone) === selectedDriverId
+            ? {
+                ...driver,
+                last_message: text,
+                last_chat_time: sentAt,
+                lastSeen: new Date(sentAt),
+                lastSeenLabel: "Just now",
+              }
+            : driver
+        )
+      );
+
+      const userId = getUserId(selectedDriver);
+      if (userId) {
+        dispatch(
+          updateUserLastMessage({
+            userid: userId,
+            lastMessage: text,
+            lastChatTime: sentAt,
+          })
+        );
+      }
+
       setQuickMessage("");
     } catch (error) {
       console.error("Failed to send quick message to driver:", error);

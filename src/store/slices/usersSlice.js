@@ -69,7 +69,7 @@ const cachedState = readUsersCache();
 
 const normalizeComparableId = (value) => {
   if (value === null || value === undefined) return null;
-  const normalized = String(value).trim();
+  const normalized = String(value).trim().replace(/[+\s-]/g, "");
   return normalized || null;
 };
 
@@ -77,9 +77,34 @@ const matchUserId = (user, targetUserId) => {
   const expected = normalizeComparableId(targetUserId);
   if (!expected) return false;
 
-  return [user.userid, user.userId, user.contactId, user.contactid, user.uid, user.id]
+  return [user.userid, user.userId, user.contactId, user.contactid, user.uid, user.id, user.phone]
     .map(normalizeComparableId)
     .some((candidate) => candidate === expected);
+};
+
+const mergeChatMetadata = (incomingUser, existingUser) => {
+  if (!existingUser) {
+    return {
+      ...incomingUser,
+      last_message: incomingUser.last_message,
+      last_chat_time: incomingUser.last_chat_time,
+    };
+  }
+
+  const incomingLastChatTime = incomingUser.last_chat_time;
+  const existingLastChatTime = existingUser.last_chat_time;
+
+  return {
+    ...incomingUser,
+    last_message:
+      incomingUser.last_message ??
+      existingUser.last_message ??
+      "",
+    last_chat_time:
+      incomingLastChatTime ??
+      existingLastChatTime ??
+      null,
+  };
 };
 
 // Async thunk for fetching initial users
@@ -194,12 +219,12 @@ const usersSlice = createSlice({
         state.error = null;
       })
       .addCase(fetchUsers.fulfilled, (state, action) => {
-        // Strip last_message/last_chat_time so ChatList re-fetches from Firebase and sorts by real order
-        state.users = (action.payload.users || []).map((u) => ({
-          ...u,
-          last_message: undefined,
-          last_chat_time: undefined,
-        }));
+        const previousUsers = state.users || [];
+
+        state.users = (action.payload.users || []).map((u) => {
+          const existingUser = previousUsers.find((prevUser) => matchUserId(prevUser, u.userid ?? u.userId ?? u.contactId ?? u.id ?? u.phone));
+          return mergeChatMetadata(u, existingUser);
+        });
         state.hasMore = action.payload.hasMore;
         state.page = action.payload.page;
         state.limit = action.payload.limit;
@@ -224,12 +249,33 @@ const usersSlice = createSlice({
         state.error = null;
       })
       .addCase(fetchMoreUsers.fulfilled, (state, action) => {
-        const newUsers = (action.payload.users || []).map((u) => ({
-          ...u,
-          last_message: undefined,
-          last_chat_time: undefined,
-        }));
-        state.users = [...state.users, ...newUsers];
+        const existingUsers = state.users || [];
+        const mergedIncomingUsers = (action.payload.users || []).map((u) => {
+          const existingUser = existingUsers.find((prevUser) =>
+            matchUserId(prevUser, u.userid ?? u.userId ?? u.contactId ?? u.id ?? u.phone)
+          );
+          return mergeChatMetadata(u, existingUser);
+        });
+
+        const nextUsers = [...existingUsers];
+
+        mergedIncomingUsers.forEach((incomingUser) => {
+          const existingIndex = nextUsers.findIndex((user) =>
+            matchUserId(user, incomingUser.userid ?? incomingUser.userId ?? incomingUser.contactId ?? incomingUser.id ?? incomingUser.phone)
+          );
+
+          if (existingIndex >= 0) {
+            nextUsers[existingIndex] = {
+              ...nextUsers[existingIndex],
+              ...incomingUser,
+            };
+            return;
+          }
+
+          nextUsers.push(incomingUser);
+        });
+
+        state.users = nextUsers;
         state.hasMore = action.payload.hasMore;
         state.page = action.payload.page;
         state.limit = action.payload.limit;
