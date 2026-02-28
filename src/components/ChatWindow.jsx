@@ -190,6 +190,7 @@ import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
 import { ChevronDown, Copy, Download, Mail, Paperclip, Phone, Trash2, X } from "lucide-react";
 import {
+  fetchMessages as defaultFetchMessages,
   subscribeMessages as defaultSubscribeMessages,
   sendMessage as defaultSendMessage,
   deleteChatHistory as defaultDeleteChatHistory,
@@ -223,7 +224,7 @@ function formatLastSeen(lastSeen) {
   });
 }
 
-export default function ChatWindow({ driver, chatApi }) {
+export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
   const { user } = useAuth();
   const dispatch = useAppDispatch();
   const location = useLocation();
@@ -355,12 +356,14 @@ export default function ChatWindow({ driver, chatApi }) {
   const shouldScrollToBottomRef = useRef(true);
 
   const {
+    fetchMessages,
     subscribeMessages,
     sendMessage,
     deleteChatHistory,
     deleteSpecificMessage,
     markMessagesAsSeen,
   } = chatApi || {
+    fetchMessages: defaultFetchMessages,
     subscribeMessages: defaultSubscribeMessages,
     sendMessage: defaultSendMessage,
     deleteChatHistory: defaultDeleteChatHistory,
@@ -413,6 +416,25 @@ export default function ChatWindow({ driver, chatApi }) {
       }
     };
   }, [driverId, messageSubscriptionTarget, subscribeMessages, markMessagesAsSeen]);
+
+  useEffect(() => {
+    if (!driverId || !messageSubscriptionTarget || !refreshSignal) return;
+
+    let isCancelled = false;
+
+    fetchMessages(messageSubscriptionTarget, 200)
+      .then((response) => {
+        if (isCancelled) return;
+        setMessages(response?.messages || []);
+      })
+      .catch((error) => {
+        console.error("Failed to refetch messages on focus:", error);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [driverId, messageSubscriptionTarget, fetchMessages, refreshSignal]);
 
   // Focus input when driver changes
   useEffect(() => {
