@@ -10,6 +10,9 @@ const DRIVERS_API_URL = `${rawBase}/admin/fetchusers`;
 
 
 function mapDriver(user) {
+  const isDeactivated =
+    user?.isDeactivated === true || user?.isDeactivated === "true";
+
   const lastSeenSeconds = user?.lastSeen?._seconds ?? user?.lastSeen?.seconds;
   const lastSeen =
     typeof lastSeenSeconds === "number"
@@ -34,7 +37,8 @@ function mapDriver(user) {
     phone: user?.phone || "",
     country: user?.country || "",
     category: user?.category || "",
-    status: user?.status || "inactive",
+    isDeactivated,
+    status: isDeactivated ? "inactive" : "active",
     lastSeen,
     email: user?.email || "",
     location: user?.location || "",
