@@ -922,7 +922,7 @@ export default function ChatWindow({ driver, chatApi }) {
               <button
                 type="button"
                 onClick={() => scrollToBottom("smooth")}
-                className="absolute bottom-4 right-4 rounded-full border border-[#1f6feb] bg-transparent p-2.5 text-[#6ca8ff] shadow-lg hover:bg-[#1f6feb]/15 focus:outline-none focus:ring-2 focus:ring-[#1f6feb] focus:ring-offset-2 focus:ring-offset-[#0b141a] z-10"
+                className="absolute bottom-4 right-5 rounded-full border border-[#1f6feb] bg-transparent p-2.5 text-[#6ca8ff] shadow-lg hover:bg-[#1f6feb]/45 focus:outline-none focus:ring-2 focus:ring-[#1f6feb] focus:ring-offset-2 focus:ring-offset-[#0b141a] z-10"
                 aria-label="Scroll to bottom"
               >
                 <ChevronDown className="w-5 h-5" />
