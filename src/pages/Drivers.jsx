@@ -226,6 +226,7 @@ export default function Drivers() {
     isError,
     isFetching,
     refetch,
+    dataUpdatedAt,
   } = useDriversQuery({ page, limit, search: debouncedSearch });
   const { data: driverCountData, isLoading: isDriverCountLoading } = useDriverCountQuery({
     search: debouncedSearch,
@@ -479,9 +480,8 @@ export default function Drivers() {
 
     async function syncMaintenanceFlag() {
       try {
-        const value = await getShowMaintenanceChat(selectedDriver.id);
+        const value = await getShowMaintenanceChat(selectedDriver);
         if (cancelled) return;
-        console.log("Puneet Fetched maintenanceChat config for driver", selectedDriver.id, value);
         setDrivers((prev) =>
           prev.map((driver) =>
             driver.id === selectedDriver.id
@@ -499,7 +499,7 @@ export default function Drivers() {
     return () => {
       cancelled = true;
     };
-  }, [selectedDriver?.id, selectedDriver?.phone]);
+  }, [selectedDriver?.id, selectedDriver?.phone, dataUpdatedAt]);
 
   async function toggleMaintenanceChat() {
     if (!selectedDriver) return;
