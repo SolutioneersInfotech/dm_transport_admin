@@ -3,7 +3,6 @@ import {
   Search,
   ChevronRight,
   Plus,
-  Save,
   Loader2,
   Trash2,
   ShieldCheck,
@@ -285,8 +284,11 @@ export default function Admins() {
 
   const handleAddAdmin = async (event) => {
     event.preventDefault();
+    setCreateAdminError("");
     const trimmedName = newAdminName.trim();
-    if (!trimmedName) {
+    const trimmedPassword = newAdminPassword.trim();
+    if (!trimmedName || !trimmedPassword) {
+      setCreateAdminError("User ID and password are required.");
       return;
     }
 
@@ -297,11 +299,10 @@ export default function Admins() {
 
     try {
       setIsCreatingAdmin(true);
-      setCreateAdminError("");
       const response = await createAdmin({
         permissions,
         userid: trimmedName,
-        password: newAdminPassword.trim(),
+        password: trimmedPassword,
       });
 
       const createdAdmin = {
@@ -485,13 +486,6 @@ export default function Admins() {
                   <ShieldCheck className="h-4 w-4 text-slate-400" />
                   Permissions
                 </div>
-                <button
-                  type="button"
-                  className="rounded-full border border-slate-700 px-4 py-1 text-xs text-slate-400"
-                  disabled
-                >
-                  Save
-                </button>
               </div>
 
               <div className="space-y-2">
