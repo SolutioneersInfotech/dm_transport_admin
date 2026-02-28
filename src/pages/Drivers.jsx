@@ -88,6 +88,10 @@ function formatDriver(driver) {
   };
 }
 
+function isDriverInactive(driver) {
+  return driver?.isDeactivated === true;
+}
+
 function mergeUniqueDrivers(...driverGroups) {
   const merged = [];
   const seen = new Set();
@@ -385,7 +389,10 @@ export default function Drivers() {
       const matchesSearch = driverMatchesSearch(driver, search);
 
       const matchesStatus =
-        statusFilter === "all" || driver.status === statusFilter;
+        statusFilter === "all" ||
+        (statusFilter === "inactive"
+          ? isDriverInactive(driver)
+          : !isDriverInactive(driver));
       const matchesCategory =
         categoryFilter === "all" || driver.category === categoryFilter;
 
@@ -711,8 +718,7 @@ export default function Drivers() {
       return;
     }
 
-    const isCurrentlyDeactivated =
-      selectedDriver.isDeactivated === true || selectedDriver.status === "inactive";
+    const isCurrentlyDeactivated = isDriverInactive(selectedDriver);
     const nextIsDeactivated = !isCurrentlyDeactivated;
 
     setIsSubmitting(true);
@@ -975,11 +981,11 @@ export default function Drivers() {
                     <span className="col-span-1">
                       <span
                         className={`rounded-full border px-2 py-0.5 text-xs ${
-                          statusStyles[driver.status] ||
+                          statusStyles[isDriverInactive(driver) ? "inactive" : "active"] ||
                           "border-slate-700 text-slate-400"
                         }`}
                       >
-                        {driver.status === "active" ? "Active" : "Inactive"}
+                        {isDriverInactive(driver) ? "Inactive" : "Active"}
                       </span>
                     </span>
                     <span className="col-span-1">
@@ -1186,7 +1192,7 @@ export default function Drivers() {
                     className="flex flex-1 items-center justify-center gap-2 rounded-full border border-rose-500/60 bg-rose-500/10 px-4 py-2 text-sm text-rose-200 transition hover:border-rose-400 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Ban className="h-4 w-4" />
-                    {selectedDriver?.status === "inactive" || selectedDriver?.isDeactivated
+                    {isDriverInactive(selectedDriver)
                       ? "Activate"
                       : "Deactivate"}
                   </button>
