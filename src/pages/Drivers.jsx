@@ -19,7 +19,11 @@ import {
 } from "lucide-react";
 import { useDriverCountQuery, useDriversQuery } from "../services/driverQueries";
 import { fetchAllDrivers } from "../services/driverAPI";
-import { createDriver } from "../services/driverCreateAPI";
+import {
+  createDriver,
+  updateDriver,
+  deactivateDriver,
+} from "../services/driverCreateAPI";
 import { uploadDriverProfilePhoto } from "../services/driverPhotoUpload";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -575,17 +579,19 @@ export default function Drivers() {
     () => ["name", "email", "phone", "password", "country", "category"],
     []
   );
+  const isFormIncomplete = requiredFields.some((field) => {
+    const value = formState[field];
+    return !String(value ?? "").trim();
+  });
+
   const isSubmitDisabled =
     isSubmitting ||
     uploadingPhoto ||
-    (activeModal === "add" &&
-      requiredFields.some((field) => {
-        const value = formState[field];
-        return !String(value ?? "").trim();
-      }));
+    ((activeModal === "add" || activeModal === "edit") && isFormIncomplete);
 
   async function handleSubmit() {
-    if (activeModal !== "add") {
+    if (activeModal !== "add" && activeModal !== "edit") {
+      // Only handle add/edit here; password is handled separately.
       return;
     }
 
@@ -598,19 +604,37 @@ export default function Drivers() {
     setSubmitError("");
 
     try {
-      const imageUrl = photoUrl || null;
+      const imageUrl = photoUrl || selectedDriver?.image || null;
 
-      await createDriver({
-        name: formState.name.trim(),
-        email: formState.email.trim(),
-        phone: formState.phone.trim(),
-        password: formState.password,
-        country: formState.country,
-        category: formState.category,
-        image: imageUrl,
-        profilePic: imageUrl,
-        profilepic: imageUrl,
-      });
+      if (activeModal === "add") {
+        await createDriver({
+          name: formState.name.trim(),
+          email: formState.email.trim(),
+          phone: formState.phone.trim(),
+          password: formState.password,
+          country: formState.country,
+          category: formState.category,
+          image: imageUrl,
+          profilePic: imageUrl,
+          profilepic: imageUrl,
+        });
+      } else if (activeModal === "edit" && selectedDriver) {
+        const userid = getUserId(selectedDriver);
+        if (!userid) {
+          throw new Error("Cannot update driver: missing user id.");
+        }
+
+        await updateDriver({
+          userid,
+          name: formState.name.trim(),
+          email: formState.email.trim(),
+          phone: formState.phone.trim(),
+          password: formState.password === "••••••••" ? undefined : formState.password,
+          country: formState.country,
+          category: formState.category,
+          image: imageUrl,
+        });
+      }
 
       closeModal();
       setFormState(initialFormState);
@@ -619,7 +643,87 @@ export default function Drivers() {
       setPage(1);
       await refetch();
     } catch (error) {
-      setSubmitError(error?.message || "Failed to create driver.");
+      setSubmitError(
+        error?.message ||
+          (activeModal === "edit"
+            ? "Failed to update driver."
+            : "Failed to create driver.")
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handlePasswordSubmit() {
+    if (!selectedDriver) {
+      setSubmitError("No driver selected.");
+      return;
+    }
+
+    const newPassword = String(passwordState.password || "").trim();
+    if (!newPassword) {
+      setSubmitError("Please enter a new password.");
+      return;
+    }
+
+    const userid = getUserId(selectedDriver);
+    if (!userid) {
+      setSubmitError("Cannot update password: missing user id.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError("");
+
+    try {
+      await updateDriver({
+        userid,
+        name: selectedDriver.name,
+        email: selectedDriver.email,
+        phone: selectedDriver.phone.replace(/\D/g, ""),
+        country: selectedDriver.country,
+        category: selectedDriver.category,
+        password: newPassword,
+        image: selectedDriver.image,
+      });
+
+      closeModal();
+      setPasswordState({ password: "" });
+      await refetch();
+    } catch (error) {
+      setSubmitError(error?.message || "Failed to update password.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleToggleActivation() {
+    if (!selectedDriver) return;
+
+    const userid = getUserId(selectedDriver);
+    if (!userid) {
+      console.error("Cannot toggle activation: missing user id");
+      return;
+    }
+
+    const isCurrentlyDeactivated =
+      selectedDriver.isDeactivated === true || selectedDriver.status === "inactive";
+    const nextIsDeactivated = !isCurrentlyDeactivated;
+
+    setIsSubmitting(true);
+    setSubmitError("");
+
+    try {
+      await deactivateDriver({
+        userId: userid,
+        isDeactivated: nextIsDeactivated,
+      });
+
+      await refetch();
+    } catch (error) {
+      setSubmitError(
+        error?.message || "Failed to update driver activation status."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -1072,10 +1176,14 @@ export default function Drivers() {
                   </button>
                   <button
                     type="button"
-                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2 text-sm text-rose-200 transition hover:border-rose-400"
+                    onClick={handleToggleActivation}
+                    disabled={isSubmitting}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-full border border-rose-500/60 bg-rose-500/10 px-4 py-2 text-sm text-rose-200 transition hover:border-rose-400 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Ban className="h-4 w-4" />
-                    Deactivate
+                    {selectedDriver?.status === "inactive" || selectedDriver?.isDeactivated
+                      ? "Activate"
+                      : "Deactivate"}
                   </button>
                 </div>
 
@@ -1137,9 +1245,15 @@ export default function Drivers() {
                 <div className="flex justify-center">
                   <button
                     type="button"
-                    className="rounded-full border border-slate-700 px-6 py-2 text-sm font-semibold text-slate-200 transition hover:border-slate-500"
+                    onClick={handlePasswordSubmit}
+                    disabled={isSubmitting || !passwordState.password.trim()}
+                    className={`rounded-full border px-10 py-2 text-sm font-semibold transition ${
+                      isSubmitting || !passwordState.password.trim()
+                        ? "cursor-not-allowed border-slate-800 text-slate-500"
+                        : "border-sky-500/60 bg-sky-500/10 text-sky-100 hover:border-sky-400 hover:bg-sky-500/20"
+                    }`}
                   >
-                    Change Password
+                    {isSubmitting ? "Updating..." : "Change Password"}
                   </button>
                 </div>
               </div>
