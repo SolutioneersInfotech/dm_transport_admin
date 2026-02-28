@@ -8,15 +8,15 @@ function resolveDriverConfigId(driver) {
   return phone || id || null;
 }
 
-export async function getShowMaintenanceChat(driver) {
-  const driverId = resolveDriverConfigId(driver);
+export async function getShowMaintenanceChat(driverId) {
   if (!driverId) return false;
 
   const snapshot = await get(
     ref(database, `configuration/${driverId}/showMaintenanceChat`)
   );
-
+  console.log("Puneet run maintenanceChat snapshot for driver", driverId, snapshot);
   if (!snapshot.exists()) return false;
+  console.log("Puneet Fetched maintenanceChat config for driver", driverId, snapshot.val());
   const value = snapshot.val();
   return value === true;
 }

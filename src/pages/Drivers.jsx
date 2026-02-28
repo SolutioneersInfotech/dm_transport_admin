@@ -475,9 +475,9 @@ export default function Drivers() {
 
     async function syncMaintenanceFlag() {
       try {
-        const value = await getShowMaintenanceChat(selectedDriver);
+        const value = await getShowMaintenanceChat(selectedDriver.id);
         if (cancelled) return;
-
+        console.log("Puneet Fetched maintenanceChat config for driver", selectedDriver.id, value);
         setDrivers((prev) =>
           prev.map((driver) =>
             driver.id === selectedDriver.id
@@ -1272,7 +1272,7 @@ export default function Drivers() {
               </div>
 
               <div className="grid gap-3">
-                <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
+                {/* <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
                     Latest activity
                   </p>
@@ -1290,7 +1290,7 @@ export default function Drivers() {
                       2 active chats with dispatch
                     </div>
                   </div>
-                </div>
+                </div> */}
 
                 <div className="mt-4 space-y-3">
                   <div className="flex flex-wrap gap-3">
