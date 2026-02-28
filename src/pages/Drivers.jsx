@@ -203,6 +203,7 @@ export default function Drivers() {
   const [submitError, setSubmitError] = useState("");
   const [passwordSubmitError, setPasswordSubmitError] = useState("");
   const [quickMessage, setQuickMessage] = useState("");
+  const [isQuickMessageSending, setIsQuickMessageSending] = useState(false);
   const [isSearchLoading, setIsSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
   const searchCacheRef = useRef([]);
@@ -541,14 +542,37 @@ export default function Drivers() {
     );
   }
 
+  function getChatTargetFromDriver(driver) {
+    if (!driver) return null;
+
+    const userid = getUserId(driver);
+    const phoneNumber = String(driver.id ?? driver.phone ?? "")
+      .replace(/[^\d+]/g, "")
+      .trim();
+
+    return {
+      userid,
+      userId: userid,
+      contactId: driver.contactId ?? driver.contactid ?? userid,
+      name: driver.name ?? driver.driver_name ?? "",
+      phone: phoneNumber || null,
+      phoneNumber: phoneNumber || null,
+      email: driver.email ?? null,
+    };
+  }
+
 
   async function handleQuickMessageSend() {
-    if (!selectedDriver) return;
+    if (!selectedDriver || isQuickMessageSending) return;
     const text = quickMessage.trim();
     if (!text) return;
 
+    const chatTarget = getChatTargetFromDriver(selectedDriver);
+    if (!chatTarget?.userid) return;
+
     try {
-      const response = await sendChatMessage(selectedDriver, text);
+      setIsQuickMessageSending(true);
+      const response = await sendChatMessage(chatTarget, text);
       const sentAt = response?.message?.dateTime || new Date().toISOString();
       const selectedDriverId = selectedDriver.id || selectedDriver.phone;
 
@@ -579,7 +603,7 @@ export default function Drivers() {
         )
       );
 
-      const userId = getUserId(selectedDriver);
+      const userId = chatTarget.userid;
       if (userId) {
         dispatch(
           updateUserLastMessage({
@@ -593,6 +617,8 @@ export default function Drivers() {
       setQuickMessage("");
     } catch (error) {
       console.error("Failed to send quick message to driver:", error);
+    } finally {
+      setIsQuickMessageSending(false);
     }
   }
 
@@ -1297,20 +1323,21 @@ export default function Drivers() {
                     value={quickMessage}
                     onChange={(e) => setQuickMessage(e.target.value)}
                     placeholder="Type message to send to driver..."
+                    disabled={isQuickMessageSending}
                     className="flex-1 rounded-full border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
                   />
                   <button
                     type="button"
                     onClick={handleQuickMessageSend}
-                    disabled={!quickMessage.trim() || !selectedDriver}
+                    disabled={!quickMessage.trim() || !selectedDriver || isQuickMessageSending}
                     className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
-                      !quickMessage.trim() || !selectedDriver
+                      !quickMessage.trim() || !selectedDriver || isQuickMessageSending
                         ? "cursor-not-allowed border border-slate-800 text-slate-500 bg-slate-900"
                         : "border border-sky-500/60 bg-sky-500/10 text-sky-100 hover:border-sky-400 hover:bg-sky-500/20"
                     }`}
                   >
                     <MessageCircle className="h-4 w-4" />
-                    Send
+                    {isQuickMessageSending ? "Sending..." : "Send"}
                   </button>
                 </div>
               </div>
