@@ -354,14 +354,14 @@ export async function sendMessage(chatTarget, text, adminUser = getAdminUser(), 
     content: { message: messageText, attachmentUrl: attachment },
     status: 0,
     type: 0,
-    contactId,
+    contactId: userid,
     sendername: adminUser?.name || adminUser?.userid || "Admin",
     replyTo,
   };
 
   const userPayload = {
     ...payload,
-    type: 1,
+    type: 0,
   };
 
   const writes = [
