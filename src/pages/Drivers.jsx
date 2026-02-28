@@ -192,6 +192,7 @@ export default function Drivers() {
   const [detailsWidth, setDetailsWidth] = useState(425);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [passwordSubmitError, setPasswordSubmitError] = useState("");
   const [isSearchLoading, setIsSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
   const searchCacheRef = useRef([]);
@@ -521,6 +522,7 @@ export default function Drivers() {
 
     if (type === "password") {
       setPasswordState({ password: "" });
+      setPasswordSubmitError("");
     }
 
     setActiveModal(type);
@@ -534,6 +536,7 @@ export default function Drivers() {
     setPhotoError("");
     setPhotoUrl("");
     setUploadedPhone("");
+    setPasswordSubmitError("");
   }
 
   function handleFormChange(event) {
@@ -573,6 +576,7 @@ export default function Drivers() {
 
   function handlePasswordChange(event) {
     setPasswordState({ password: event.target.value });
+    setPasswordSubmitError("");
   }
 
   const requiredFields = useMemo(
@@ -657,24 +661,24 @@ export default function Drivers() {
 
   async function handlePasswordSubmit() {
     if (!selectedDriver) {
-      setSubmitError("No driver selected.");
+      setPasswordSubmitError("No driver selected.");
       return;
     }
 
     const newPassword = String(passwordState.password || "").trim();
     if (!newPassword) {
-      setSubmitError("Please enter a new password.");
+      setPasswordSubmitError("Please enter a new password.");
       return;
     }
 
     const userid = getUserId(selectedDriver);
     if (!userid) {
-      setSubmitError("Cannot update password: missing user id.");
+      setPasswordSubmitError("Cannot update password: missing user id.");
       return;
     }
 
     setIsSubmitting(true);
-    setSubmitError("");
+    setPasswordSubmitError("");
 
     try {
       await updateDriver({
@@ -692,7 +696,7 @@ export default function Drivers() {
       setPasswordState({ password: "" });
       await refetch();
     } catch (error) {
-      setSubmitError(error?.message || "Failed to update password.");
+      setPasswordSubmitError(error?.message || "Failed to update password.");
     } finally {
       setIsSubmitting(false);
     }
@@ -1257,8 +1261,8 @@ export default function Drivers() {
                     {isSubmitting ? "Updating..." : "Change Password"}
                   </button>
                 </div>
-                {submitError && (
-                  <p className="text-center text-sm text-rose-300">{submitError}</p>
+                {passwordSubmitError && (
+                  <p className="text-center text-sm text-rose-300">{passwordSubmitError}</p>
                 )}
               </div>
             ) : (
