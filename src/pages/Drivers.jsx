@@ -306,8 +306,31 @@ export default function Drivers() {
 
   useEffect(() => {
     if (!driverData) return;
+
+    // Format drivers coming from the API
     const incoming = driverData.users.map(formatDriver);
-    setCachedSearchDrivers(mergeUniqueDrivers(getCachedSearchDrivers(), incoming));
+
+    // Preserve existing maintenanceChat flags for matching drivers
+    const previousDrivers = drivers || [];
+    const maintenanceMap = new Map(
+      previousDrivers.map((driver) => {
+        const key = driver.id || driver.phone;
+        return [key, driver.maintenanceChat];
+      })
+    );
+
+    const incomingWithMaintenance = incoming.map((driver) => {
+      const key = driver.id || driver.phone;
+      const maintenanceChat = maintenanceMap.get(key);
+      return typeof maintenanceChat === "boolean"
+        ? { ...driver, maintenanceChat }
+        : driver;
+    });
+
+    // Use the enriched list everywhere below instead of the raw incoming list
+    setCachedSearchDrivers(
+      mergeUniqueDrivers(getCachedSearchDrivers(), incomingWithMaintenance)
+    );
 
     const activeSearch = debouncedSearch.trim();
     if (activeSearch) {
@@ -325,15 +348,15 @@ export default function Drivers() {
       pagination.hasMore ??
       (pagination.currentPage && pagination.totalPages
         ? pagination.currentPage < pagination.totalPages
-        : incoming.length === limit);
+        : incomingWithMaintenance.length === limit);
     setHasMore(Boolean(derivedHasMore));
 
     if (page === 1) {
-      setDrivers(incoming);
+      setDrivers(incomingWithMaintenance);
       return;
     }
 
-    setDrivers((prev) => mergeUniqueDrivers(prev, incoming));
+    setDrivers((prev) => mergeUniqueDrivers(prev, incomingWithMaintenance));
   }, [
     driverData,
     page,
@@ -485,7 +508,7 @@ export default function Drivers() {
 
     async function syncMaintenanceFlag() {
       try {
-        const value = await getShowMaintenanceChat(selectedDriver.id);
+        const value = await getShowMaintenanceChat(selectedDriver);
         if (cancelled) return;
         console.log("Puneet Fetched maintenanceChat config for driver", selectedDriver.id, value);
         setDrivers((prev) =>

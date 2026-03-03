@@ -23,7 +23,12 @@ export async function uploadDriverProfilePhoto({ phone, file }) {
 
   await ensureAdminFirebaseAuth();
 
-  const path = `drivers/${phone}/profile_${Date.now()}_${file.name}`;
+  const currentUser = auth.currentUser;
+  const uploaderUid = currentUser?.uid ?? "anonymous-admin";
+  const safePhone =
+    (phone && String(phone).replace(/\D/g, "").trim()) || "unknown";
+
+  const path = `chat/uploads/${uploaderUid}/${safePhone}/profile_${Date.now()}_${file.name}`;
   const storageRef = ref(storage, path);
 
   await uploadBytes(storageRef, file, { contentType: file.type });
