@@ -36,7 +36,7 @@ function buildChatTargetFromUser(user) {
 
 export default function GlobalUnreadBadgeSync() {
   const dispatch = useAppDispatch();
-  const { users, hasLoaded, loading } = useAppSelector((state) => state.users);
+  const { users, loading, limit } = useAppSelector((state) => state.users);
   const {
     users: maintenanceUsers,
     hasLoaded: maintenanceHasLoaded,
@@ -47,15 +47,16 @@ export default function GlobalUnreadBadgeSync() {
   const maintenanceUnsubscribeRefs = useRef({});
 
   useEffect(() => {
-    if (!hasLoaded && !loading) {
-      // Use paginated fetch here; let ChatList / scroll load more as needed.
-      dispatch(fetchUsers({ page: 1 })); // will use default limit from fetchUsers thunk (25)
+    // For global unread counts, we want ALL regular-chat users exactly once.
+    // If limit is not -1, it means we have not yet loaded the full list.
+    if (!loading && limit !== -1) {
+      dispatch(fetchUsers({ page: 1, limit: -1 }));
     }
 
     if (!maintenanceHasLoaded && !maintenanceLoading) {
       dispatch(fetchMaintenanceUsers({ limit: -1 }));
     }
-  }, [dispatch, hasLoaded, loading, maintenanceHasLoaded, maintenanceLoading]);
+  }, [dispatch, loading, limit, maintenanceHasLoaded, maintenanceLoading]);
 
   useEffect(() => {
     if (!users?.length) return;
