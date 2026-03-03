@@ -413,6 +413,12 @@ export default function Drivers() {
   const totalDrivers = hasActiveSearch
     ? filteredDrivers.length
     : driverCountData?.totalDrivers ?? null;
+  const effectiveImageUrl =
+    photoUrl ||
+    selectedDriver?.image ||
+    selectedDriver?.profilePic ||
+    selectedDriver?.profilepic ||
+    "";
 
   const isInitialLoading = (isLoading || isSearchLoading) && drivers.length === 0;
 
@@ -643,6 +649,17 @@ export default function Drivers() {
         country: selectedDriver.country,
         image: null,
       });
+      const existingImage =
+        selectedDriver?.image ||
+        selectedDriver?.profilePic ||
+        selectedDriver?.profilepic ||
+        "";
+      setPhotoUrl(existingImage || "");
+      setUploadedPhone(
+        selectedDriver.phone ? selectedDriver.phone.replace(/\D/g, "") : ""
+      );
+      setUploadingPhoto(false);
+      setPhotoError("");
     }
 
     if (type === "password") {
@@ -733,8 +750,15 @@ export default function Drivers() {
     setSubmitError("");
 
     try {
+      const existingImage =
+        selectedDriver?.image ||
+        selectedDriver?.profilePic ||
+        selectedDriver?.profilepic ||
+        null;
       const imageUrl =
-        activeModal === "add" ? photoUrl || null : photoUrl || selectedDriver?.image || null;
+        activeModal === "add"
+          ? photoUrl || null
+          : photoUrl || existingImage || null;
 
       if (activeModal === "add") {
         await createDriver({
@@ -1565,11 +1589,11 @@ export default function Drivers() {
 
                 <div className="flex flex-wrap items-center gap-4">
                   <div className="flex h-16 w-16 items-center justify-center rounded-full border border-slate-800 bg-slate-900">
-                    {photoUrl ? (
+                    {effectiveImageUrl ? (
                       <img
-                        src={photoUrl}
-                        alt="Driver profile preview"
-                        className="h-16 w-16 rounded-full object-cover"
+                        src={effectiveImageUrl}
+                        className="h-10 w-10 rounded-full object-cover"
+                        alt="Driver"
                       />
                     ) : (
                       <UploadCloud className="h-4 w-4 text-slate-400" />
