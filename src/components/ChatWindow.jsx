@@ -209,6 +209,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Checkbox } from "./ui/checkbox";
 import { toast } from "sonner";
+import { ADMIN_PERMISSION_KEYS, hasAdminPermission } from "../utils/adminPermissions";
 
 /* ================= LAST SEEN FORMATTER ================= */
 function formatLastSeen(lastSeen) {
@@ -232,6 +233,10 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
   const updateLastMessageAction = isMaintenanceChat ? updateMaintenanceUserLastMessage : updateUserLastMessage;
 
   const adminId = user?.userid || user?.userId || "admin";
+  const canDeleteAllMessages = useMemo(
+    () => hasAdminPermission(user?.permissions, ADMIN_PERMISSION_KEYS.deleteMultipleUsersChart),
+    [user?.permissions]
+  );
   const [messages, setMessages] = useState([]);
   const [selected, setSelected] = useState([]);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -808,9 +813,11 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
               >
                 <Trash2 className="h-5 w-5" strokeWidth={1.8} />
               </Button>
-              <Button onClick={handleDeleteAll} variant="ghost" size="sm" className="bg-red-900 text-red-100 hover:bg-red-600 hover:text-white">
-                Delete All
-              </Button>
+              {canDeleteAllMessages && (
+                <Button onClick={handleDeleteAll} variant="ghost" size="sm" className="bg-red-900 text-red-100 hover:bg-red-600 hover:text-white">
+                  Delete All
+                </Button>
+              )}
             </>
           )}
         </div>

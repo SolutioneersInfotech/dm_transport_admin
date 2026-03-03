@@ -33,6 +33,8 @@ import { updateUserLastMessage } from "../store/slices/usersSlice";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+import { useAuth } from "../context/AuthContext";
+import { ADMIN_PERMISSION_KEYS, hasAdminPermission } from "../utils/adminPermissions";
 
 const statusStyles = {
   active: "bg-emerald-500/15 text-emerald-300 border-emerald-500/20",
@@ -176,6 +178,7 @@ const initialFormState = {
 };
 
 export default function Drivers() {
+  const { user } = useAuth();
   const dispatch = useAppDispatch();
   const [drivers, setDrivers] = useState([]);
   const [search, setSearch] = useState("");
@@ -219,6 +222,10 @@ export default function Drivers() {
     searchCacheRef.current = nextDrivers;
   }, []);
   const [skeletonRows, setSkeletonRows] = useState(8);
+  const canManageDrivers = useMemo(
+    () => hasAdminPermission(user?.permissions, ADMIN_PERMISSION_KEYS.manageDrivers),
+    [user?.permissions]
+  );
   const isFetchingLocalSearchRef = useRef(false);
   const isResizingRef = useRef(false);
   const sectionRef = useRef(null);
@@ -540,7 +547,7 @@ export default function Drivers() {
   }, [selectedDriver?.id, selectedDriver?.phone]);
 
   async function toggleMaintenanceChat() {
-    if (!selectedDriver) return;
+    if (!canManageDrivers || !selectedDriver) return;
 
     const nextValue = !showMaintenanceChat;
     setShowMaintenanceChatState(nextValue);
@@ -603,7 +610,7 @@ export default function Drivers() {
 
 
   async function handleQuickMessageSend() {
-    if (!selectedDriver || isQuickMessageSending) return;
+    if (!canManageDrivers || !selectedDriver || isQuickMessageSending) return;
     const text = quickMessage.trim();
     if (!text) return;
 
@@ -663,6 +670,7 @@ export default function Drivers() {
   }
 
   function openModal(type) {
+    if (!canManageDrivers) return;
     setSubmitError("");
     setIsSubmitting(false);
     if (type === "add") {
@@ -886,7 +894,7 @@ export default function Drivers() {
   }
 
   async function handleToggleActivation() {
-    if (!selectedDriver) return;
+    if (!canManageDrivers || !selectedDriver) return;
 
     const userid = getUserId(selectedDriver);
     if (!userid) {
@@ -917,7 +925,7 @@ export default function Drivers() {
   }
 
   async function handleDeleteDriver() {
-    if (!selectedDriver) return;
+    if (!canManageDrivers || !selectedDriver) return;
 
     const userid = getUserId(selectedDriver);
     if (!userid) {
@@ -1356,7 +1364,7 @@ export default function Drivers() {
                     <button
                       type="button"
                       onClick={toggleMaintenanceChat}
-                      disabled={loadingMaintenanceChat}
+                      disabled={loadingMaintenanceChat || !canManageDrivers}
                       className={`relative h-7 w-12 rounded-full transition ${
                         showMaintenanceChat ? "bg-emerald-500/40" : "bg-slate-700"
                       }`}
@@ -1392,9 +1400,9 @@ export default function Drivers() {
                   <button
                     type="button"
                     onClick={handleQuickMessageSend}
-                    disabled={!quickMessage.trim() || !selectedDriver || isQuickMessageSending}
+                    disabled={!quickMessage.trim() || !selectedDriver || isQuickMessageSending || !canManageDrivers}
                     className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
-                      !quickMessage.trim() || !selectedDriver || isQuickMessageSending
+                      !quickMessage.trim() || !selectedDriver || isQuickMessageSending || !canManageDrivers
                         ? "cursor-not-allowed border border-slate-800 text-slate-500 bg-slate-900"
                         : "border border-sky-500/60 bg-sky-500/10 text-sky-100 hover:border-sky-400 hover:bg-sky-500/20"
                     }`}
@@ -1431,7 +1439,8 @@ export default function Drivers() {
                     <button
                       type="button"
                       onClick={() => openModal("edit")}
-                      className="flex flex-1 items-center justify-center gap-2 rounded-full border border-slate-700 bg-slate-900/60 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-500"
+                      disabled={!canManageDrivers}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-full border border-slate-700 bg-slate-900/60 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <Pencil className="h-4 w-4" />
                       Edit driver
@@ -1442,7 +1451,8 @@ export default function Drivers() {
                         event.stopPropagation();
                         openModal("password");
                       }}
-                      className="flex flex-1 items-center justify-center gap-2 rounded-full border border-slate-700 bg-slate-900/60 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-500"
+                      disabled={!canManageDrivers}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-full border border-slate-700 bg-slate-900/60 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <KeyRound className="h-4 w-4" />
                       Change password
@@ -1453,7 +1463,7 @@ export default function Drivers() {
                     <button
                       type="button"
                       onClick={handleToggleActivation}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || !canManageDrivers}
                       className={`flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2 text-sm transition ${
                         selectedDriver?.status === "inactive" || selectedDriver?.isDeactivated
                           ? "border border-emerald-500/60 bg-emerald-500/10 text-emerald-200 hover:border-emerald-400"
@@ -1469,7 +1479,7 @@ export default function Drivers() {
                     <button
                       type="button"
                       onClick={handleDeleteDriver}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || !canManageDrivers}
                       className="flex flex-1 items-center justify-center gap-2 rounded-full border border-red-600/70 bg-red-600/10 px-4 py-2 text-sm text-red-200 transition hover:border-red-500 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <Trash2 className="h-4 w-4" />

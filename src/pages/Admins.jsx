@@ -18,6 +18,8 @@ import {
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { toast } from "sonner";
+import { useAuth } from "../context/AuthContext";
+import { ADMIN_PERMISSION_KEYS, hasAdminPermission } from "../utils/adminPermissions";
 
 const permissionSections = [
   {
@@ -130,6 +132,7 @@ const normalizeAdmins = (payload) => {
 const ADMIN_CACHE_KEY = "dm_admins_cache_v1";
 
 export default function Admins() {
+  const { user } = useAuth();
   const [query, setQuery] = useState("");
   const [admins, setAdmins] = useState([]);
   const [selectedAdmin, setSelectedAdmin] = useState("");
@@ -157,6 +160,11 @@ export default function Admins() {
   const [savedAdminPermissions, setSavedAdminPermissions] = useState({});
   const [isSavingPermissions, setIsSavingPermissions] = useState(false);
   const [savePermissionsError, setSavePermissionsError] = useState("");
+
+  const canManageAdmins = useMemo(
+    () => hasAdminPermission(user?.permissions, ADMIN_PERMISSION_KEYS.manageAdmin),
+    [user?.permissions]
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -266,7 +274,7 @@ export default function Admins() {
   );
 
   const togglePermission = (permission) => {
-    if (!selectedAdmin) return;
+    if (!selectedAdmin || !canManageAdmins) return;
     setSavePermissionsError("");
     setAdminPermissions((prev) => ({
       ...prev,
@@ -404,7 +412,7 @@ export default function Admins() {
   };
 
   const handleSavePermissions = async () => {
-    if (!selectedAdmin || !hasPermissionChanges) return;
+    if (!selectedAdmin || !hasPermissionChanges || !canManageAdmins) return;
     const permissionsForAdmin = adminPermissions[selectedAdmin] || permissionDefaults;
     const permissions = Object.entries(permissionsForAdmin)
       .filter(([, enabled]) => enabled)
@@ -763,7 +771,7 @@ export default function Admins() {
                   <button
                     type="button"
                     onClick={handleSavePermissions}
-                    disabled={!selectedAdmin || !hasPermissionChanges || isSavingPermissions}
+                    disabled={!selectedAdmin || !hasPermissionChanges || isSavingPermissions || !canManageAdmins}
                     className="rounded-lg border border-slate-700 bg-slate-900 p-2 text-emerald-300 transition hover:border-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
                     aria-label="Save updated permissions"
                   >
@@ -819,7 +827,7 @@ export default function Admins() {
                           <button
                             type="button"
                             onClick={() => togglePermission(permission)}
-                            disabled={!selectedAdmin}
+                            disabled={!selectedAdmin || !canManageAdmins}
                             className={`flex h-7 w-12 items-center rounded-full border transition ${
                               permissions?.[permission]
                                 ? "border-sky-400 bg-sky-500"
