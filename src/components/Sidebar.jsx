@@ -49,6 +49,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useAppSelector } from "../store/hooks";
 import { useAuth } from "../context/AuthContext";
 import { hasDocumentAccess } from "../utils/documentPermissions";
+import { ADMIN_PERMISSION_KEYS, hasAdminPermission } from "../utils/adminPermissions";
 import {
   Bell,
   Folder,
@@ -141,6 +142,22 @@ export default function Sidebar() {
     () => hasDocumentAccess(currentUser?.permissions),
     [currentUser?.permissions]
   );
+  const canAccessChat = useMemo(
+    () => hasAdminPermission(currentUser?.permissions, ADMIN_PERMISSION_KEYS.chat),
+    [currentUser?.permissions]
+  );
+  const canAccessMaintenanceChat = useMemo(
+    () => hasAdminPermission(currentUser?.permissions, ADMIN_PERMISSION_KEYS.maintenanceChat),
+    [currentUser?.permissions]
+  );
+  const canAccessDrivers = useMemo(
+    () => hasAdminPermission(currentUser?.permissions, ADMIN_PERMISSION_KEYS.viewDrivers),
+    [currentUser?.permissions]
+  );
+  const canAccessAdmins = useMemo(
+    () => hasAdminPermission(currentUser?.permissions, ADMIN_PERMISSION_KEYS.viewAdmin),
+    [currentUser?.permissions]
+  );
 
   // Create menu sections with dynamic badges (number of users with unseen, not total unseen)
   const menuSectionsWithBadges = useMemo(() => {
@@ -148,6 +165,10 @@ export default function Sidebar() {
       ...section,
       items: section.items
         .filter((item) => item.path !== "/documents" || canAccessDocuments)
+        .filter((item) => item.path !== "/chat" || canAccessChat)
+        .filter((item) => item.path !== "/maintenance-chat" || canAccessMaintenanceChat)
+        .filter((item) => item.path !== "/drivers" || canAccessDrivers)
+        .filter((item) => item.path !== "/admins" || canAccessAdmins)
         .map((item) => {
         if (item.path === "/chat") {
           return { ...item, badge: regularChatUnreadUserCount > 0 ? regularChatUnreadUserCount : null };
@@ -158,7 +179,15 @@ export default function Sidebar() {
         return item;
       }),
     }));
-  }, [canAccessDocuments, regularChatUnreadUserCount, maintenanceChatUnreadUserCount]);
+  }, [
+    canAccessDocuments,
+    canAccessChat,
+    canAccessMaintenanceChat,
+    canAccessDrivers,
+    canAccessAdmins,
+    regularChatUnreadUserCount,
+    maintenanceChatUnreadUserCount,
+  ]);
 
   useEffect(() => {
     const savedUser = localStorage.getItem("adminUser");
