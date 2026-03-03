@@ -361,7 +361,7 @@ export async function sendMessage(chatTarget, text, adminUser = getAdminUser(), 
 
   const userPayload = {
     ...payload,
-    type: 0,
+    type: 1,
   };
 
   const writes = [
