@@ -1350,7 +1350,7 @@ export default function Drivers() {
                   </div>
                   {loadingMaintenanceChat ? (
                     <div className="flex items-center justify-center h-6 w-10">
-                      <div className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-600 border-t-sky-400" />
+                      <div className="maintenance-spinner" />
                     </div>
                   ) : (
                     <button
