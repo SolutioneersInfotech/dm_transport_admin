@@ -1,16 +1,20 @@
-import { useState, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import ChatList from "../components/ChatList";
 import ChatWindow from "../components/ChatWindow";
 import * as chatAPI from "../services/chatAPI";
 import { useChatListQuery, useChatMessagesQuery } from "../services/chatQueries";
-import { useAppSelector } from "../store/hooks";
+import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { fetchUsers } from "../store/slices/usersSlice";
 
 const Chat = () => {
+  const dispatch = useAppDispatch();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedDriver, setSelectedDriver] = useState(null);
   const [refreshSignal, setRefreshSignal] = useState(0);
+  const hasBootstrappedUsersRef = useRef(false);
+  const [isBootstrappingChatUsers, setIsBootstrappingChatUsers] = useState(false);
   const { users } = useAppSelector((state) => state.users);
   const activeChatId = selectedDriver ? getUserId(selectedDriver) : null;
 
@@ -67,6 +71,34 @@ const Chat = () => {
 
   // Auto-open chat if userid is in URL
   useEffect(() => {
+    if (hasBootstrappedUsersRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+    hasBootstrappedUsersRef.current = true;
+    setIsBootstrappingChatUsers(true);
+
+    async function bootstrapChatUsers() {
+      try {
+        await dispatch(fetchUsers({ page: 1, limit: -1 }));
+      } catch (error) {
+        console.error("Failed to bootstrap chat users:", error);
+      } finally {
+        if (!cancelled) {
+          setIsBootstrappingChatUsers(false);
+        }
+      }
+    }
+
+    bootstrapChatUsers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dispatch]);
+
+  useEffect(() => {
     const userIdFromUrl = searchParams.get("userid");
     const currentDriverId = selectedDriver ? getUserId(selectedDriver) : null;
     
@@ -115,6 +147,39 @@ const Chat = () => {
       window.removeEventListener("focus", handleFocus);
     };
   }, [refetchChatList, refetchChatMessages, activeChatId]);
+
+  if (isBootstrappingChatUsers) {
+    return (
+      <div className="flex h-full w-full bg-[#0d1117] text-white overflow-hidden">
+        <div className="w-[320px] min-w-[280px] max-w-[340px] border-r border-gray-700 h-full overflow-hidden p-3 space-y-2">
+          {Array.from({ length: 7 }).map((_, idx) => (
+            <div key={idx} className="h-12 rounded bg-slate-900 animate-pulse" />
+          ))}
+        </div>
+
+        <div className="flex flex-1 flex-col">
+          <div className="h-12 border-b border-gray-700 px-4 flex items-center">
+            <div className="h-4 w-32 rounded bg-slate-800 animate-pulse" />
+          </div>
+
+          <div className="flex flex-1">
+            <div className="w-[320px] min-w-[280px] max-w-[340px] border-r border-gray-700 p-3 space-y-2">
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <div key={idx} className="h-12 rounded bg-slate-900 animate-pulse" />
+              ))}
+            </div>
+
+            <div className="flex-1 p-4 space-y-3">
+              {Array.from({ length: 4 }).map((_, idx) => (
+                <div key={idx} className="h-6 w-1/2 rounded bg-slate-900 animate-pulse" />
+              ))}
+              <div className="mt-auto h-12 rounded-full bg-slate-900 animate-pulse" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex w-full h-full bg-[#0d1117] text-white overflow-hidden">
