@@ -47,6 +47,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAppSelector } from "../store/hooks";
+import { useAuth } from "../context/AuthContext";
+import { hasDocumentAccess } from "../utils/documentPermissions";
 import {
   Bell,
   Folder,
@@ -89,11 +91,12 @@ const menuSections = [
 
 export default function Sidebar() {
   const location = useLocation();
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showMenuIcon, setShowMenuIcon] = useState(false);
   const userMenuRef = useRef(null);
-  const [user, setUser] = useState(null);
+  const [storedUser, setStoredUser] = useState(null);
   const [notifications, setNotifications] = useState([
     {
       id: "notif-1",
@@ -127,18 +130,25 @@ export default function Sidebar() {
     return Object.values(unreadCountsByUser || {}).filter((c) => (c?.maintenance || 0) > 0).length;
   }, [unreadCountsByUser]);
 
-  const displayName = user?.name || user?.username || user?.userid || "Admin";
-  const userRole = user?.role || user?.userType || user?.designation || "Admin";
+  const currentUser = user || storedUser;
+  const displayName = currentUser?.name || currentUser?.username || currentUser?.userid || "Admin";
+  const userRole = currentUser?.role || currentUser?.userType || currentUser?.designation || "Admin";
   const displaySubtitle =
-    user?.email && user.email !== displayName && user.email !== user?.userid
-      ? user.email
+    currentUser?.email && currentUser.email !== displayName && currentUser.email !== currentUser?.userid
+      ? currentUser.email
       : userRole;
+  const canAccessDocuments = useMemo(
+    () => hasDocumentAccess(currentUser?.permissions),
+    [currentUser?.permissions]
+  );
 
   // Create menu sections with dynamic badges (number of users with unseen, not total unseen)
   const menuSectionsWithBadges = useMemo(() => {
     return menuSections.map((section) => ({
       ...section,
-      items: section.items.map((item) => {
+      items: section.items
+        .filter((item) => item.path !== "/documents" || canAccessDocuments)
+        .map((item) => {
         if (item.path === "/chat") {
           return { ...item, badge: regularChatUnreadUserCount > 0 ? regularChatUnreadUserCount : null };
         }
@@ -148,12 +158,12 @@ export default function Sidebar() {
         return item;
       }),
     }));
-  }, [regularChatUnreadUserCount, maintenanceChatUnreadUserCount]);
+  }, [canAccessDocuments, regularChatUnreadUserCount, maintenanceChatUnreadUserCount]);
 
   useEffect(() => {
     const savedUser = localStorage.getItem("adminUser");
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
+      setStoredUser(JSON.parse(savedUser));
     }
   }, []);
 
@@ -388,7 +398,7 @@ export default function Sidebar() {
             <div className="absolute bottom-16 right-0 w-56 rounded-lg border border-slate-700 bg-slate-950 p-2 shadow-xl">
               <p className="px-3 pb-2 text-xs text-slate-400">Logged in as</p>
               <p className="px-3 pb-2 text-sm font-semibold text-slate-100">
-                {user?.userid || "Admin"}
+                {currentUser?.userid || "Admin"}
               </p>
               <button className="w-full rounded-md px-3 py-2 text-left text-sm text-slate-300 transition hover:bg-slate-900 hover:text-white">
                 Change Password

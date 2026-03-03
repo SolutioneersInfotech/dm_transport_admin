@@ -32,6 +32,7 @@ import {
 } from "../components/ui/popover";
 import { toast } from "sonner";
 import { buildDocumentDownloadName, getDocumentTypeLabel } from "../utils/documentDownloadName";
+import { getAvailableDocumentFilterOptions } from "../utils/documentPermissions";
 import { useAuth } from "../context/AuthContext";
 
 const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
@@ -49,19 +50,7 @@ function getDefaultDates() {
   return { from: past, to: start };
 }
 
-const FILTER_OPTIONS = [
-  { label: "Pickup Doc", filterValue: "pick_up", permissionKey: "pick_up" },
-  { label: "Delivery Proof", filterValue: "delivery", permissionKey: "delivery" },
-  { label: "Load Image", filterValue: "load_image", permissionKey: "load_image" },
-  { label: "Fuel Receipt", filterValue: "fuel_recipt", permissionKey: "fuel_recipt" },
-  { label: "Stamp Paper", filterValue: "paper_logs", permissionKey: "paper_logs" },
-  { label: "Driver Expense", filterValue: "driver_expense_sheet", permissionKey: "driver_expense_sheet" },
-  { label: "DM Transport Trip Envelope", filterValue: "dm_transport_trip_envelope", permissionKey: "dm_transport_trip_envelope" },
-  { label: "DM Trans Inc Trip Envelope", filterValue: "dm_trans_inc_trip_envelope", permissionKey: "dm_trans_inc_trip_envelope" },
-  { label: "DM Transport City Worksheet", filterValue: "dm_transport_city_worksheet_trip_envelope", permissionKey: "dm_transport_city_worksheet_trip_envelope" },
-  { label: "Repair and Maintenance", filterValue: "trip_envelope", permissionKey: "trip_envelope" },
-  { label: "CTPAT", filterValue: "CTPAT", permissionKey: "CTPAT" },
-];
+const FILTER_OPTIONS = getAvailableDocumentFilterOptions(undefined);
 
 const FILTER_MAP = FILTER_OPTIONS.reduce((map, option) => {
   map[option.label] = option.filterValue;
@@ -123,20 +112,11 @@ export default function Documents() {
   }));
 
   const [selectedFilters, setSelectedFilters] = useState([]); // Array of filter values
-  const hasDocumentPermissionRestrictions = Array.isArray(user?.permissions) && user.permissions.length > 0;
-
   const availableFilterOptions = useMemo(() => {
-    if (!hasDocumentPermissionRestrictions) {
-      return FILTER_OPTIONS;
-    }
+    return getAvailableDocumentFilterOptions(user?.permissions);
+  }, [user?.permissions]);
 
-    const activePermissions = new Set(user.permissions.map((permission) => String(permission).trim()));
-    return FILTER_OPTIONS.filter(({ permissionKey, filterValue, label }) =>
-      activePermissions.has(permissionKey) ||
-      activePermissions.has(filterValue) ||
-      activePermissions.has(label)
-    );
-  }, [hasDocumentPermissionRestrictions, user?.permissions]);
+  const hasDocumentPermissionRestrictions = Array.isArray(user?.permissions);
 
   const availableFilterValues = useMemo(
     () => availableFilterOptions.map((option) => option.filterValue),
@@ -447,6 +427,10 @@ export default function Documents() {
 
   // Fetch documents when params change (initial load)
   useEffect(() => {
+    if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
+      return;
+    }
+
     const paramsChanged =
       !lastFetchParams ||
       lastFetchParams.startDate !== startDate ||
@@ -476,9 +460,15 @@ export default function Documents() {
     lastFetched,
     loading,
     currentFetchArgs,
+    availableFilterValues.length,
+    hasDocumentPermissionRestrictions,
   ]);
 
   const handleManualRefresh = useCallback(async () => {
+    if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
+      return;
+    }
+
     if (isManualRefreshing) return;
     setIsManualRefreshing(true);
     try {
@@ -486,7 +476,7 @@ export default function Documents() {
     } finally {
       setIsManualRefreshing(false);
     }
-  }, [dispatch, currentFetchArgs, isManualRefreshing]);
+  }, [dispatch, currentFetchArgs, isManualRefreshing, availableFilterValues.length, hasDocumentPermissionRestrictions]);
 
   useEffect(() => {
     const typeParam = searchParams.get("type");
@@ -750,6 +740,10 @@ export default function Documents() {
 
   // Infinite scroll handler
   const handleLoadMore = useCallback(() => {
+    if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
+      return;
+    }
+
     if (hasMore && !loadingMore && !loading) {
       dispatch(
         fetchMoreDocuments({
@@ -778,6 +772,8 @@ export default function Documents() {
     isFlaggedParam,
     categoryParam,
     typeFilters,
+    availableFilterValues.length,
+    hasDocumentPermissionRestrictions,
   ]);
 
   // Intersection Observer for infinite scroll
