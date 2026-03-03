@@ -204,6 +204,8 @@ export default function Drivers() {
   const [passwordSubmitError, setPasswordSubmitError] = useState("");
   const [quickMessage, setQuickMessage] = useState("");
   const [isQuickMessageSending, setIsQuickMessageSending] = useState(false);
+  const [showMaintenanceChat, setShowMaintenanceChatState] = useState(false);
+  const [loadingMaintenanceChat, setLoadingMaintenanceChat] = useState(false);
   const [isSearchLoading, setIsSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
   const searchCacheRef = useRef([]);
@@ -507,10 +509,13 @@ export default function Drivers() {
     let cancelled = false;
 
     async function syncMaintenanceFlag() {
+      if (!selectedDriver) return;
+
+      setLoadingMaintenanceChat(true);
       try {
         const value = await getShowMaintenanceChat(selectedDriver);
         if (cancelled) return;
-        console.log("Puneet Fetched maintenanceChat config for driver", selectedDriver.id, value);
+        setShowMaintenanceChatState(value);
         setDrivers((prev) =>
           prev.map((driver) =>
             driver.id === selectedDriver.id
@@ -518,8 +523,12 @@ export default function Drivers() {
               : driver
           )
         );
-      } catch (error) {
-        console.error("Failed to sync maintenanceChat config:", error);
+      } catch (err) {
+        console.error("Failed to load maintenance chat flag:", err);
+      } finally {
+        if (!cancelled) {
+          setLoadingMaintenanceChat(false);
+        }
       }
     }
 
@@ -533,7 +542,8 @@ export default function Drivers() {
   async function toggleMaintenanceChat() {
     if (!selectedDriver) return;
 
-    const nextValue = !selectedDriver.maintenanceChat;
+    const nextValue = !showMaintenanceChat;
+    setShowMaintenanceChatState(nextValue);
 
     setDrivers((prev) =>
       prev.map((driver) =>
@@ -547,6 +557,7 @@ export default function Drivers() {
       await setShowMaintenanceChat(selectedDriver, nextValue);
     } catch (error) {
       console.error("Failed to update maintenanceChat config:", error);
+      setShowMaintenanceChatState(!nextValue);
       setDrivers((prev) =>
         prev.map((driver) =>
           driver.id === selectedDriver.id
@@ -1337,22 +1348,27 @@ export default function Drivers() {
                       Enable direct access for maintenance updates.
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={toggleMaintenanceChat}
-                    className={`relative h-7 w-12 rounded-full transition ${
-                      selectedDriver.maintenanceChat
-                        ? "bg-emerald-500/40"
-                        : "bg-slate-700"
-                    }`}
-                    aria-pressed={selectedDriver.maintenanceChat}
-                  >
-                    <span
-                      className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white transition ${
-                        selectedDriver.maintenanceChat ? "translate-x-5" : ""
+                  {loadingMaintenanceChat ? (
+                    <div className="flex items-center justify-center h-6 w-10">
+                      <div className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-600 border-t-sky-400" />
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={toggleMaintenanceChat}
+                      disabled={loadingMaintenanceChat}
+                      className={`relative h-7 w-12 rounded-full transition ${
+                        showMaintenanceChat ? "bg-emerald-500/40" : "bg-slate-700"
                       }`}
-                    />
-                  </button>
+                      aria-pressed={showMaintenanceChat}
+                    >
+                      <span
+                        className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white transition ${
+                          showMaintenanceChat ? "translate-x-5" : ""
+                        }`}
+                      />
+                    </button>
+                  )}
                 </div>
               </div>
 
