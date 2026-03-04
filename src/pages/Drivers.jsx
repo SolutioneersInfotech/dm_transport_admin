@@ -1580,17 +1580,20 @@ export default function Drivers() {
                       Password
                       <div className="relative mt-2">
                         <Input
+                          key={showDriverPassword ? "driver-password-visible" : "driver-password-hidden"}
                           type={showDriverPassword ? "text" : "password"}
                           name="password"
                           value={formState.password}
                           onChange={handleFormChange}
-                          placeholder="••••••••"
+                          autoComplete="new-password"
+                          placeholder="Enter password"
                           className="w-full rounded-none border-x-0 border-t-0 border-b border-slate-700 bg-slate-900/80 pb-2 pr-10 text-base text-slate-100 transition focus:border-sky-500 placeholder:text-slate-500 autofill:[-webkit-text-fill-color:theme(colors.slate.100)] autofill:[box-shadow:inset_0_0_0px_1000px_theme(colors.slate.900)]"
                         />
                         <button
                           type="button"
+                          onMouseDown={(event) => event.preventDefault()}
                           onClick={() => setShowDriverPassword((prev) => !prev)}
-                          className="absolute right-1 top-1/2 -translate-y-1/2 rounded bg-slate-900/90 p-1 text-slate-300 transition hover:text-slate-100"
+                          className="absolute right-1 top-1/2 z-10 -translate-y-1/2 rounded bg-slate-900/90 p-1 text-slate-300 transition hover:text-slate-100"
                           aria-label={showDriverPassword ? "Hide password" : "Show password"}
                         >
                           {showDriverPassword ? (
