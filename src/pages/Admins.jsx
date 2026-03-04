@@ -7,7 +7,9 @@ import {
   Loader2,
   Trash2,
   ShieldCheck,
-  KeyRound
+  KeyRound,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   createAdmin,
@@ -141,6 +143,7 @@ export default function Admins() {
   const [isAddAdminOpen, setIsAddAdminOpen] = useState(false);
   const [newAdminName, setNewAdminName] = useState("");
   const [newAdminPassword, setNewAdminPassword] = useState("");
+  const [showNewAdminPassword, setShowNewAdminPassword] = useState(false);
   const [newAdminPermissions, setNewAdminPermissions] = useState(() =>
     Object.keys(permissionDefaults).reduce((acc, permission) => {
       acc[permission] = false;
@@ -330,6 +333,7 @@ export default function Admins() {
       setSelectedAdmin(createdAdmin.name);
       setNewAdminName("");
       setNewAdminPassword("");
+      setShowNewAdminPassword(false);
       setNewAdminPermissions(
         Object.keys(permissionDefaults).reduce((acc, permission) => {
           acc[permission] = false;
@@ -468,20 +472,30 @@ export default function Admins() {
                     value={newAdminName}
                     onChange={(event) => setNewAdminName(event.target.value)}
                     placeholder="Enter Admin ID"
-                    className="mt-2 w-full border-b border-slate-700 bg-transparent px-1 py-2 text-sm text-slate-100 focus:border-slate-400 focus:outline-none"
+                    className="mt-2 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-slate-400 focus:outline-none"
                   />
                 </div>
                 <div>
                   <label className="text-sm text-slate-300">Password</label>
-                  <input
-                    type="password"
-                    value={newAdminPassword}
-                    onChange={(event) =>
-                      setNewAdminPassword(event.target.value)
-                    }
-                    placeholder="Enter Password"
-                    className="mt-2 w-full border-b border-slate-700 bg-transparent px-1 py-2 text-sm text-slate-100 focus:border-slate-400 focus:outline-none"
-                  />
+                  <div className="relative mt-2">
+                    <input
+                      type={showNewAdminPassword ? "text" : "password"}
+                      value={newAdminPassword}
+                      onChange={(event) =>
+                        setNewAdminPassword(event.target.value)
+                      }
+                      placeholder="Enter Password"
+                      className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 pr-10 text-sm text-slate-100 placeholder:text-slate-500 focus:border-slate-400 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewAdminPassword((prev) => !prev)}
+                      className="absolute inset-y-0 right-2 flex items-center text-slate-400 transition hover:text-slate-200"
+                      aria-label={showNewAdminPassword ? "Hide password" : "Show password"}
+                    >
+                      {showNewAdminPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
               </div>
               {createAdminError && (
