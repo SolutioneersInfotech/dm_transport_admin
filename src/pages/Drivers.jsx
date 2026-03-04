@@ -16,6 +16,8 @@ import {
   Pencil,
   Circle,
   Trash2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { useDriverCountQuery, useDriversQuery } from "../services/driverQueries";
 import { fetchAllDrivers } from "../services/driverAPI";
@@ -205,6 +207,7 @@ export default function Drivers() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [passwordSubmitError, setPasswordSubmitError] = useState("");
+  const [showDriverPassword, setShowDriverPassword] = useState(false);
   const [quickMessage, setQuickMessage] = useState("");
   const [isQuickMessageSending, setIsQuickMessageSending] = useState(false);
   const [showMaintenanceChat, setShowMaintenanceChatState] = useState(false);
@@ -673,6 +676,7 @@ export default function Drivers() {
     if (!canManageDrivers) return;
     setSubmitError("");
     setIsSubmitting(false);
+    setShowDriverPassword(false);
     if (type === "add") {
       setFormState(initialFormState);
       setUploadingPhoto(false);
@@ -721,6 +725,7 @@ export default function Drivers() {
     setPhotoUrl("");
     setUploadedPhone("");
     setPasswordSubmitError("");
+    setShowDriverPassword(false);
   }
 
   function handleFormChange(event) {
@@ -1570,14 +1575,28 @@ export default function Drivers() {
                     </label>
                     <label className="block text-sm text-slate-300">
                       Password
-                      <Input
-                        type="password"
-                        name="password"
-                        value={formState.password}
-                        onChange={handleFormChange}
-                        placeholder="••••••••"
-                        className="mt-2 w-full border-b border-slate-700 bg-transparent pb-2 text-base text-slate-100 rounded-none border-x-0 border-t-0 transition focus:border-sky-500"
-                      />
+                      <div className="relative mt-2">
+                        <Input
+                          type={showDriverPassword ? "text" : "password"}
+                          name="password"
+                          value={formState.password}
+                          onChange={handleFormChange}
+                          placeholder="••••••••"
+                          className="w-full border-b border-slate-700 bg-transparent pb-2 pr-10 text-base text-slate-100 rounded-none border-x-0 border-t-0 transition focus:border-sky-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowDriverPassword((prev) => !prev)}
+                          className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 transition hover:text-slate-200"
+                          aria-label={showDriverPassword ? "Hide password" : "Show password"}
+                        >
+                          {showDriverPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
                     </label>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
