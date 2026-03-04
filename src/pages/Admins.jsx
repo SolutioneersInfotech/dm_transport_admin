@@ -504,16 +504,10 @@ export default function Admins() {
 
               <div className="flex items-center justify-between text-sm font-semibold text-slate-200">
                 <div className="flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4 text-slate-400" />
-                  Permissions
+                  <ShieldCheck className="h-5 w-5 text-slate-400" />
+                  Assign Permissions
                 </div>
-                <button
-                  type="button"
-                  className="rounded-full border border-slate-700 px-4 py-1 text-xs text-slate-400"
-                  disabled
-                >
-                  Save
-                </button>
+                
               </div>
 
               <div className="admin-scroll min-h-0 flex-1 space-y-5 overflow-y-auto pr-1">
