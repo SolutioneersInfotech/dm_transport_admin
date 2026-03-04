@@ -689,7 +689,7 @@ export default function Drivers() {
       setFormState({
         name: selectedDriver.name,
         email: selectedDriver.email,
-        password: "••••••••",
+        password: "",
         phone: selectedDriver.phone.replace(/\D/g, ""),
         category: selectedDriver.category,
         country: selectedDriver.country,
@@ -769,8 +769,11 @@ export default function Drivers() {
   }
 
   const requiredFields = useMemo(
-    () => ["name", "email", "phone", "password", "country", "category"],
-    []
+    () =>
+      activeModal === "edit"
+        ? ["name", "email", "phone", "country", "category"]
+        : ["name", "email", "phone", "password", "country", "category"],
+    [activeModal]
   );
   const isFormIncomplete = requiredFields.some((field) => {
     const value = formState[field];
@@ -830,7 +833,7 @@ export default function Drivers() {
           name: formState.name.trim(),
           email: formState.email.trim(),
           phone: formState.phone.trim(),
-          password: formState.password === "••••••••" ? undefined : formState.password,
+          password: formState.password.trim() || undefined,
           country: formState.country,
           category: formState.category,
           image: imageUrl,
