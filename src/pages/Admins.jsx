@@ -442,8 +442,8 @@ export default function Admins() {
     <div className="flex min-h-screen h-full flex-col overflow-hidden bg-[#101418] px-2 py-2 text-white">
 
       {isAddAdminOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
-          <div className="w-full max-w-2xl rounded-2xl border border-slate-800 bg-[#151a1f] p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 py-4">
+          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-[#151a1f] p-6 shadow-xl">
             <div className="flex items-start justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-slate-100">
@@ -460,7 +460,7 @@ export default function Admins() {
               </button>
             </div>
 
-            <form onSubmit={handleAddAdmin} className="mt-6 space-y-6">
+            <form onSubmit={handleAddAdmin} className="mt-6 flex min-h-0 flex-1 flex-col gap-6">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className="text-sm text-slate-300">Admin ID</label>
@@ -502,30 +502,37 @@ export default function Admins() {
                 </button>
               </div>
 
-              <div className="space-y-2">
-                {permissionSections[0].items.map((permission) => (
-                  <div
-                    key={permission}
-                    className="flex items-center justify-between border-b border-slate-800 py-3"
-                  >
-                    <span className="text-sm text-slate-200">{permission}</span>
-                    <button
-                      type="button"
-                      onClick={() => toggleNewAdminPermission(permission)}
-                      className={`flex h-7 w-12 items-center rounded-full border transition ${
-                        newAdminPermissions[permission]
-                          ? "border-sky-400 bg-sky-500"
-                          : "border-slate-700 bg-slate-800"
-                      }`}
-                    >
-                      <span
-                        className={`h-5 w-5 rounded-full bg-white shadow transition ${
-                          newAdminPermissions[permission]
-                            ? "translate-x-6"
-                            : "translate-x-1"
-                        }`}
-                      />
-                    </button>
+              <div className="admin-scroll min-h-0 flex-1 space-y-5 overflow-y-auto pr-1">
+                {permissionSections.map((section) => (
+                  <div key={section.title} className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                      {section.title}
+                    </p>
+                    {section.items.map((permission) => (
+                      <div
+                        key={permission}
+                        className="flex items-center justify-between border-b border-slate-800 py-3"
+                      >
+                        <span className="text-sm text-slate-200">{permission}</span>
+                        <button
+                          type="button"
+                          onClick={() => toggleNewAdminPermission(permission)}
+                          className={`flex h-7 w-12 items-center rounded-full border transition ${
+                            newAdminPermissions[permission]
+                              ? "border-sky-400 bg-sky-500"
+                              : "border-slate-700 bg-slate-800"
+                          }`}
+                        >
+                          <span
+                            className={`h-5 w-5 rounded-full bg-white shadow transition ${
+                              newAdminPermissions[permission]
+                                ? "translate-x-6"
+                                : "translate-x-1"
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>
