@@ -1561,7 +1561,7 @@ export default function Drivers() {
                       value={formState.name}
                       onChange={handleFormChange}
                       placeholder="Driver name"
-                      className="mt-2 w-full border-b border-slate-700 bg-transparent pb-2 text-base text-slate-100 rounded-none border-x-0 border-t-0 transition focus:border-sky-500"
+                      className="mt-2 w-full rounded-none border-x-0 border-t-0 border-b border-slate-700 bg-slate-900/80 pb-2 text-base text-slate-100 transition focus:border-sky-500 placeholder:text-slate-500 autofill:[-webkit-text-fill-color:theme(colors.slate.100)] autofill:[box-shadow:inset_0_0_0px_1000px_theme(colors.slate.900)]"
                     />
                   </label>
                   <div className="grid gap-4 sm:grid-cols-2">
@@ -1585,12 +1585,12 @@ export default function Drivers() {
                           value={formState.password}
                           onChange={handleFormChange}
                           placeholder="••••••••"
-                          className="w-full border-b border-slate-700 bg-transparent pb-2 pr-10 text-base text-slate-100 rounded-none border-x-0 border-t-0 transition focus:border-sky-500"
+                          className="w-full rounded-none border-x-0 border-t-0 border-b border-slate-700 bg-slate-900/80 pb-2 pr-10 text-base text-slate-100 transition focus:border-sky-500 placeholder:text-slate-500 autofill:[-webkit-text-fill-color:theme(colors.slate.100)] autofill:[box-shadow:inset_0_0_0px_1000px_theme(colors.slate.900)]"
                         />
                         <button
                           type="button"
                           onClick={() => setShowDriverPassword((prev) => !prev)}
-                          className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 transition hover:text-slate-200"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 rounded bg-slate-900/90 p-1 text-slate-300 transition hover:text-slate-100"
                           aria-label={showDriverPassword ? "Hide password" : "Show password"}
                         >
                           {showDriverPassword ? (
