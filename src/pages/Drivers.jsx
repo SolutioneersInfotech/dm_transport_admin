@@ -1590,7 +1590,7 @@ export default function Drivers() {
                         <button
                           type="button"
                           onClick={() => setShowDriverPassword((prev) => !prev)}
-                          className="absolute right-1 top-1/2 -translate-y-1/2 rounded bg-slate-900/90 p-1 text-slate-300 transition hover:text-slate-100"
+                          className="absolute right-1 top-1/2 z-10 -translate-y-1/2 rounded bg-slate-900/90 p-1 text-slate-300 transition hover:text-slate-100"
                           aria-label={showDriverPassword ? "Hide password" : "Show password"}
                         >
                           {showDriverPassword ? (
