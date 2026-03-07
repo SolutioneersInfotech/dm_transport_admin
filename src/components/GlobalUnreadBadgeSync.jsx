@@ -1,10 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { fetchUsers } from "../store/slices/usersSlice";
 import { fetchMaintenanceUsers } from "../store/slices/maintenanceUsersSlice";
 import { setUnreadCountForUser, removeUserUnreadCounts } from "../store/slices/chatUnreadSlice";
 import { subscribeUnreadCount as subscribeRegularChatUnread } from "../services/chatAPI";
 import { subscribeUnreadCount as subscribeMaintenanceChatUnread } from "../services/maintenanceChatAPI";
+import useAppResumeSync from "../hooks/useAppResumeSync";
 
 function getUserId(user) {
   return (
@@ -45,6 +46,19 @@ export default function GlobalUnreadBadgeSync() {
 
   const regularUnsubscribeRefs = useRef({});
   const maintenanceUnsubscribeRefs = useRef({});
+
+  const handleResumeReconcile = useCallback(() => {
+    // Keep live listeners, but explicitly reconcile list state after browser resume/network restore.
+    if (!loading) {
+      dispatch(fetchUsers({ page: 1, limit: -1 }));
+    }
+
+    if (!maintenanceLoading) {
+      dispatch(fetchMaintenanceUsers({ limit: -1 }));
+    }
+  }, [dispatch, loading, maintenanceLoading]);
+
+  useAppResumeSync(handleResumeReconcile);
 
   useEffect(() => {
     // For global unread counts, we want ALL regular-chat users exactly once.

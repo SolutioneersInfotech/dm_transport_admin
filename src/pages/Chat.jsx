@@ -1,11 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import ChatList from "../components/ChatList";
 import ChatWindow from "../components/ChatWindow";
 import * as chatAPI from "../services/chatAPI";
-import { useChatListQuery, useChatMessagesQuery } from "../services/chatQueries";
-import { useAppSelector } from "../store/hooks";
+import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { fetchUsers } from "../store/slices/usersSlice";
+import useAppResumeSync from "../hooks/useAppResumeSync";
 
 const Chat = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -14,10 +15,7 @@ const Chat = () => {
   const { users } = useAppSelector((state) => state.users);
   const activeChatId = selectedDriver ? getUserId(selectedDriver) : null;
 
-  const { refetch: refetchChatList } = useChatListQuery();
-  const { refetch: refetchChatMessages } = useChatMessagesQuery(selectedDriver, {
-    enabled: Boolean(activeChatId),
-  });
+  const dispatch = useAppDispatch();
 
   // Helper function to get user ID from various possible fields
   function getUserId(user) {
@@ -88,33 +86,16 @@ const Chat = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, users]);
 
-  useEffect(() => {
-    function refreshActiveChat() {
-      refetchChatList();
-      if (activeChatId) {
-        refetchChatMessages();
-      }
+  const handleResume = useCallback(() => {
+    // Chat list is rendered from Redux usersSlice, so React Query refetch alone cannot update visible ordering.
+    dispatch(fetchUsers({ page: 1, limit: -1 }));
+
+    if (activeChatId) {
       setRefreshSignal((prev) => prev + 1);
     }
+  }, [dispatch, activeChatId]);
 
-    function handleVisibilityChange() {
-      if (document.visibilityState === "visible") {
-        refreshActiveChat();
-      }
-    }
-
-    function handleFocus() {
-      refreshActiveChat();
-    }
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("focus", handleFocus);
-
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("focus", handleFocus);
-    };
-  }, [refetchChatList, refetchChatMessages, activeChatId]);
+  useAppResumeSync(handleResume);
 
   return (
     <div className="flex w-full h-full bg-[#0d1117] text-white overflow-hidden">
