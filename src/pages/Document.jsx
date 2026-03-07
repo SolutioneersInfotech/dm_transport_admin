@@ -10,9 +10,12 @@ import {
   updateDocument,
   deleteDocumentThunk,
   deleteDocumentsThunk,
-  upsertRealtimeDocument,
-  removeRealtimeDocument,
-  reorderDocumentsByLatest,
+  upsertLiveDocument,
+  removeLiveDocument,
+  trimVisibleDocumentsToPageSize,
+  beginDocumentSync,
+  endDocumentSync,
+  selectIsDocumentSyncActive,
 } from "../store/slices/documentsSlice";
 import DocumentPreviewContent from "../components/DocumentPreviewContent";
 import { Button } from "../components/ui/button";
@@ -46,7 +49,7 @@ import { buildDocumentDownloadName, getDocumentTypeLabel } from "../utils/docume
 import { getAvailableDocumentFilterOptions } from "../utils/documentPermissions";
 import { useAuth } from "../context/AuthContext";
 import useAppResumeSync from "../hooks/useAppResumeSync";
-import { documentMatchesRealtimeFilters, subscribeToDocumentRealtimeSync } from "../services/documentRealtimeSync";
+import { subscribeToLiveDocuments } from "../services/documentRealtimeOverlay";
 
 const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
 const ALL_DOCUMENTS_START_DATE = "1970-01-01";
@@ -89,6 +92,7 @@ export default function Documents() {
     countsLoading,
   } = useAppSelector((state) => state.documents);
   const { users } = useAppSelector((state) => state.users);
+  const isDocumentSyncActive = useAppSelector(selectIsDocumentSyncActive);
   const documentDropDownRef = useRef(null);
 
   const [selectedDoc, setSelectedDoc] = useState(null);
@@ -109,6 +113,10 @@ export default function Documents() {
   const [skeletonRows, setSkeletonRows] = useState(12);
   const skeletonRowHeight = 36;
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const [showSyncSpinner, setShowSyncSpinner] = useState(false);
+  const spinnerShownAtRef = useRef(0);
+  const spinnerShowTimerRef = useRef(null);
+  const spinnerHideTimerRef = useRef(null);
   const previousCountRef = useRef(null);
   const [isFlagUpdating, setIsFlagUpdating] = useState(false);
   const [isFlagFilterLoading, setIsFlagFilterLoading] = useState(false);
@@ -511,9 +519,11 @@ export default function Documents() {
 
     if (isManualRefreshing) return;
     setIsManualRefreshing(true);
+    dispatch(beginDocumentSync("manualRefresh"));
     try {
       await dispatch(fetchDocuments(currentFetchArgs)).unwrap();
     } finally {
+      dispatch(endDocumentSync("manualRefresh"));
       setIsManualRefreshing(false);
     }
   }, [dispatch, currentFetchArgs, isManualRefreshing, availableFilterValues.length, hasDocumentPermissionRestrictions]);
@@ -843,30 +853,30 @@ export default function Documents() {
   }, [handleLoadMore]);
 
   useEffect(() => {
+    if (page !== 1) return undefined;
+
     if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
       return undefined;
     }
 
-    // Previous resume-only refetch fixed correctness, but latest docs could still appear late
-    // because hidden tabs throttle timers. A long-lived Firestore listener keeps this list warm
-    // in memory while backgrounded so restore is instant like the old admin panel.
-    const unsubscribe = subscribeToDocumentRealtimeSync({
+    // Backend remains authoritative for pagination and totals; this Firestore channel is a
+    // lightweight page-1 overlay for top-of-list freshness only to avoid heavy full-list rebuilds.
+    const unsubscribe = subscribeToLiveDocuments({
       filters: realtimeFilters,
-      onDocumentChange: ({ type, documentId, document }) => {
-        if (type === "removed") {
-          dispatch(removeRealtimeDocument(documentId));
-          return;
+      onChanges: (changes) => {
+        dispatch(beginDocumentSync("firebaseOverlay"));
+        try {
+          changes.forEach(({ type, documentId, document }) => {
+            if (type === "removed") {
+              dispatch(removeLiveDocument(documentId));
+              return;
+            }
+            dispatch(upsertLiveDocument(document));
+          });
+          dispatch(trimVisibleDocumentsToPageSize(limit));
+        } finally {
+          dispatch(endDocumentSync("firebaseOverlay"));
         }
-
-        if (!documentMatchesRealtimeFilters(document, realtimeFilters)) {
-          dispatch(removeRealtimeDocument(document.id));
-          return;
-        }
-
-        dispatch(upsertRealtimeDocument(document));
-      },
-      onReady: () => {
-        dispatch(reorderDocumentsByLatest());
       },
       onError: (error) => {
         console.error("Document realtime listener failed", error);
@@ -878,6 +888,8 @@ export default function Documents() {
     };
   }, [
     dispatch,
+    page,
+    limit,
     realtimeFilters,
     hasDocumentPermissionRestrictions,
     availableFilterValues.length,
@@ -886,19 +898,23 @@ export default function Documents() {
   useEffect(() => {
     const pollIntervalMs = 30 * 1000;
 
-    const pollCounts = () => {
-      // Browsers heavily throttle timers/listeners while tabs are hidden/minimized,
-      // so polling is only background freshness and resume sync performs immediate catch-up.
+    const pollCounts = async () => {
+      // Polling is fallback only; realtime overlay + resume reconciliation are primary freshness paths.
       if (document.visibilityState !== "visible") return;
       if (loading || loadingMore) return;
-      dispatch(
-        fetchDocumentCount({
-          start_date: startDate,
-          end_date: endDate,
-          isSeen: isSeenParam,
-          isFlagged: isFlaggedParam,
-        })
-      );
+      dispatch(beginDocumentSync("polling"));
+      try {
+        await dispatch(
+          fetchDocumentCount({
+            start_date: startDate,
+            end_date: endDate,
+            isSeen: isSeenParam,
+            isFlagged: isFlaggedParam,
+          })
+        );
+      } finally {
+        dispatch(endDocumentSync("polling"));
+      }
     };
 
     pollCounts();
@@ -910,8 +926,11 @@ export default function Documents() {
   useEffect(() => {
     if (typeof countsTotal !== "number") return;
     if (previousCountRef.current !== null && countsTotal > previousCountRef.current && !loading) {
-      // Realtime is the primary freshness path; this count-driven fetch only reconciles misses.
-      dispatch(fetchDocuments(currentFetchArgs));
+      // Realtime is primary; count drift triggers a guarded backend reconciliation fetch.
+      dispatch(beginDocumentSync("polling"));
+      dispatch(fetchDocuments(currentFetchArgs)).finally(() => {
+        dispatch(endDocumentSync("polling"));
+      });
     }
     previousCountRef.current = countsTotal;
   }, [countsTotal, dispatch, currentFetchArgs, loading]);
@@ -933,6 +952,7 @@ export default function Documents() {
     isResumeFetchInFlightRef.current = true;
     lastReconcileAtRef.current = now;
 
+    dispatch(beginDocumentSync("reconciliation"));
     try {
       const countResult = await dispatch(
         fetchDocumentCount({
@@ -947,12 +967,13 @@ export default function Documents() {
       const hasCountDrift = typeof nextTotal === "number" && nextTotal !== (allDocuments?.length || 0);
       const hasStaleList = !lastFetched || Date.now() - lastFetched > 5 * 60 * 1000;
 
-      // Keep the current list rendered during resume. Reconciliation fetch is a fallback for
-      // rare throttling/network stalls where realtime missed some changes while backgrounded.
+      // Keep rendered rows during restore; reconciliation exists as fallback when browsers
+      // throttle background listeners/timers and some updates are missed.
       if (hasCountDrift || hasStaleList) {
         await dispatch(fetchDocuments(currentFetchArgs));
       }
     } finally {
+      dispatch(endDocumentSync("reconciliation"));
       isResumeFetchInFlightRef.current = false;
     }
   }, [
@@ -972,6 +993,39 @@ export default function Documents() {
 
   useAppResumeSync(handleResumeSync);
 
+  useEffect(() => {
+    // Delay + minimum display duration keeps sync icon from flickering during quick operations.
+    if (isDocumentSyncActive) {
+      if (!showSyncSpinner && !spinnerShowTimerRef.current) {
+        spinnerShowTimerRef.current = setTimeout(() => {
+          spinnerShownAtRef.current = Date.now();
+          setShowSyncSpinner(true);
+          spinnerShowTimerRef.current = null;
+        }, 180);
+      }
+      return;
+    }
+
+    if (spinnerShowTimerRef.current) {
+      clearTimeout(spinnerShowTimerRef.current);
+      spinnerShowTimerRef.current = null;
+    }
+
+    if (!showSyncSpinner) return;
+
+    const elapsed = Date.now() - spinnerShownAtRef.current;
+    const remaining = Math.max(0, 500 - elapsed);
+
+    spinnerHideTimerRef.current = setTimeout(() => {
+      setShowSyncSpinner(false);
+      spinnerHideTimerRef.current = null;
+    }, remaining);
+  }, [isDocumentSyncActive, showSyncSpinner]);
+
+  useEffect(() => () => {
+    if (spinnerShowTimerRef.current) clearTimeout(spinnerShowTimerRef.current);
+    if (spinnerHideTimerRef.current) clearTimeout(spinnerHideTimerRef.current);
+  }, []);
 
   return (
     <div className="text-white h-full overflow-hidden flex flex-col p-1 sm:p-2">
@@ -1396,7 +1450,7 @@ export default function Documents() {
                     aria-label="Refresh"
                     className="h-7 w-7 text-gray-400 hover:text-gray-200 hover:bg-[#1d232a] disabled:opacity-60"
                   >
-                    <RefreshCw className={`h-3.5 w-3.5 ${isManualRefreshing ? "animate-spin" : ""}`} />
+                    <RefreshCw className={`h-3.5 w-3.5 ${showSyncSpinner ? "animate-spin" : ""}`} />
                   </Button>
                 </TableHead>
               </TableRow>
