@@ -34,6 +34,7 @@ import { toast } from "sonner";
 import { buildDocumentDownloadName, getDocumentTypeLabel } from "../utils/documentDownloadName";
 import { getAvailableDocumentFilterOptions } from "../utils/documentPermissions";
 import { useAuth } from "../context/AuthContext";
+import useAppResumeSync from "../hooks/useAppResumeSync";
 
 const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
 const ALL_DOCUMENTS_START_DATE = "1970-01-01";
@@ -103,6 +104,7 @@ export default function Documents() {
   const [isTypeFilterLoading, setIsTypeFilterLoading] = useState(false);
   const [activeTypeFilterValue, setActiveTypeFilterValue] = useState(null);
   const hasTypeFilterRequestStartedRef = useRef(false);
+  const isResumeFetchInFlightRef = useRef(false);
 
   const [searchParams] = useSearchParams();
 
@@ -806,6 +808,8 @@ export default function Documents() {
     const pollIntervalMs = 30 * 1000;
 
     const pollCounts = () => {
+      // Browsers heavily throttle timers/listeners while tabs are hidden/minimized,
+      // so polling is only background freshness and resume sync performs immediate catch-up.
       if (document.visibilityState !== "visible") return;
       if (loading || loadingMore) return;
       dispatch(
@@ -832,6 +836,46 @@ export default function Documents() {
     }
     previousCountRef.current = countsTotal;
   }, [countsTotal, dispatch, currentFetchArgs, loading]);
+  const handleResumeSync = useCallback(async () => {
+    if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
+      return;
+    }
+
+    if (loading || loadingMore || isResumeFetchInFlightRef.current) {
+      return;
+    }
+
+    isResumeFetchInFlightRef.current = true;
+
+    try {
+      await dispatch(
+        fetchDocumentCount({
+          start_date: startDate,
+          end_date: endDate,
+          isSeen: isSeenParam,
+          isFlagged: isFlaggedParam,
+        })
+      );
+
+      dispatch(resetPagination());
+      await dispatch(fetchDocuments(currentFetchArgs));
+    } finally {
+      isResumeFetchInFlightRef.current = false;
+    }
+  }, [
+    hasDocumentPermissionRestrictions,
+    availableFilterValues.length,
+    loading,
+    loadingMore,
+    dispatch,
+    startDate,
+    endDate,
+    isSeenParam,
+    isFlaggedParam,
+    currentFetchArgs,
+  ]);
+
+  useAppResumeSync(handleResumeSync);
 
 
   return (
