@@ -12,6 +12,7 @@ import {
   deleteDocumentsThunk,
   upsertLiveDocument,
   removeLiveDocument,
+  clearLiveDocumentOverlay,
   trimVisibleDocumentsToPageSize,
   beginDocumentSync,
   endDocumentSync,
@@ -473,6 +474,31 @@ export default function Documents() {
     ]
   );
 
+  const realtimeOverlayQuerySignature = useMemo(
+    () =>
+      JSON.stringify({
+        startDate,
+        endDate,
+        search: searchDebounced,
+        isSeen: isSeenParam,
+        isFlagged: isFlaggedParam,
+        category: categoryParam,
+        types: typeFilters,
+        allowedTypes: hasDocumentPermissionRestrictions ? availableFilterValues : [],
+      }),
+    [
+      startDate,
+      endDate,
+      searchDebounced,
+      isSeenParam,
+      isFlaggedParam,
+      categoryParam,
+      typeFilters,
+      hasDocumentPermissionRestrictions,
+      availableFilterValues,
+    ]
+  );
+
   // Fetch documents when params change (initial load)
   useEffect(() => {
     if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
@@ -853,6 +879,18 @@ export default function Documents() {
   }, [handleLoadMore]);
 
   useEffect(() => {
+    // Overlay docs are query-scoped; clear cache when realtime query context changes so
+    // stale rows from previous filters/search/date/category do not bleed into next page-1 view.
+    dispatch(clearLiveDocumentOverlay());
+  }, [dispatch, realtimeOverlayQuerySignature]);
+
+  useEffect(() => {
+    return () => {
+      dispatch(clearLiveDocumentOverlay());
+    };
+  }, [dispatch]);
+
+  useEffect(() => {
     if (page !== 1) return undefined;
 
     if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
@@ -891,6 +929,7 @@ export default function Documents() {
     page,
     limit,
     realtimeFilters,
+    realtimeOverlayQuerySignature,
     hasDocumentPermissionRestrictions,
     availableFilterValues.length,
   ]);
@@ -996,6 +1035,12 @@ export default function Documents() {
   useEffect(() => {
     // Delay + minimum display duration keeps sync icon from flickering during quick operations.
     if (isDocumentSyncActive) {
+      // Cancel any queued hide when sync restarts, otherwise spinner can stop mid-sync.
+      if (spinnerHideTimerRef.current) {
+        clearTimeout(spinnerHideTimerRef.current);
+        spinnerHideTimerRef.current = null;
+      }
+
       if (!showSyncSpinner && !spinnerShowTimerRef.current) {
         spinnerShowTimerRef.current = setTimeout(() => {
           spinnerShownAtRef.current = Date.now();
