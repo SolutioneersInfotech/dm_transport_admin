@@ -5,6 +5,7 @@ import { useAppDispatch, useAppSelector } from "../store/hooks";
 import {
   fetchDocumentCount,
   fetchDocuments,
+  fetchDocumentsHead,
   fetchMoreDocuments,
   resetPagination,
   updateDocument,
@@ -14,6 +15,7 @@ import {
   removeLiveDocument,
   clearLiveDocumentOverlay,
   trimVisibleDocumentsToPageSize,
+  setHeadDocuments,
   beginDocumentSync,
   endDocumentSync,
   selectIsDocumentSyncActive,
@@ -118,7 +120,7 @@ export default function Documents() {
   const spinnerShownAtRef = useRef(0);
   const spinnerShowTimerRef = useRef(null);
   const spinnerHideTimerRef = useRef(null);
-  const previousCountRef = useRef(null);
+  const lastHeadFetchAtRef = useRef(0);
   const [isFlagUpdating, setIsFlagUpdating] = useState(false);
   const [isFlagFilterLoading, setIsFlagFilterLoading] = useState(false);
   const hasFlagFilterRequestStartedRef = useRef(false);
@@ -546,13 +548,36 @@ export default function Documents() {
     if (isManualRefreshing) return;
     setIsManualRefreshing(true);
     dispatch(beginDocumentSync("manualRefresh"));
+
     try {
-      await dispatch(fetchDocuments(currentFetchArgs)).unwrap();
+      if (page === 1) {
+        // Head-first refresh keeps page-1 feeling instant while backend pagination remains authoritative.
+        await dispatch(
+          fetchDocumentsHead({
+            startDate,
+            endDate,
+            search: searchDebounced,
+            isSeen: isSeenParam,
+            isFlagged: isFlaggedParam,
+            category: categoryParam,
+            filters: typeFilters,
+            limit,
+          })
+        ).unwrap();
+      }
+
+      await dispatch(
+        fetchDocuments({
+          ...currentFetchArgs,
+          page,
+          limit,
+        })
+      ).unwrap();
     } finally {
       dispatch(endDocumentSync("manualRefresh"));
       setIsManualRefreshing(false);
     }
-  }, [dispatch, currentFetchArgs, isManualRefreshing, availableFilterValues.length, hasDocumentPermissionRestrictions]);
+  }, [dispatch, currentFetchArgs, isManualRefreshing, availableFilterValues.length, hasDocumentPermissionRestrictions, page, limit, startDate, endDate, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters]);
 
   useEffect(() => {
     const typeParam = searchParams.get("type");
@@ -897,10 +922,19 @@ export default function Documents() {
       return undefined;
     }
 
-    // Backend remains authoritative for pagination and totals; this Firestore channel is a
-    // lightweight page-1 overlay for top-of-list freshness only to avoid heavy full-list rebuilds.
+    // Old admin felt instant because page-1 stayed warm from a latest-first live head stream.
+    // The previous implementation lagged because it skipped first snapshot and only patched later changes.
     const unsubscribe = subscribeToLiveDocuments({
       filters: realtimeFilters,
+      onInitialDocuments: (documents) => {
+        dispatch(beginDocumentSync("firebaseOverlay"));
+        try {
+          dispatch(setHeadDocuments(documents));
+          dispatch(trimVisibleDocumentsToPageSize(limit));
+        } finally {
+          dispatch(endDocumentSync("firebaseOverlay"));
+        }
+      },
       onChanges: (changes) => {
         dispatch(beginDocumentSync("firebaseOverlay"));
         try {
@@ -962,25 +996,13 @@ export default function Documents() {
     return () => clearInterval(intervalId);
   }, [dispatch, startDate, endDate, isSeenParam, isFlaggedParam, loading, loadingMore]);
 
-  useEffect(() => {
-    if (typeof countsTotal !== "number") return;
-    if (previousCountRef.current !== null && countsTotal > previousCountRef.current && !loading) {
-      // Realtime is primary; count drift triggers a guarded backend reconciliation fetch.
-      dispatch(beginDocumentSync("polling"));
-      dispatch(fetchDocuments(currentFetchArgs)).finally(() => {
-        dispatch(endDocumentSync("polling"));
-      });
-    }
-    previousCountRef.current = countsTotal;
-  }, [countsTotal, dispatch, currentFetchArgs, loading]);
-
   const handleResumeSync = useCallback(async () => {
     if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
       return;
     }
 
     const now = Date.now();
-    if (now - lastReconcileAtRef.current < 2500) {
+    if (now - lastReconcileAtRef.current < 1500) {
       return;
     }
 
@@ -993,23 +1015,36 @@ export default function Documents() {
 
     dispatch(beginDocumentSync("reconciliation"));
     try {
-      const countResult = await dispatch(
-        fetchDocumentCount({
-          start_date: startDate,
-          end_date: endDate,
-          isSeen: isSeenParam,
-          isFlagged: isFlaggedParam,
-        })
-      );
+      const canRunHead = page === 1;
+      const isVeryStale = !lastFetched || Date.now() - lastFetched > 5 * 60 * 1000;
+      const shouldRunHead = canRunHead && (Date.now() - lastHeadFetchAtRef.current > 1500 || isVeryStale);
 
-      const nextTotal = countResult?.payload?.total;
-      const hasCountDrift = typeof nextTotal === "number" && nextTotal !== (allDocuments?.length || 0);
-      const hasStaleList = !lastFetched || Date.now() - lastFetched > 5 * 60 * 1000;
+      // Head-first resume avoids waiting on expensive count/full-page reconciliation before page-1 updates.
+      if (shouldRunHead) {
+        await dispatch(
+          fetchDocumentsHead({
+            startDate,
+            endDate,
+            search: searchDebounced,
+            isSeen: isSeenParam,
+            isFlagged: isFlaggedParam,
+            category: categoryParam,
+            filters: typeFilters,
+            limit,
+          })
+        ).unwrap();
+        lastHeadFetchAtRef.current = Date.now();
+      }
 
-      // Keep rendered rows during restore; reconciliation exists as fallback when browsers
-      // throttle background listeners/timers and some updates are missed.
-      if (hasCountDrift || hasStaleList) {
-        await dispatch(fetchDocuments(currentFetchArgs));
+      // Keep backend pagination authoritative; page 2+ or very stale lists reconcile through backend fetch.
+      if (page !== 1 || isVeryStale) {
+        await dispatch(
+          fetchDocuments({
+            ...currentFetchArgs,
+            page,
+            limit,
+          })
+        );
       }
     } finally {
       dispatch(endDocumentSync("reconciliation"));
@@ -1023,17 +1058,22 @@ export default function Documents() {
     dispatch,
     startDate,
     endDate,
+    searchDebounced,
     isSeenParam,
     isFlaggedParam,
+    categoryParam,
+    typeFilters,
     currentFetchArgs,
-    allDocuments?.length,
+    page,
+    limit,
     lastFetched,
   ]);
 
-  useAppResumeSync(handleResumeSync);
+  useAppResumeSync(handleResumeSync, { debounceMs: 300 });
 
   useEffect(() => {
-    // Delay + minimum display duration keeps sync icon from flickering during quick operations.
+    // Spinner timing is tuned so restore/head sync is actually visible (old delays hid quick resume work),
+    // while still applying anti-flicker and keeping it pinned until all sync sources finish.
     if (isDocumentSyncActive) {
       // Cancel any queued hide when sync restarts, otherwise spinner can stop mid-sync.
       if (spinnerHideTimerRef.current) {
@@ -1046,7 +1086,7 @@ export default function Documents() {
           spinnerShownAtRef.current = Date.now();
           setShowSyncSpinner(true);
           spinnerShowTimerRef.current = null;
-        }, 180);
+        }, 100);
       }
       return;
     }
@@ -1059,7 +1099,7 @@ export default function Documents() {
     if (!showSyncSpinner) return;
 
     const elapsed = Date.now() - spinnerShownAtRef.current;
-    const remaining = Math.max(0, 500 - elapsed);
+    const remaining = Math.max(0, 450 - elapsed);
 
     spinnerHideTimerRef.current = setTimeout(() => {
       setShowSyncSpinner(false);
