@@ -1,9 +1,11 @@
 import { createSlice, createAsyncThunk, createSelector } from "@reduxjs/toolkit";
 import { fetchDocumentsRoute, fetchDocumentCountRoute, updateDocumentRoute, changeDocumentTypeRoute } from "../../utils/apiRoutes";
 import { deleteDocument, deleteDocuments } from "../../services/documentDeleteAPI";
+import { fetchDocumentsHeadAPI } from "../../services/documentHeadAPI";
 
 const SYNC_SOURCE = {
   backendFetch: "backendFetch",
+  headFetch: "headFetch",
   polling: "polling",
   reconciliation: "reconciliation",
   firebaseOverlay: "firebaseOverlay",
@@ -40,29 +42,89 @@ const sortDocumentsByLatest = (documents = []) => {
   documents.sort(compareByLatest);
 };
 
-const mergeUniqueDocuments = (currentDocuments = [], incomingDocuments = []) => {
-  const deduped = new Map();
-  currentDocuments.forEach((document) => {
-    if (document?.id) deduped.set(document.id, document);
-  });
-  incomingDocuments.forEach((document) => {
-    if (document?.id) deduped.set(document.id, document);
-  });
-  const nextDocuments = Array.from(deduped.values());
-  sortDocumentsByLatest(nextDocuments);
-  return nextDocuments;
+const hasDocumentChanged = (existing = {}, incoming = {}) => {
+  const incomingKeys = Object.keys(incoming);
+  for (const key of incomingKeys) {
+    if (existing[key] !== incoming[key]) return true;
+  }
+
+  return false;
 };
 
-const applyLiveOverlayToBackendPage = (backendDocuments = [], liveOverlayById = {}, page = 1, limit = 10) => {
-  // Backend pagination remains authoritative; overlay only patches the first page so we avoid
-  // rebuilding large arrays on each realtime event and keep table rendering responsive.
-  if (page !== 1) return backendDocuments;
+const overlayMapFromDocuments = (previousOverlay = {}, incomingDocuments = []) => {
+  const nextOverlay = {};
 
-  const overlayValues = Object.values(liveOverlayById || {}).filter(Boolean);
-  if (overlayValues.length === 0) return backendDocuments;
+  incomingDocuments.forEach((document) => {
+    if (!document?.id || isDeletedDocument(document)) return;
 
-  const mergedTop = mergeUniqueDocuments(backendDocuments.slice(0, limit), overlayValues);
-  return mergedTop.slice(0, limit);
+    const previous = previousOverlay[document.id];
+    nextOverlay[document.id] = previous && !hasDocumentChanged(previous, document) ? previous : document;
+  });
+
+  return nextOverlay;
+};
+
+const applyDocumentToOverlay = (overlayById = {}, nextDocument) => {
+  if (!nextDocument?.id || isDeletedDocument(nextDocument)) return overlayById;
+
+  const previous = overlayById[nextDocument.id];
+  if (previous && !hasDocumentChanged(previous, nextDocument)) {
+    return overlayById;
+  }
+
+  return {
+    ...overlayById,
+    [nextDocument.id]: previous ? { ...previous, ...nextDocument } : nextDocument,
+  };
+};
+
+const removeDocumentFromOverlay = (overlayById = {}, documentId) => {
+  if (!documentId || !overlayById[documentId]) return overlayById;
+
+  const next = { ...overlayById };
+  delete next[documentId];
+  return next;
+};
+
+const mergeVisiblePageOne = ({ backendDocuments = [], headOverlayById = {}, liveOverlayById = {}, limit = 10 }) => {
+  const merged = new Map();
+
+  const addDocuments = (documents) => {
+    documents.forEach((document) => {
+      if (!document?.id || isDeletedDocument(document)) return;
+      const existing = merged.get(document.id);
+      merged.set(document.id, existing ? { ...existing, ...document } : document);
+    });
+  };
+
+  // Backend stays authoritative for pagination; page-1 freshness layers on top via head + live overlays.
+  addDocuments(backendDocuments.slice(0, limit));
+  addDocuments(Object.values(headOverlayById));
+  addDocuments(Object.values(liveOverlayById));
+
+  const nextVisible = Array.from(merged.values());
+  sortDocumentsByLatest(nextVisible);
+  return nextVisible.slice(0, limit);
+};
+
+const getVisibleDocuments = (state) => {
+  if (state.page !== 1) return state.backendDocuments;
+  return mergeVisiblePageOne(state);
+};
+
+const beginSyncSource = (state, source) => {
+  state.documentSyncInFlightCount += 1;
+  state.documentSyncInFlightSources[source] = (state.documentSyncInFlightSources[source] || 0) + 1;
+};
+
+const endSyncSource = (state, source) => {
+  state.documentSyncInFlightCount = Math.max(0, state.documentSyncInFlightCount - 1);
+  const previous = state.documentSyncInFlightSources[source] || 0;
+  if (previous <= 1) {
+    delete state.documentSyncInFlightSources[source];
+  } else {
+    state.documentSyncInFlightSources[source] = previous - 1;
+  }
 };
 
 export const fetchDocuments = createAsyncThunk(
@@ -73,6 +135,7 @@ export const fetchDocuments = createAsyncThunk(
       const url = fetchDocumentsRoute(startDate, endDate, { page, limit, search, isSeen, isFlagged, category, filters });
       const res = await fetch(url, {
         method: "GET",
+        cache: "no-store",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       });
 
@@ -85,7 +148,7 @@ export const fetchDocuments = createAsyncThunk(
         hasMore: data.hasMore !== undefined ? data.hasMore : (data.documents?.length || 0) >= limit,
         page: data.page || page,
         limit: data.limit || limit,
-        total: data.pagination.totalDocuments || 0,
+        total: data.pagination?.totalDocuments || 0,
       };
     } catch (error) {
       return rejectWithValue(error.message || "Failed to fetch documents");
@@ -101,6 +164,7 @@ export const fetchMoreDocuments = createAsyncThunk(
       const url = fetchDocumentsRoute(startDate, endDate, { page, limit, search, isSeen, isFlagged, category, filters });
       const res = await fetch(url, {
         method: "GET",
+        cache: "no-store",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       });
 
@@ -113,10 +177,23 @@ export const fetchMoreDocuments = createAsyncThunk(
         hasMore: data.hasMore !== undefined ? data.hasMore : (data.documents?.length || 0) >= limit,
         page: data.page || page,
         limit: data.limit || limit,
-        total: data.pagination.totalDocuments || 0,
+        total: data.pagination?.totalDocuments || 0,
       };
     } catch (error) {
       return rejectWithValue(error.message || "Failed to fetch more documents");
+    }
+  }
+);
+
+export const fetchDocumentsHead = createAsyncThunk(
+  "documents/fetchDocumentsHead",
+  async ({ startDate, endDate, search = "", isSeen = null, isFlagged = null, category = null, filters = [], limit = 30 }, { rejectWithValue }) => {
+    try {
+      const data = await fetchDocumentsHeadAPI({ startDate, endDate, search, isSeen, isFlagged, category, filters, limit });
+      const documents = (data.documents || data.head || []).filter((document) => !isDeletedDocument(document));
+      return { documents, limit };
+    } catch (error) {
+      return rejectWithValue(error.message || "Failed to fetch documents head");
     }
   }
 );
@@ -127,7 +204,7 @@ export const fetchDocumentCount = createAsyncThunk("documents/fetchDocumentCount
     const url = fetchDocumentCountRoute(start_date, end_date, { isSeen, isFlagged });
     const res = await fetch(url, {
       method: "GET",
-      cache: "force-cache",
+      cache: "no-store",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     });
     const data = await res.json();
@@ -225,6 +302,7 @@ export const changeDocumentType = createAsyncThunk("documents/changeDocumentType
 const initialState = {
   documents: [],
   backendDocuments: [],
+  headOverlayById: {},
   liveOverlayById: {},
   loading: false,
   loadingMore: false,
@@ -252,6 +330,7 @@ const documentsSlice = createSlice({
     clearDocuments: (state) => {
       state.documents = [];
       state.backendDocuments = [];
+      state.headOverlayById = {};
       state.liveOverlayById = {};
       state.error = null;
       state.hasMore = false;
@@ -265,42 +344,25 @@ const documentsSlice = createSlice({
       state.page = 1;
       state.hasMore = false;
     },
+    setHeadDocuments: (state, action) => {
+      state.headOverlayById = overlayMapFromDocuments(state.headOverlayById, action.payload || []);
+      state.documents = getVisibleDocuments(state);
+    },
     upsertLiveDocument: (state, action) => {
-      const nextDocument = action.payload;
-      if (!nextDocument?.id || isDeletedDocument(nextDocument)) return;
-
-      state.liveOverlayById[nextDocument.id] = nextDocument;
-
-      if (state.page !== 1) return;
-
-      const existingIndex = state.documents.findIndex((document) => document.id === nextDocument.id);
-      if (existingIndex >= 0) {
-        state.documents[existingIndex] = { ...state.documents[existingIndex], ...nextDocument };
-      } else {
-        state.documents.unshift(nextDocument);
-      }
-
-      const scanWindow = Math.min(state.documents.length, Math.max(state.limit, 30));
-      const sortedSlice = state.documents.slice(0, scanWindow);
-      sortDocumentsByLatest(sortedSlice);
-      state.documents.splice(0, scanWindow, ...sortedSlice);
+      state.liveOverlayById = applyDocumentToOverlay(state.liveOverlayById, action.payload);
+      state.documents = getVisibleDocuments(state);
     },
     removeLiveDocument: (state, action) => {
-      const documentId = action.payload;
-      if (!documentId) return;
-
-      delete state.liveOverlayById[documentId];
-      if (state.page !== 1) return;
-
-      const existingIndex = state.documents.findIndex((document) => document.id === documentId);
-      if (existingIndex >= 0) state.documents.splice(existingIndex, 1);
+      state.liveOverlayById = removeDocumentFromOverlay(state.liveOverlayById, action.payload);
+      state.documents = getVisibleDocuments(state);
     },
     clearLiveDocumentOverlay: (state) => {
       state.liveOverlayById = {};
-      state.documents = applyLiveOverlayToBackendPage(state.backendDocuments, state.liveOverlayById, state.page, state.limit);
+      state.headOverlayById = {};
+      state.documents = getVisibleDocuments(state);
     },
     mergeBackendDocumentsWithLiveOverlay: (state) => {
-      state.documents = applyLiveOverlayToBackendPage(state.backendDocuments, state.liveOverlayById, state.page, state.limit);
+      state.documents = getVisibleDocuments(state);
     },
     trimVisibleDocumentsToPageSize: (state, action) => {
       const pageSize = action.payload ?? state.limit;
@@ -310,19 +372,10 @@ const documentsSlice = createSlice({
       }
     },
     beginDocumentSync: (state, action) => {
-      const source = action.payload || "unknown";
-      state.documentSyncInFlightCount += 1;
-      state.documentSyncInFlightSources[source] = (state.documentSyncInFlightSources[source] || 0) + 1;
+      beginSyncSource(state, action.payload || "unknown");
     },
     endDocumentSync: (state, action) => {
-      const source = action.payload || "unknown";
-      state.documentSyncInFlightCount = Math.max(0, state.documentSyncInFlightCount - 1);
-      const previous = state.documentSyncInFlightSources[source] || 0;
-      if (previous <= 1) {
-        delete state.documentSyncInFlightSources[source];
-      } else {
-        state.documentSyncInFlightSources[source] = previous - 1;
-      }
+      endSyncSource(state, action.payload || "unknown");
     },
   },
   extraReducers: (builder) => {
@@ -332,12 +385,11 @@ const documentsSlice = createSlice({
         state.loadingMore = false;
         state.error = null;
         state.lastFetchParams = action.meta.arg;
-        state.documentSyncInFlightCount += 1;
-        state.documentSyncInFlightSources[SYNC_SOURCE.backendFetch] = (state.documentSyncInFlightSources[SYNC_SOURCE.backendFetch] || 0) + 1;
+        beginSyncSource(state, SYNC_SOURCE.backendFetch);
       })
       .addCase(fetchDocuments.fulfilled, (state, action) => {
         state.loading = false;
-        state.backendDocuments = mergeUniqueDocuments([], action.payload.documents);
+        state.backendDocuments = action.payload.documents;
         state.hasMore = action.payload.hasMore;
         state.page = action.payload.page;
         state.limit = action.payload.limit;
@@ -345,20 +397,14 @@ const documentsSlice = createSlice({
         state.error = null;
         state.lastFetched = Date.now();
         state.totalDocuments = action.payload.total;
-        state.documents = applyLiveOverlayToBackendPage(state.backendDocuments, state.liveOverlayById, state.page, state.limit);
-        state.documentSyncInFlightCount = Math.max(0, state.documentSyncInFlightCount - 1);
-        const prev = state.documentSyncInFlightSources[SYNC_SOURCE.backendFetch] || 0;
-        if (prev <= 1) delete state.documentSyncInFlightSources[SYNC_SOURCE.backendFetch];
-        else state.documentSyncInFlightSources[SYNC_SOURCE.backendFetch] = prev - 1;
+        state.documents = getVisibleDocuments(state);
+        endSyncSource(state, SYNC_SOURCE.backendFetch);
       })
       .addCase(fetchDocuments.rejected, (state, action) => {
         state.loading = false;
         state.loadingMore = false;
         state.error = action.payload;
-        state.documentSyncInFlightCount = Math.max(0, state.documentSyncInFlightCount - 1);
-        const prev = state.documentSyncInFlightSources[SYNC_SOURCE.backendFetch] || 0;
-        if (prev <= 1) delete state.documentSyncInFlightSources[SYNC_SOURCE.backendFetch];
-        else state.documentSyncInFlightSources[SYNC_SOURCE.backendFetch] = prev - 1;
+        endSyncSource(state, SYNC_SOURCE.backendFetch);
       })
       .addCase(fetchMoreDocuments.pending, (state) => {
         state.loadingMore = true;
@@ -366,17 +412,28 @@ const documentsSlice = createSlice({
       })
       .addCase(fetchMoreDocuments.fulfilled, (state, action) => {
         state.loadingMore = false;
-        state.backendDocuments = mergeUniqueDocuments(state.backendDocuments, action.payload.documents);
+        state.backendDocuments = [...state.backendDocuments, ...action.payload.documents];
         state.hasMore = action.payload.hasMore;
         state.page = action.payload.page;
         state.limit = action.payload.limit;
         state.total = action.payload.total;
         state.error = null;
-        state.documents = applyLiveOverlayToBackendPage(state.backendDocuments, state.liveOverlayById, state.page, state.limit);
+        state.documents = getVisibleDocuments(state);
       })
       .addCase(fetchMoreDocuments.rejected, (state, action) => {
         state.loadingMore = false;
         state.error = action.payload;
+      })
+      .addCase(fetchDocumentsHead.pending, (state) => {
+        beginSyncSource(state, SYNC_SOURCE.headFetch);
+      })
+      .addCase(fetchDocumentsHead.fulfilled, (state, action) => {
+        state.headOverlayById = overlayMapFromDocuments(state.headOverlayById, action.payload.documents);
+        state.documents = getVisibleDocuments(state);
+        endSyncSource(state, SYNC_SOURCE.headFetch);
+      })
+      .addCase(fetchDocumentsHead.rejected, (state) => {
+        endSyncSource(state, SYNC_SOURCE.headFetch);
       })
       .addCase(fetchDocumentCount.pending, (state) => {
         state.countsLoading = true;
@@ -421,7 +478,8 @@ const documentsSlice = createSlice({
         const { documentId } = action.payload;
         state.backendDocuments = state.backendDocuments.filter((doc) => doc.id !== documentId);
         state.documents = state.documents.filter((doc) => doc.id !== documentId);
-        delete state.liveOverlayById[documentId];
+        state.liveOverlayById = removeDocumentFromOverlay(state.liveOverlayById, documentId);
+        state.headOverlayById = removeDocumentFromOverlay(state.headOverlayById, documentId);
         if (state.total > 0) state.total -= 1;
       })
       .addCase(deleteDocumentThunk.rejected, (state, action) => {
@@ -432,7 +490,10 @@ const documentsSlice = createSlice({
         if (Array.isArray(documentIds) && documentIds.length > 0) {
           state.backendDocuments = state.backendDocuments.filter((doc) => !documentIds.includes(doc.id));
           state.documents = state.documents.filter((doc) => !documentIds.includes(doc.id));
-          documentIds.forEach((id) => delete state.liveOverlayById[id]);
+          documentIds.forEach((id) => {
+            state.liveOverlayById = removeDocumentFromOverlay(state.liveOverlayById, id);
+            state.headOverlayById = removeDocumentFromOverlay(state.headOverlayById, id);
+          });
           if (state.total > 0) state.total = Math.max(state.total - documentIds.length, 0);
         }
       })
@@ -464,6 +525,7 @@ export const {
   clearDocuments,
   markDocumentAsSeen,
   resetPagination,
+  setHeadDocuments,
   upsertLiveDocument,
   removeLiveDocument,
   clearLiveDocumentOverlay,
@@ -473,9 +535,6 @@ export const {
   endDocumentSync,
 } = documentsSlice.actions;
 
-export const selectIsDocumentSyncActive = createSelector(
-  [(state) => state.documents.documentSyncInFlightCount],
-  (count) => count > 0
-);
+export const selectIsDocumentSyncActive = createSelector([(state) => state.documents.documentSyncInFlightCount], (count) => count > 0);
 
 export default documentsSlice.reducer;
