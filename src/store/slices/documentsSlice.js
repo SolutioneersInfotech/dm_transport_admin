@@ -7,6 +7,63 @@ const isDeletedDocument = (document) => {
   return value === true || value === "true" || value === "yes" || value === 1 || value === "1";
 };
 
+const getDocumentSortTimestamp = (document) => {
+  const candidates = [
+    document?.date,
+    document?.createdAt,
+    document?.created_at,
+    document?.timestamp,
+    document?.updatedAt,
+    document?.updated_at,
+  ];
+
+  for (const value of candidates) {
+    if (!value) continue;
+
+    if (value?.toDate instanceof Function) {
+      return value.toDate().getTime();
+    }
+
+    if (typeof value?.seconds === "number") {
+      return value.seconds * 1000;
+    }
+
+    const parsed = value instanceof Date ? value : new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.getTime();
+    }
+  }
+
+  return 0;
+};
+
+const sortDocumentsByLatest = (documents = []) => {
+  documents.sort((a, b) => {
+    const byDate = getDocumentSortTimestamp(b) - getDocumentSortTimestamp(a);
+    if (byDate !== 0) return byDate;
+    return String(b?.id || "").localeCompare(String(a?.id || ""));
+  });
+};
+
+const mergeUniqueDocuments = (currentDocuments = [], incomingDocuments = []) => {
+  const deduped = new Map();
+  currentDocuments.forEach((document) => {
+    if (document?.id) {
+      deduped.set(document.id, document);
+    }
+  });
+
+  incomingDocuments.forEach((document) => {
+    if (document?.id) {
+      deduped.set(document.id, document);
+    }
+  });
+
+  const nextDocuments = Array.from(deduped.values());
+  sortDocumentsByLatest(nextDocuments);
+  return nextDocuments;
+};
+
 // Async thunk for fetching initial documents
 export const fetchDocuments = createAsyncThunk(
   "documents/fetchDocuments",
@@ -378,6 +435,53 @@ const documentsSlice = createSlice({
       state.page = 1;
       state.hasMore = false;
     },
+    upsertRealtimeDocument: (state, action) => {
+      const nextDocument = action.payload;
+      if (!nextDocument?.id || isDeletedDocument(nextDocument)) return;
+
+      const existingIndex = state.documents.findIndex((document) => document.id === nextDocument.id);
+      if (existingIndex >= 0) {
+        state.documents[existingIndex] = {
+          ...state.documents[existingIndex],
+          ...nextDocument,
+        };
+      } else {
+        state.documents.push(nextDocument);
+        if (typeof state.countsTotal === "number") {
+          state.countsTotal += 1;
+        }
+        if (typeof state.total === "number") {
+          state.total += 1;
+        }
+        if (typeof state.totalDocuments === "number") {
+          state.totalDocuments += 1;
+        }
+      }
+
+      sortDocumentsByLatest(state.documents);
+    },
+    removeRealtimeDocument: (state, action) => {
+      const documentId = action.payload;
+      if (!documentId) return;
+
+      const previousLength = state.documents.length;
+      state.documents = state.documents.filter((document) => document.id !== documentId);
+
+      if (state.documents.length !== previousLength) {
+        if (typeof state.countsTotal === "number") {
+          state.countsTotal = Math.max(state.countsTotal - 1, 0);
+        }
+        if (typeof state.total === "number") {
+          state.total = Math.max(state.total - 1, 0);
+        }
+        if (typeof state.totalDocuments === "number") {
+          state.totalDocuments = Math.max(state.totalDocuments - 1, 0);
+        }
+      }
+    },
+    reorderDocumentsByLatest: (state) => {
+      sortDocumentsByLatest(state.documents);
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -390,7 +494,7 @@ const documentsSlice = createSlice({
       })
       .addCase(fetchDocuments.fulfilled, (state, action) => {
         state.loading = false;
-        state.documents = action.payload.documents;
+        state.documents = mergeUniqueDocuments([], action.payload.documents);
         state.hasMore = action.payload.hasMore;
         state.page = action.payload.page;
         state.limit = action.payload.limit;
@@ -411,7 +515,7 @@ const documentsSlice = createSlice({
       })
       .addCase(fetchMoreDocuments.fulfilled, (state, action) => {
         state.loadingMore = false;
-        state.documents = [...state.documents, ...action.payload.documents];
+        state.documents = mergeUniqueDocuments(state.documents, action.payload.documents);
         state.hasMore = action.payload.hasMore;
         state.page = action.payload.page;
         state.limit = action.payload.limit;
@@ -516,5 +620,12 @@ const documentsSlice = createSlice({
   },
 });
 
-export const { clearDocuments, markDocumentAsSeen, resetPagination } = documentsSlice.actions;
+export const {
+  clearDocuments,
+  markDocumentAsSeen,
+  resetPagination,
+  upsertRealtimeDocument,
+  removeRealtimeDocument,
+  reorderDocumentsByLatest,
+} = documentsSlice.actions;
 export default documentsSlice.reducer;

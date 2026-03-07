@@ -2,7 +2,18 @@ import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { format as formatDate, isValid } from "date-fns";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
-import { fetchDocumentCount, fetchDocuments, fetchMoreDocuments, resetPagination, updateDocument, deleteDocumentThunk, deleteDocumentsThunk } from "../store/slices/documentsSlice";
+import {
+  fetchDocumentCount,
+  fetchDocuments,
+  fetchMoreDocuments,
+  resetPagination,
+  updateDocument,
+  deleteDocumentThunk,
+  deleteDocumentsThunk,
+  upsertRealtimeDocument,
+  removeRealtimeDocument,
+  reorderDocumentsByLatest,
+} from "../store/slices/documentsSlice";
 import DocumentPreviewContent from "../components/DocumentPreviewContent";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -35,6 +46,7 @@ import { buildDocumentDownloadName, getDocumentTypeLabel } from "../utils/docume
 import { getAvailableDocumentFilterOptions } from "../utils/documentPermissions";
 import { useAuth } from "../context/AuthContext";
 import useAppResumeSync from "../hooks/useAppResumeSync";
+import { documentMatchesRealtimeFilters, subscribeToDocumentRealtimeSync } from "../services/documentRealtimeSync";
 
 const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
 const ALL_DOCUMENTS_START_DATE = "1970-01-01";
@@ -105,6 +117,7 @@ export default function Documents() {
   const [activeTypeFilterValue, setActiveTypeFilterValue] = useState(null);
   const hasTypeFilterRequestStartedRef = useRef(false);
   const isResumeFetchInFlightRef = useRef(false);
+  const lastReconcileAtRef = useRef(0);
 
   const [searchParams] = useSearchParams();
 
@@ -424,6 +437,31 @@ export default function Documents() {
       isFlaggedParam,
       categoryParam,
       typeFilters,
+    ]
+  );
+
+  const realtimeFilters = useMemo(
+    () => ({
+      startDate,
+      endDate,
+      search: searchDebounced,
+      isSeen: isSeenParam,
+      isFlagged: isFlaggedParam,
+      category: categoryParam,
+      types: typeFilters,
+      // Permission-aware filtering is still enforced in the listener even if types is empty.
+      allowedTypes: hasDocumentPermissionRestrictions ? availableFilterValues : [],
+    }),
+    [
+      startDate,
+      endDate,
+      searchDebounced,
+      isSeenParam,
+      isFlaggedParam,
+      categoryParam,
+      typeFilters,
+      hasDocumentPermissionRestrictions,
+      availableFilterValues,
     ]
   );
 
@@ -805,6 +843,47 @@ export default function Documents() {
   }, [handleLoadMore]);
 
   useEffect(() => {
+    if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
+      return undefined;
+    }
+
+    // Previous resume-only refetch fixed correctness, but latest docs could still appear late
+    // because hidden tabs throttle timers. A long-lived Firestore listener keeps this list warm
+    // in memory while backgrounded so restore is instant like the old admin panel.
+    const unsubscribe = subscribeToDocumentRealtimeSync({
+      filters: realtimeFilters,
+      onDocumentChange: ({ type, documentId, document }) => {
+        if (type === "removed") {
+          dispatch(removeRealtimeDocument(documentId));
+          return;
+        }
+
+        if (!documentMatchesRealtimeFilters(document, realtimeFilters)) {
+          dispatch(removeRealtimeDocument(document.id));
+          return;
+        }
+
+        dispatch(upsertRealtimeDocument(document));
+      },
+      onReady: () => {
+        dispatch(reorderDocumentsByLatest());
+      },
+      onError: (error) => {
+        console.error("Document realtime listener failed", error);
+      },
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [
+    dispatch,
+    realtimeFilters,
+    hasDocumentPermissionRestrictions,
+    availableFilterValues.length,
+  ]);
+
+  useEffect(() => {
     const pollIntervalMs = 30 * 1000;
 
     const pollCounts = () => {
@@ -831,13 +910,19 @@ export default function Documents() {
   useEffect(() => {
     if (typeof countsTotal !== "number") return;
     if (previousCountRef.current !== null && countsTotal > previousCountRef.current && !loading) {
-      dispatch(resetPagination());
+      // Realtime is the primary freshness path; this count-driven fetch only reconciles misses.
       dispatch(fetchDocuments(currentFetchArgs));
     }
     previousCountRef.current = countsTotal;
   }, [countsTotal, dispatch, currentFetchArgs, loading]);
+
   const handleResumeSync = useCallback(async () => {
     if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - lastReconcileAtRef.current < 2500) {
       return;
     }
 
@@ -846,9 +931,10 @@ export default function Documents() {
     }
 
     isResumeFetchInFlightRef.current = true;
+    lastReconcileAtRef.current = now;
 
     try {
-      await dispatch(
+      const countResult = await dispatch(
         fetchDocumentCount({
           start_date: startDate,
           end_date: endDate,
@@ -857,8 +943,15 @@ export default function Documents() {
         })
       );
 
-      dispatch(resetPagination());
-      await dispatch(fetchDocuments(currentFetchArgs));
+      const nextTotal = countResult?.payload?.total;
+      const hasCountDrift = typeof nextTotal === "number" && nextTotal !== (allDocuments?.length || 0);
+      const hasStaleList = !lastFetched || Date.now() - lastFetched > 5 * 60 * 1000;
+
+      // Keep the current list rendered during resume. Reconciliation fetch is a fallback for
+      // rare throttling/network stalls where realtime missed some changes while backgrounded.
+      if (hasCountDrift || hasStaleList) {
+        await dispatch(fetchDocuments(currentFetchArgs));
+      }
     } finally {
       isResumeFetchInFlightRef.current = false;
     }
@@ -873,6 +966,8 @@ export default function Documents() {
     isSeenParam,
     isFlaggedParam,
     currentFetchArgs,
+    allDocuments?.length,
+    lastFetched,
   ]);
 
   useAppResumeSync(handleResumeSync);
