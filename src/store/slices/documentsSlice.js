@@ -414,6 +414,15 @@ const documentsSlice = createSlice({
       state.page = 1;
       state.hasMore = false;
     },
+    preparePageOneFilterTransition: (state) => {
+      // Page-1 server-side filter changes must drop stale backend base so fast head rows are not crowded out by old query results.
+      state.backendDocuments = [];
+      state.documents = [];
+      state.headOverlayById = {};
+      state.liveOverlayById = {};
+      state.page = 1;
+      state.hasMore = false;
+    },
     setHeadDocuments: (state, action) => {
       state.headOverlayById = overlayMapFromDocuments(state.headOverlayById, action.payload || []);
       state.documents = getVisibleDocuments(state);
@@ -631,6 +640,7 @@ export const {
   clearDocuments,
   markDocumentAsSeen,
   resetPagination,
+  preparePageOneFilterTransition,
   setHeadDocuments,
   upsertLiveDocument,
   removeLiveDocument,
