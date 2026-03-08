@@ -300,6 +300,7 @@ export default function ChatMessageBubble({
   senderName,
   showSenderName = true,
   replyToMessage = null,
+  replyTargetId = null,
   onReplyClick,
   onImageClick,
   onDownloadMedia,
@@ -399,7 +400,7 @@ export default function ChatMessageBubble({
         "Message"
       : "Message";
 
-  const showReplyTo = msg?.replyTo;
+  const showReplyTo = msg?.replyTo || replyToMessage;
   const showCopyButton =
     Boolean(text) && !isKnownMediaAttachment && !showFileAttachmentLink;
   const [copied, setCopied] = useState(false);
@@ -469,7 +470,7 @@ export default function ChatMessageBubble({
           {showReplyTo && (
             <button
               type="button"
-              onClick={() => onReplyClick?.(msg.replyTo)}
+              onClick={() => onReplyClick?.(replyTargetId)}
               className={`mb-2 w-full text-left rounded border-l-2 pl-2 py-1 text-xs ${
                 isAdmin
                   ? "border-[#1f6feb] bg-white/10 text-white"

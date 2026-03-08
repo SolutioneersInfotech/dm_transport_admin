@@ -43,6 +43,30 @@ function resolveUserId(chatTarget) {
   return normalizeUserId(chatTarget);
 }
 
+
+function normalizeReplySnapshot(replyTo) {
+  if (!replyTo || typeof replyTo !== "object") {
+    return { replyToId: null, replyToSnapshot: null };
+  }
+
+  const id = replyTo?.id ?? replyTo?.msgId ?? null;
+  return {
+    replyToId: id,
+    // Legacy/mobile payloads can embed the full replied message object in replyTo.
+    replyToSnapshot: {
+      id,
+      msgId: id,
+      sendername: replyTo?.sendername ?? "Unknown",
+      type: replyTo?.type,
+      content: {
+        message: replyTo?.content?.message ?? replyTo?.message ?? "",
+        attachmentUrl: replyTo?.content?.attachmentUrl ?? replyTo?.attachmentUrl ?? "",
+      },
+      dateTime: replyTo?.dateTime ?? replyTo?.datetime ?? null,
+    },
+  };
+}
+
 function normalizeMessage(messageId, msg) {
   const rawDate = msg?.dateTime || msg?.datetime;
   const date = rawDate ? new Date(rawDate) : new Date();
@@ -53,6 +77,10 @@ function normalizeMessage(messageId, msg) {
     msg?.type === 0 ? 1 :
     msg?.type === 1 ? 0 :
     msg?.type;
+  const rawReplyTo = msg?.replyTo ?? null;
+  const replyMeta = typeof rawReplyTo === "string"
+    ? { replyToId: rawReplyTo, replyToSnapshot: null }
+    : normalizeReplySnapshot(rawReplyTo);
 
   return {
     msgId: messageId,
@@ -66,7 +94,9 @@ function normalizeMessage(messageId, msg) {
     type: typeof type === "number" ? type : 0,
     contactId: msg?.contactId ?? msg?.userid ?? null,
     sendername: msg?.sendername ?? "Unknown",
-    replyTo: msg?.replyTo ?? null,
+    replyTo: rawReplyTo,
+    replyToId: replyMeta.replyToId,
+    replyToSnapshot: replyMeta.replyToSnapshot,
     seenByAdmin: msg?.seenByAdmin ?? false,
     seenByAdmins: msg?.seenByAdmins ?? null,
     seenAt: msg?.seenAt ?? null,
