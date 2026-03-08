@@ -529,6 +529,24 @@ export default function Documents() {
     dispatch(beginDocumentSync("flagFilter"));
   }, [dispatch]);
 
+  const clearFastFilterLoadingForSignature = useCallback((signature) => {
+    if (pendingTypeFilterSignatureRef.current === signature) {
+      setIsTypeFilterLoading(false);
+      setActiveTypeFilterValue(null);
+      pendingTypeFilterSignatureRef.current = null;
+    }
+
+    if (pendingFlagFilterSignatureRef.current === signature) {
+      setIsFlagFilterLoading(false);
+      pendingFlagFilterSignatureRef.current = null;
+    }
+
+    // Clear any active flag-filter sync for this signature so failed/latest head requests cannot leave spinner state stuck.
+    if (pendingFlagFilterSyncSignatureRef.current === signature) {
+      endPendingFlagFilterSync();
+    }
+  }, [endPendingFlagFilterSync]);
+
   const currentFilterSignature = useMemo(() => buildFilterSignature(), [buildFilterSignature]);
 
   const clearDeferredReconciliation = useCallback(() => {
@@ -667,20 +685,10 @@ export default function Documents() {
       const isLatestSignature = activeSignature === latestFilterSignatureRef.current;
 
       if (!fetchDocumentsHead.fulfilled.match(headResult)) {
-        // Failed latest head responses must clear fast filter loading so flag/type UX never gets stuck.
+        // Failed head fetches for the latest signature must clear fast filter loading instead of returning early.
         if (isLatestSignature) {
-          if (pendingTypeFilterSignatureRef.current === activeSignature) {
-            setIsTypeFilterLoading(false);
-            setActiveTypeFilterValue(null);
-            pendingTypeFilterSignatureRef.current = null;
-          }
-
-          if (pendingFlagFilterSignatureRef.current === activeSignature) {
-            setIsFlagFilterLoading(false);
-            pendingFlagFilterSignatureRef.current = null;
-            endPendingFlagFilterSync();
-            toast.error("Failed to load flagged documents");
-          }
+          clearFastFilterLoadingForSignature(activeSignature);
+          toast.error("Failed to load documents. Please try again.");
         }
         return;
       }
@@ -690,18 +698,7 @@ export default function Documents() {
       }
 
       // Type/flag filter spinners track the fast head fetch completion, not the heavy backend reconciliation.
-      if (pendingTypeFilterSignatureRef.current === activeSignature) {
-        setIsTypeFilterLoading(false);
-        setActiveTypeFilterValue(null);
-        pendingTypeFilterSignatureRef.current = null;
-      }
-
-      if (pendingFlagFilterSignatureRef.current === activeSignature) {
-        // Flag-filter UX completes on head data; backend reconciliation continues in background authority mode.
-        setIsFlagFilterLoading(false);
-        pendingFlagFilterSignatureRef.current = null;
-        endPendingFlagFilterSync();
-      }
+      clearFastFilterLoadingForSignature(activeSignature);
 
       lastHeadFetchAtRef.current = Date.now();
 
@@ -726,7 +723,7 @@ export default function Documents() {
     currentFilterSignature,
     clearDeferredReconciliation,
     scheduleDeferredReconciliation,
-    endPendingFlagFilterSync,
+    clearFastFilterLoadingForSignature,
     availableFilterValues.length,
     hasDocumentPermissionRestrictions,
     limit,
