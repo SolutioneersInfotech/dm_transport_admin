@@ -140,6 +140,8 @@ export default function Documents() {
   const pendingTypeFilterSignatureRef = useRef(null);
   const pendingFlagFilterSignatureRef = useRef(null);
   const pendingFlagFilterSyncSignatureRef = useRef(null);
+  const hasResolvedInitialDocumentsFetchRef = useRef(false);
+  const [hasResolvedInitialDocumentsFetch, setHasResolvedInitialDocumentsFetch] = useState(false);
 
   const [searchParams] = useSearchParams();
 
@@ -540,12 +542,7 @@ export default function Documents() {
       setIsFlagFilterLoading(false);
       pendingFlagFilterSignatureRef.current = null;
     }
-
-    // Clear any active flag-filter sync for this signature so failed/latest head requests cannot leave spinner state stuck.
-    if (pendingFlagFilterSyncSignatureRef.current === signature) {
-      endPendingFlagFilterSync();
-    }
-  }, [endPendingFlagFilterSync]);
+  }, []);
 
   const currentFilterSignature = useMemo(() => buildFilterSignature(), [buildFilterSignature]);
 
@@ -574,7 +571,17 @@ export default function Documents() {
         if (signature !== latestFilterSignatureRef.current) return;
 
         // Backend pagination remains authoritative, but this reconciliation must not block page-1 filter UX.
-        dispatch(fetchDocuments({ ...fetchArgs, requestSignature: signature }));
+        const reconciliationPromise = dispatch(fetchDocuments({ ...fetchArgs, requestSignature: signature }));
+
+        reconciliationPromise.finally(() => {
+          // Keep refresh spinner active across fast head load + deferred reconciliation for the latest flag signature.
+          if (
+            signature === latestFilterSignatureRef.current &&
+            pendingFlagFilterSyncSignatureRef.current === signature
+          ) {
+            endPendingFlagFilterSync();
+          }
+        });
       };
 
       if ("requestIdleCallback" in window) {
@@ -585,7 +592,7 @@ export default function Documents() {
         deferredReconcileTypeRef.current = "timeout";
       }
     },
-    [clearDeferredReconciliation, dispatch]
+    [clearDeferredReconciliation, dispatch, endPendingFlagFilterSync]
   );
 
   const realtimeFilters = useMemo(
@@ -664,6 +671,15 @@ export default function Documents() {
     latestFilterSignatureRef.current = activeSignature;
     clearDeferredReconciliation();
 
+    // Cancel older flag-filter sync/loading loops when a newer signature starts so stale completions cannot stop latest spinner work.
+    if (pendingFlagFilterSignatureRef.current && pendingFlagFilterSignatureRef.current !== activeSignature) {
+      pendingFlagFilterSignatureRef.current = null;
+      setIsFlagFilterLoading(false);
+    }
+    if (pendingFlagFilterSyncSignatureRef.current && pendingFlagFilterSyncSignatureRef.current !== activeSignature) {
+      endPendingFlagFilterSync();
+    }
+
     dispatch(resetPagination());
 
     const runHeadFirstFetch = async () => {
@@ -684,10 +700,19 @@ export default function Documents() {
 
       const isLatestSignature = activeSignature === latestFilterSignatureRef.current;
 
+      // Initial empty-state must wait for first head/list attempt to resolve so we don't flash "No documents found" too early.
+      if (isLatestSignature && !hasResolvedInitialDocumentsFetchRef.current) {
+        hasResolvedInitialDocumentsFetchRef.current = true;
+        setHasResolvedInitialDocumentsFetch(true);
+      }
+
       if (!fetchDocumentsHead.fulfilled.match(headResult)) {
-        // Failed head fetches for the latest signature must clear fast filter loading instead of returning early.
+        // Latest-signature failures must close the fast-loading loop and flag sync spinner so filter UX cannot get stuck.
         if (isLatestSignature) {
           clearFastFilterLoadingForSignature(activeSignature);
+          if (pendingFlagFilterSyncSignatureRef.current === activeSignature) {
+            endPendingFlagFilterSync();
+          }
           toast.error("Failed to load documents. Please try again.");
         }
         return;
@@ -724,6 +749,7 @@ export default function Documents() {
     clearDeferredReconciliation,
     scheduleDeferredReconciliation,
     clearFastFilterLoadingForSignature,
+    endPendingFlagFilterSync,
     availableFilterValues.length,
     hasDocumentPermissionRestrictions,
     limit,
@@ -813,12 +839,6 @@ export default function Documents() {
   };
 
   // Remove a specific filter
-  useEffect(() => {
-    if (!isFlagFilterLoading) {
-      endPendingFlagFilterSync();
-    }
-  }, [isFlagFilterLoading, endPendingFlagFilterSync]);
-
   const removeFilter = (filterValue) => {
     setActiveTypeFilterValue(filterValue);
     setIsTypeFilterLoading(true);
@@ -967,8 +987,8 @@ export default function Documents() {
 
   const canRequestDocuments = !(hasDocumentPermissionRestrictions && availableFilterValues.length === 0);
   const hasVisibleDocuments = (filteredDocuments?.length || 0) > 0;
-  // Initial empty state should stay in loading mode until the first list request resolves.
-  const isInitialDocumentsLoading = canRequestDocuments && !hasVisibleDocuments && (!lastFetchParams || (loading && !lastFetched));
+  // Initial empty state should stay loading until the first head/list request actually resolves.
+  const isInitialDocumentsLoading = canRequestDocuments && !hasVisibleDocuments && !hasResolvedInitialDocumentsFetch;
   const showSkeleton = loading && !isManualRefreshing && !isInitialDocumentsLoading && !hasVisibleDocuments;
   const displayedTotalDocuments = useMemo(() => {
     if (countsLoading) return null;
