@@ -161,13 +161,13 @@ const endSyncSource = (state, source) => {
 
 export const fetchDocuments = createAsyncThunk(
   "documents/fetchDocuments",
-  async ({ startDate, endDate, page = 1, limit = 10, search = "", isSeen = null, isFlagged = null, category = null, filters = [], bypassCache = false }, { rejectWithValue }) => {
+  async ({ startDate, endDate, page = 1, limit = 10, search = "", isSeen = null, isFlagged = null, category = null, filters = [], bypassCache = false, requestSignature = "" }, { rejectWithValue }) => {
     try {
       const cacheKey = createDocumentsCacheKey({ startDate, endDate, page, limit, search, isSeen, isFlagged, category, filters });
       if (!bypassCache) {
         const cached = getCachedDocumentRequest(cacheKey, LIST_CACHE_TTL_MS);
         if (cached) {
-          return { ...cached, fromCache: true };
+          return { ...cached, fromCache: true, requestSignature };
         }
       }
 
@@ -191,7 +191,7 @@ export const fetchDocuments = createAsyncThunk(
       };
 
       setCachedDocumentRequest(cacheKey, payload);
-      return payload;
+      return { ...payload, requestSignature };
     } catch (error) {
       return rejectWithValue(error.message || "Failed to fetch documents");
     }
@@ -382,6 +382,7 @@ const initialState = {
   countsTotal: 0,
   lastCountsFetched: null,
   lastCountRequestSignature: "",
+  lastListRequestSignature: "",
   documentSyncInFlightCount: 0,
   documentSyncInFlightSources: {},
 };
@@ -458,9 +459,17 @@ const documentsSlice = createSlice({
         state.loadingMore = false;
         state.error = null;
         state.lastFetchParams = action.meta.arg;
+        state.lastListRequestSignature = action.meta.arg?.requestSignature || "";
         beginSyncSource(state, SYNC_SOURCE.backendFetch);
       })
       .addCase(fetchDocuments.fulfilled, (state, action) => {
+        // Ignore stale deferred reconciliations so older filter signatures cannot overwrite newer page-1 state.
+        const responseSignature = action.payload.requestSignature || "";
+        if (responseSignature && state.lastListRequestSignature && responseSignature !== state.lastListRequestSignature) {
+          endSyncSource(state, SYNC_SOURCE.backendFetch);
+          return;
+        }
+
         state.loading = false;
         state.backendDocuments = action.payload.documents;
         state.hasMore = action.payload.hasMore;
@@ -474,6 +483,12 @@ const documentsSlice = createSlice({
         endSyncSource(state, SYNC_SOURCE.backendFetch);
       })
       .addCase(fetchDocuments.rejected, (state, action) => {
+        const requestSignature = action.meta.arg?.requestSignature || "";
+        if (requestSignature && state.lastListRequestSignature && requestSignature !== state.lastListRequestSignature) {
+          endSyncSource(state, SYNC_SOURCE.backendFetch);
+          return;
+        }
+
         state.loading = false;
         state.loadingMore = false;
         state.error = action.payload;

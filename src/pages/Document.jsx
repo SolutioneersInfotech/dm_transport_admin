@@ -127,15 +127,18 @@ export default function Documents() {
   const [rowActionInFlight, setRowActionInFlight] = useState({});
   const [isFlagUpdating, setIsFlagUpdating] = useState(false);
   const [isFlagFilterLoading, setIsFlagFilterLoading] = useState(false);
-  const hasFlagFilterRequestStartedRef = useRef(false);
   const [isTypeFilterLoading, setIsTypeFilterLoading] = useState(false);
   const [activeTypeFilterValue, setActiveTypeFilterValue] = useState(null);
-  const hasTypeFilterRequestStartedRef = useRef(false);
   const isResumeFetchInFlightRef = useRef(false);
   const lastReconcileAtRef = useRef(0);
   const countPollIntervalRef = useRef(null);
   const deferredCountKickoffRef = useRef(null);
   const deferredCountTypeRef = useRef(null);
+  const deferredReconcileRef = useRef(null);
+  const deferredReconcileTypeRef = useRef(null);
+  const latestFilterSignatureRef = useRef("");
+  const pendingTypeFilterSignatureRef = useRef(null);
+  const pendingFlagFilterSignatureRef = useRef(null);
 
   const [searchParams] = useSearchParams();
 
@@ -493,6 +496,61 @@ export default function Documents() {
     ]
   );
 
+  const buildFilterSignature = useCallback(
+    ({ filters = typeFilters, isFlagged = isFlaggedParam } = {}) =>
+      JSON.stringify({
+        startDate,
+        endDate,
+        search: searchDebounced,
+        isSeen: isSeenParam,
+        isFlagged,
+        category: categoryParam,
+        filters,
+      }),
+    [startDate, endDate, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters]
+  );
+
+  const currentFilterSignature = useMemo(() => buildFilterSignature(), [buildFilterSignature]);
+
+  const clearDeferredReconciliation = useCallback(() => {
+    if (!deferredReconcileRef.current) return;
+
+    // Cancel stale deferred reconciliation so rapid filter changes only reconcile the newest signature.
+    if (deferredReconcileTypeRef.current === "idle") {
+      window.cancelIdleCallback?.(deferredReconcileRef.current);
+    } else {
+      clearTimeout(deferredReconcileRef.current);
+    }
+
+    deferredReconcileRef.current = null;
+    deferredReconcileTypeRef.current = null;
+  }, []);
+
+  const scheduleDeferredReconciliation = useCallback(
+    (signature, fetchArgs) => {
+      clearDeferredReconciliation();
+
+      const runReconciliation = () => {
+        deferredReconcileRef.current = null;
+        deferredReconcileTypeRef.current = null;
+
+        if (signature !== latestFilterSignatureRef.current) return;
+
+        // Backend pagination remains authoritative, but this reconciliation must not block page-1 filter UX.
+        dispatch(fetchDocuments({ ...fetchArgs, requestSignature: signature }));
+      };
+
+      if ("requestIdleCallback" in window) {
+        deferredReconcileRef.current = window.requestIdleCallback(runReconciliation, { timeout: 900 });
+        deferredReconcileTypeRef.current = "idle";
+      } else {
+        deferredReconcileRef.current = window.setTimeout(runReconciliation, 400);
+        deferredReconcileTypeRef.current = "timeout";
+      }
+    },
+    [clearDeferredReconciliation, dispatch]
+  );
+
   const realtimeFilters = useMemo(
     () => ({
       startDate,
@@ -565,11 +623,15 @@ export default function Documents() {
       return;
     }
 
+    const activeSignature = currentFilterSignature;
+    latestFilterSignatureRef.current = activeSignature;
+    clearDeferredReconciliation();
+
     dispatch(resetPagination());
 
     const runHeadFirstFetch = async () => {
       // Page-1 is head-first so the table paints immediately while backend pagination reconciles in the background.
-      await dispatch(
+      const headResult = await dispatch(
         fetchDocumentsHead({
           startDate,
           endDate,
@@ -582,10 +644,31 @@ export default function Documents() {
           limit: FAST_HEAD_PAGE_LIMIT,
         })
       );
+
+      if (!fetchDocumentsHead.fulfilled.match(headResult)) {
+        return;
+      }
+
+      if (activeSignature !== latestFilterSignatureRef.current) {
+        return;
+      }
+
+      // Type/flag filter spinners track the fast head fetch completion, not the heavy backend reconciliation.
+      if (pendingTypeFilterSignatureRef.current === activeSignature) {
+        setIsTypeFilterLoading(false);
+        setActiveTypeFilterValue(null);
+        pendingTypeFilterSignatureRef.current = null;
+      }
+
+      if (pendingFlagFilterSignatureRef.current === activeSignature) {
+        setIsFlagFilterLoading(false);
+        pendingFlagFilterSignatureRef.current = null;
+      }
+
       lastHeadFetchAtRef.current = Date.now();
 
-      // Deeper pages still rely on authoritative backend pagination metadata and ordering.
-      dispatch(fetchDocuments(currentFetchArgs));
+      // Keep backend authority, but defer page-1 reconciliation so perceived filter transitions stay fast.
+      scheduleDeferredReconciliation(activeSignature, currentFetchArgs);
     };
 
     runHeadFirstFetch();
@@ -602,6 +685,9 @@ export default function Documents() {
     lastFetched,
     loading,
     currentFetchArgs,
+    currentFilterSignature,
+    clearDeferredReconciliation,
+    scheduleDeferredReconciliation,
     availableFilterValues.length,
     hasDocumentPermissionRestrictions,
     limit,
@@ -644,6 +730,7 @@ export default function Documents() {
             page,
             limit,
             bypassCache: true,
+            requestSignature: buildFilterSignature({}),
           })
         ).unwrap();
       }
@@ -651,7 +738,7 @@ export default function Documents() {
       dispatch(endDocumentSync("manualRefresh"));
       setIsManualRefreshing(false);
     }
-  }, [dispatch, currentFetchArgs, isManualRefreshing, availableFilterValues.length, hasDocumentPermissionRestrictions, page, limit, startDate, endDate, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters]);
+  }, [dispatch, currentFetchArgs, isManualRefreshing, availableFilterValues.length, hasDocumentPermissionRestrictions, page, limit, startDate, endDate, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters, buildFilterSignature]);
 
   useEffect(() => {
     const typeParam = searchParams.get("type");
@@ -675,45 +762,17 @@ export default function Documents() {
     );
   }, [availableFilterValues]);
 
-  useEffect(() => {
-    if (!isFlagFilterLoading) return;
-
-    if (loading) {
-      hasFlagFilterRequestStartedRef.current = true;
-      return;
-    }
-
-    if (hasFlagFilterRequestStartedRef.current) {
-      setIsFlagFilterLoading(false);
-      hasFlagFilterRequestStartedRef.current = false;
-    }
-  }, [isFlagFilterLoading, loading]);
-
-  useEffect(() => {
-    if (!isTypeFilterLoading) return;
-
-    if (loading) {
-      hasTypeFilterRequestStartedRef.current = true;
-      return;
-    }
-
-    if (hasTypeFilterRequestStartedRef.current) {
-      setIsTypeFilterLoading(false);
-      setActiveTypeFilterValue(null);
-      hasTypeFilterRequestStartedRef.current = false;
-    }
-  }, [isTypeFilterLoading, loading]);
-
   // Toggle filter selection
   const toggleFilter = (filterValue) => {
     setActiveTypeFilterValue(filterValue);
     setIsTypeFilterLoading(true);
     setSelectedFilters((prev) => {
-      if (prev.includes(filterValue)) {
-        return prev.filter((f) => f !== filterValue);
-      } else {
-        return [...prev, filterValue];
-      }
+      const nextFilters = prev.includes(filterValue)
+        ? prev.filter((f) => f !== filterValue)
+        : [...prev, filterValue];
+
+      pendingTypeFilterSignatureRef.current = buildFilterSignature({ filters: nextFilters });
+      return nextFilters;
     });
   };
 
@@ -721,7 +780,11 @@ export default function Documents() {
   const removeFilter = (filterValue) => {
     setActiveTypeFilterValue(filterValue);
     setIsTypeFilterLoading(true);
-    setSelectedFilters((prev) => prev.filter((f) => f !== filterValue));
+    setSelectedFilters((prev) => {
+      const nextFilters = prev.filter((f) => f !== filterValue);
+      pendingTypeFilterSignatureRef.current = buildFilterSignature({ filters: nextFilters });
+      return nextFilters;
+    });
   };
 
   // Keep visible documents aligned with current admin document permissions
@@ -1175,6 +1238,7 @@ export default function Documents() {
             ...currentFetchArgs,
             page,
             limit,
+            requestSignature: buildFilterSignature({}),
           })
         );
       }
@@ -1199,7 +1263,12 @@ export default function Documents() {
     page,
     limit,
     lastFetched,
+    buildFilterSignature,
   ]);
+
+  useEffect(() => () => {
+    clearDeferredReconciliation();
+  }, [clearDeferredReconciliation]);
 
   useAppResumeSync(handleResumeSync, { debounceMs: 300 });
 
@@ -1532,9 +1601,8 @@ export default function Documents() {
           onClick={() => {
             const nextFlagFilter = flagFilter === null ? true : null;
             setFlagFilter(nextFlagFilter);
-            if (nextFlagFilter === true) {
-              setIsFlagFilterLoading(true);
-            }
+            setIsFlagFilterLoading(true);
+            pendingFlagFilterSignatureRef.current = buildFilterSignature({ isFlagged: nextFlagFilter === true ? true : null });
           }}
           variant="outline"
           size="sm"
