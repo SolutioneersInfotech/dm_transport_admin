@@ -54,9 +54,11 @@ import { getAvailableDocumentFilterOptions } from "../utils/documentPermissions"
 import { useAuth } from "../context/AuthContext";
 import useAppResumeSync from "../hooks/useAppResumeSync";
 import { subscribeToLiveDocuments } from "../services/documentRealtimeOverlay";
+import { invalidateDocumentRequestCache } from "../services/documentRequestCache";
 
 const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
 const ALL_DOCUMENTS_START_DATE = "1970-01-01";
+const FAST_HEAD_PAGE_LIMIT = 50;
 
 const isValidDateValue = (value) => value instanceof Date && isValid(value);
 
@@ -133,6 +135,7 @@ export default function Documents() {
   const lastReconcileAtRef = useRef(0);
   const countPollIntervalRef = useRef(null);
   const deferredCountKickoffRef = useRef(null);
+  const deferredCountTypeRef = useRef(null);
 
   const [searchParams] = useSearchParams();
 
@@ -200,6 +203,8 @@ export default function Documents() {
       if (!updateDocument.fulfilled.match(result)) {
         dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { flag: previousFlag } }));
         toast.error(result.payload || "Failed to update flag status");
+      } else {
+        invalidateDocumentRequestCache();
       }
     } catch (error) {
       dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { flag: previousFlag } }));
@@ -470,7 +475,7 @@ export default function Documents() {
       startDate,
       endDate,
       page: 1,
-      limit: 100,
+      limit: FAST_HEAD_PAGE_LIMIT,
       search: searchDebounced,
       isSeen: isSeenParam,
       isFlagged: isFlaggedParam,
@@ -573,7 +578,8 @@ export default function Documents() {
           isFlagged: isFlaggedParam,
           category: categoryParam,
           filters: typeFilters,
-          limit,
+          // 50 keeps first paint dense enough for admins while staying safely responsive.
+          limit: FAST_HEAD_PAGE_LIMIT,
         })
       );
       lastHeadFetchAtRef.current = Date.now();
@@ -611,8 +617,9 @@ export default function Documents() {
     dispatch(beginDocumentSync("manualRefresh"));
 
     try {
+      const forceRefresh = true;
       if (page === 1) {
-        // Manual refresh is head-first on page-1 for immediate visual feedback.
+        // Manual refresh stays head-first for immediate paint, but must still reconcile with backend authority.
         await dispatch(
           fetchDocumentsHead({
             startDate,
@@ -622,19 +629,21 @@ export default function Documents() {
             isFlagged: isFlaggedParam,
             category: categoryParam,
             filters: typeFilters,
-            limit,
+            limit: FAST_HEAD_PAGE_LIMIT,
+            bypassCache: true,
           })
         ).unwrap();
         lastHeadFetchAtRef.current = Date.now();
       }
 
-      const shouldReconcileWithBackend = page > 1 || Date.now() - lastHeadFetchAtRef.current > 1200;
+      const shouldReconcileWithBackend = forceRefresh || page > 1 || Date.now() - lastHeadFetchAtRef.current > 1200;
       if (shouldReconcileWithBackend) {
         await dispatch(
           fetchDocuments({
             ...currentFetchArgs,
             page,
             limit,
+            bypassCache: true,
           })
         ).unwrap();
       }
@@ -830,6 +839,7 @@ export default function Documents() {
       const result = await dispatch(deleteDocumentsThunk({ documents: docsToDelete }));
       if (deleteDocumentsThunk.fulfilled.match(result)) {
         didDelete = true;
+        invalidateDocumentRequestCache();
       } else {
         toast.error(result.payload || "Failed to delete documents");
       }
@@ -916,7 +926,7 @@ export default function Documents() {
           startDate,
           endDate,
           page: page + 1,
-          limit: 100,
+          limit: FAST_HEAD_PAGE_LIMIT,
           search: searchDebounced,
           isSeen: isSeenParam,
           isFlagged: isFlaggedParam,
@@ -1036,18 +1046,34 @@ export default function Documents() {
   useEffect(() => {
     const pollIntervalMs = 30 * 1000;
 
-    const pollCounts = async () => {
+    const activeCountFilterSignature = JSON.stringify({
+      startDate,
+      endDate,
+      search: searchDebounced,
+      isSeen: isSeenParam,
+      isFlagged: isFlaggedParam,
+      category: categoryParam,
+      filters: typeFilters,
+    });
+
+    const pollCounts = async ({ bypassCache = false } = {}) => {
       // Polling is fallback only; realtime overlay + resume reconciliation are primary freshness paths.
       if (document.visibilityState !== "visible") return;
       if (loading || loadingMore) return;
+      // Count responses are applied only when their filter signature still matches the active request.
       dispatch(beginDocumentSync("polling"));
       try {
         await dispatch(
           fetchDocumentCount({
             start_date: startDate,
             end_date: endDate,
+            search: searchDebounced,
             isSeen: isSeenParam,
             isFlagged: isFlaggedParam,
+            category: categoryParam,
+            filters: typeFilters,
+            requestSignature: activeCountFilterSignature,
+            bypassCache,
           })
         );
       } finally {
@@ -1060,24 +1086,29 @@ export default function Documents() {
       countPollIntervalRef.current = null;
     }
     if (deferredCountKickoffRef.current) {
-      if (typeof deferredCountKickoffRef.current === "number") {
-        clearTimeout(deferredCountKickoffRef.current);
-      } else {
+      // requestIdleCallback and setTimeout both return numeric handles in modern browsers,
+      // so we track scheduler type explicitly to avoid leaking stale deferred callbacks.
+      if (deferredCountTypeRef.current === "idle") {
         window.cancelIdleCallback?.(deferredCountKickoffRef.current);
+      } else if (deferredCountTypeRef.current === "timeout") {
+        clearTimeout(deferredCountKickoffRef.current);
       }
       deferredCountKickoffRef.current = null;
+      deferredCountTypeRef.current = null;
     }
 
     // Defer counts so first visible rows render first; counts are secondary metadata.
     const kickoffPolling = () => {
-      pollCounts();
+      pollCounts({ bypassCache: false });
       countPollIntervalRef.current = setInterval(pollCounts, pollIntervalMs);
     };
 
     if ("requestIdleCallback" in window) {
       deferredCountKickoffRef.current = window.requestIdleCallback(kickoffPolling, { timeout: 1000 });
+      deferredCountTypeRef.current = "idle";
     } else {
       deferredCountKickoffRef.current = window.setTimeout(kickoffPolling, 700);
+      deferredCountTypeRef.current = "timeout";
     }
 
     return () => {
@@ -1086,15 +1117,16 @@ export default function Documents() {
         countPollIntervalRef.current = null;
       }
       if (deferredCountKickoffRef.current) {
-        if (typeof deferredCountKickoffRef.current === "number") {
-          clearTimeout(deferredCountKickoffRef.current);
-        } else {
+        if (deferredCountTypeRef.current === "idle") {
           window.cancelIdleCallback?.(deferredCountKickoffRef.current);
+        } else if (deferredCountTypeRef.current === "timeout") {
+          clearTimeout(deferredCountKickoffRef.current);
         }
         deferredCountKickoffRef.current = null;
+        deferredCountTypeRef.current = null;
       }
     };
-  }, [dispatch, startDate, endDate, isSeenParam, isFlaggedParam, loading, loadingMore]);
+  }, [dispatch, startDate, endDate, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters, loading, loadingMore]);
 
   const handleResumeSync = useCallback(async () => {
     if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
@@ -1130,7 +1162,7 @@ export default function Documents() {
             isFlagged: isFlaggedParam,
             category: categoryParam,
             filters: typeFilters,
-            limit,
+            limit: FAST_HEAD_PAGE_LIMIT,
           })
         ).unwrap();
         lastHeadFetchAtRef.current = Date.now();
@@ -1702,6 +1734,8 @@ export default function Documents() {
                               if (!updateDocument.fulfilled.match(result)) {
                                 dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { seen: previousSeen } }));
                                 toast.error(result.payload || "Failed to update seen status");
+                              } else {
+                                invalidateDocumentRequestCache();
                               }
                             } catch (error) {
                               console.error("Failed to update seen status", error);
