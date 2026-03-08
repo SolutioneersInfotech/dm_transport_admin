@@ -58,7 +58,7 @@ import { invalidateDocumentRequestCache } from "../services/documentRequestCache
 
 const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
 const ALL_DOCUMENTS_START_DATE = "1970-01-01";
-const FAST_HEAD_PAGE_LIMIT = 50;
+const FAST_HEAD_PAGE_LIMIT = 100;
 
 const isValidDateValue = (value) => value instanceof Date && isValid(value);
 

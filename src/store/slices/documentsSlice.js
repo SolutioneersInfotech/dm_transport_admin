@@ -239,7 +239,7 @@ export const fetchMoreDocuments = createAsyncThunk(
 
 export const fetchDocumentsHead = createAsyncThunk(
   "documents/fetchDocumentsHead",
-  async ({ startDate, endDate, search = "", isSeen = null, isFlagged = null, category = null, filters = [], limit = 50, bypassCache = false }, { rejectWithValue }) => {
+  async ({ startDate, endDate, search = "", isSeen = null, isFlagged = null, category = null, filters = [], limit = 100, bypassCache = false }, { rejectWithValue }) => {
     try {
       const data = await fetchDocumentsHeadAPI({ startDate, endDate, search, isSeen, isFlagged, category, filters, limit, bypassCache });
       const documents = (data.documents || data.head || []).filter((document) => !isDeletedDocument(document));

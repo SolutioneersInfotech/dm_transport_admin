@@ -2,7 +2,7 @@ import { collection, limit, onSnapshot, query } from "firebase/firestore";
 import { firestore } from "../firebase/firebaseApp";
 
 const DOCUMENTS_COLLECTION = "documents";
-const REALTIME_LIMIT = 500;
+const REALTIME_LIMIT = 0;
 
 const isTruthyDeleteFlag = (value) => value === true || value === "true" || value === "yes" || value === 1 || value === "1";
 
