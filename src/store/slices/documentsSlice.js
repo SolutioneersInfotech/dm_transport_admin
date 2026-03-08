@@ -2,6 +2,7 @@ import { createSlice, createAsyncThunk, createSelector } from "@reduxjs/toolkit"
 import { fetchDocumentsRoute, fetchDocumentCountRoute, updateDocumentRoute, changeDocumentTypeRoute } from "../../utils/apiRoutes";
 import { deleteDocument, deleteDocuments } from "../../services/documentDeleteAPI";
 import { fetchDocumentsHeadAPI } from "../../services/documentHeadAPI";
+import { buildDocumentCacheKey, getCachedDocumentRequest, setCachedDocumentRequest } from "../../services/documentRequestCache";
 
 const SYNC_SOURCE = {
   backendFetch: "backendFetch",
@@ -134,6 +135,15 @@ const patchCollectionDocument = (collection = [], documentId, changes = {}) => {
   };
 };
 
+const LIST_CACHE_TTL_MS = 8 * 1000;
+const COUNT_CACHE_TTL_MS = 5 * 1000;
+
+const createDocumentsCacheKey = ({ startDate, endDate, page = 1, limit = 10, search = "", isSeen = null, isFlagged = null, category = null, filters = [] }) =>
+  buildDocumentCacheKey("documentsList", { startDate, endDate, page, limit, search, isSeen, isFlagged, category, filters });
+
+const createCountsCacheKey = ({ start_date, end_date, search = "", isSeen = null, isFlagged = null, category = null, filters = [] }) =>
+  buildDocumentCacheKey("documentsCount", { start_date, end_date, search, isSeen, isFlagged, category, filters });
+
 const beginSyncSource = (state, source) => {
   state.documentSyncInFlightCount += 1;
   state.documentSyncInFlightSources[source] = (state.documentSyncInFlightSources[source] || 0) + 1;
@@ -151,8 +161,16 @@ const endSyncSource = (state, source) => {
 
 export const fetchDocuments = createAsyncThunk(
   "documents/fetchDocuments",
-  async ({ startDate, endDate, page = 1, limit = 10, search = "", isSeen = null, isFlagged = null, category = null, filters = [] }, { rejectWithValue }) => {
+  async ({ startDate, endDate, page = 1, limit = 10, search = "", isSeen = null, isFlagged = null, category = null, filters = [], bypassCache = false }, { rejectWithValue }) => {
     try {
+      const cacheKey = createDocumentsCacheKey({ startDate, endDate, page, limit, search, isSeen, isFlagged, category, filters });
+      if (!bypassCache) {
+        const cached = getCachedDocumentRequest(cacheKey, LIST_CACHE_TTL_MS);
+        if (cached) {
+          return { ...cached, fromCache: true };
+        }
+      }
+
       const token = localStorage.getItem("adminToken");
       const url = fetchDocumentsRoute(startDate, endDate, { page, limit, search, isSeen, isFlagged, category, filters });
       const res = await fetch(url, {
@@ -164,14 +182,16 @@ export const fetchDocuments = createAsyncThunk(
       const data = await res.json();
       if (!res.ok) return rejectWithValue(data.message || "Failed to fetch documents");
 
-      const documents = (data.documents || []).filter((document) => !isDeletedDocument(document));
-      return {
-        documents,
+      const payload = {
+        documents: (data.documents || []).filter((document) => !isDeletedDocument(document)),
         hasMore: data.hasMore !== undefined ? data.hasMore : (data.documents?.length || 0) >= limit,
         page: data.page || page,
         limit: data.limit || limit,
         total: data.pagination?.totalDocuments || 0,
       };
+
+      setCachedDocumentRequest(cacheKey, payload);
+      return payload;
     } catch (error) {
       return rejectWithValue(error.message || "Failed to fetch documents");
     }
@@ -180,8 +200,16 @@ export const fetchDocuments = createAsyncThunk(
 
 export const fetchMoreDocuments = createAsyncThunk(
   "documents/fetchMoreDocuments",
-  async ({ startDate, endDate, page, limit = 10, search = "", isSeen = null, isFlagged = null, category = null, filters = [] }, { rejectWithValue }) => {
+  async ({ startDate, endDate, page, limit = 10, search = "", isSeen = null, isFlagged = null, category = null, filters = [], bypassCache = false }, { rejectWithValue }) => {
     try {
+      const cacheKey = createDocumentsCacheKey({ startDate, endDate, page, limit, search, isSeen, isFlagged, category, filters });
+      if (!bypassCache) {
+        const cached = getCachedDocumentRequest(cacheKey, LIST_CACHE_TTL_MS);
+        if (cached) {
+          return { ...cached, fromCache: true };
+        }
+      }
+
       const token = localStorage.getItem("adminToken");
       const url = fetchDocumentsRoute(startDate, endDate, { page, limit, search, isSeen, isFlagged, category, filters });
       const res = await fetch(url, {
@@ -193,14 +221,16 @@ export const fetchMoreDocuments = createAsyncThunk(
       const data = await res.json();
       if (!res.ok) return rejectWithValue(data.message || "Failed to fetch more documents");
 
-      const documents = (data.documents || []).filter((document) => !isDeletedDocument(document));
-      return {
-        documents,
+      const payload = {
+        documents: (data.documents || []).filter((document) => !isDeletedDocument(document)),
         hasMore: data.hasMore !== undefined ? data.hasMore : (data.documents?.length || 0) >= limit,
         page: data.page || page,
         limit: data.limit || limit,
         total: data.pagination?.totalDocuments || 0,
       };
+
+      setCachedDocumentRequest(cacheKey, payload);
+      return payload;
     } catch (error) {
       return rejectWithValue(error.message || "Failed to fetch more documents");
     }
@@ -209,9 +239,9 @@ export const fetchMoreDocuments = createAsyncThunk(
 
 export const fetchDocumentsHead = createAsyncThunk(
   "documents/fetchDocumentsHead",
-  async ({ startDate, endDate, search = "", isSeen = null, isFlagged = null, category = null, filters = [], limit = 30 }, { rejectWithValue }) => {
+  async ({ startDate, endDate, search = "", isSeen = null, isFlagged = null, category = null, filters = [], limit = 50, bypassCache = false }, { rejectWithValue }) => {
     try {
-      const data = await fetchDocumentsHeadAPI({ startDate, endDate, search, isSeen, isFlagged, category, filters, limit });
+      const data = await fetchDocumentsHeadAPI({ startDate, endDate, search, isSeen, isFlagged, category, filters, limit, bypassCache });
       const documents = (data.documents || data.head || []).filter((document) => !isDeletedDocument(document));
       return { documents, limit };
     } catch (error) {
@@ -220,10 +250,18 @@ export const fetchDocumentsHead = createAsyncThunk(
   }
 );
 
-export const fetchDocumentCount = createAsyncThunk("documents/fetchDocumentCount", async ({ start_date, end_date, isSeen = null, isFlagged = null }, { rejectWithValue }) => {
+export const fetchDocumentCount = createAsyncThunk("documents/fetchDocumentCount", async ({ start_date, end_date, search = "", isSeen = null, isFlagged = null, category = null, filters = [], bypassCache = false, requestSignature = "" }, { rejectWithValue }) => {
   try {
+    const cacheKey = createCountsCacheKey({ start_date, end_date, search, isSeen, isFlagged, category, filters });
+    if (!bypassCache) {
+      const cached = getCachedDocumentRequest(cacheKey, COUNT_CACHE_TTL_MS);
+      if (cached) {
+        return { ...cached, requestSignature };
+      }
+    }
+
     const token = localStorage.getItem("adminToken");
-    const url = fetchDocumentCountRoute(start_date, end_date, { isSeen, isFlagged });
+    const url = fetchDocumentCountRoute(start_date, end_date, { search, isSeen, isFlagged, category, filters });
     const res = await fetch(url, {
       method: "GET",
       cache: "no-store",
@@ -232,7 +270,9 @@ export const fetchDocumentCount = createAsyncThunk("documents/fetchDocumentCount
     const data = await res.json();
     if (!res.ok) return rejectWithValue(data.message || "Failed to fetch document counts");
 
-    return { counts: data.counts || {}, total: data.total || 0, filters: data.filters || {} };
+    const payload = { counts: data.counts || {}, total: data.total || 0, filters: data.filters || {} };
+    setCachedDocumentRequest(cacheKey, payload);
+    return { ...payload, requestSignature };
   } catch (error) {
     return rejectWithValue(error.message || "Failed to fetch document counts");
   }
@@ -341,6 +381,7 @@ const initialState = {
   countsError: null,
   countsTotal: 0,
   lastCountsFetched: null,
+  lastCountRequestSignature: "",
   documentSyncInFlightCount: 0,
   documentSyncInFlightSources: {},
 };
@@ -467,11 +508,18 @@ const documentsSlice = createSlice({
       .addCase(fetchDocumentsHead.rejected, (state) => {
         endSyncSource(state, SYNC_SOURCE.headFetch);
       })
-      .addCase(fetchDocumentCount.pending, (state) => {
+      .addCase(fetchDocumentCount.pending, (state, action) => {
         state.countsLoading = true;
         state.countsError = null;
+        state.lastCountRequestSignature = action.meta.arg?.requestSignature || "";
       })
       .addCase(fetchDocumentCount.fulfilled, (state, action) => {
+        // Ignore stale count responses so rapid filter changes (including type filters) cannot overwrite newer totals.
+        const responseSignature = action.payload.requestSignature || "";
+        if (responseSignature && state.lastCountRequestSignature && responseSignature !== state.lastCountRequestSignature) {
+          return;
+        }
+
         state.countsLoading = false;
         state.documentCounts = action.payload.counts;
         state.countsTotal = action.payload.total;
@@ -481,6 +529,11 @@ const documentsSlice = createSlice({
         state.lastCountsFetched = Date.now();
       })
       .addCase(fetchDocumentCount.rejected, (state, action) => {
+        const requestSignature = action.meta.arg?.requestSignature || "";
+        if (requestSignature && state.lastCountRequestSignature && requestSignature !== state.lastCountRequestSignature) {
+          return;
+        }
+
         state.countsLoading = false;
         state.countsError = action.payload;
       })

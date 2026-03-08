@@ -148,6 +148,23 @@ export const fetchDocumentCountRoute = (startDate, endDate, options = {}) => {
     params.append("isFlagged", options.isFlagged);
   }
 
+  if (options.search !== undefined) {
+    params.append("search", options.search || "");
+  }
+
+  if (options.category != null && options.category !== "") {
+    const arr = Array.isArray(options.category)
+      ? options.category.filter(Boolean).map((c) => String(c).trim())
+      : String(options.category).trim().split(/\s*,\s*/).filter(Boolean);
+    arr.forEach((c) => params.append("category", c));
+  }
+
+  if (options.filters && Array.isArray(options.filters) && options.filters.length > 0) {
+    options.filters.forEach((filter) => {
+      params.append("type", filter);
+    });
+  }
+
   const queryString = params.toString();
   return queryString ? `${baseUrl}?${queryString}` : baseUrl;
 };
