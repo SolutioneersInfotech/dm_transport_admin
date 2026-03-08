@@ -139,6 +139,7 @@ export default function Documents() {
   const latestFilterSignatureRef = useRef("");
   const pendingTypeFilterSignatureRef = useRef(null);
   const pendingFlagFilterSignatureRef = useRef(null);
+  const pendingFlagFilterSyncSignatureRef = useRef(null);
 
   const [searchParams] = useSearchParams();
 
@@ -510,6 +511,24 @@ export default function Documents() {
     [startDate, endDate, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters]
   );
 
+  const endPendingFlagFilterSync = useCallback(() => {
+    if (!pendingFlagFilterSyncSignatureRef.current) return;
+    pendingFlagFilterSyncSignatureRef.current = null;
+    dispatch(endDocumentSync("flagFilter"));
+  }, [dispatch]);
+
+  const beginFlagFilterSyncForSignature = useCallback((signature) => {
+    if (pendingFlagFilterSyncSignatureRef.current === signature) return;
+
+    if (pendingFlagFilterSyncSignatureRef.current) {
+      dispatch(endDocumentSync("flagFilter"));
+    }
+
+    pendingFlagFilterSyncSignatureRef.current = signature;
+    // Flag-filter toggles should surface refresh feedback immediately, before async head/deferred fetches settle.
+    dispatch(beginDocumentSync("flagFilter"));
+  }, [dispatch]);
+
   const currentFilterSignature = useMemo(() => buildFilterSignature(), [buildFilterSignature]);
 
   const clearDeferredReconciliation = useCallback(() => {
@@ -645,11 +664,28 @@ export default function Documents() {
         })
       );
 
+      const isLatestSignature = activeSignature === latestFilterSignatureRef.current;
+
       if (!fetchDocumentsHead.fulfilled.match(headResult)) {
+        // Failed latest head responses must clear fast filter loading so flag/type UX never gets stuck.
+        if (isLatestSignature) {
+          if (pendingTypeFilterSignatureRef.current === activeSignature) {
+            setIsTypeFilterLoading(false);
+            setActiveTypeFilterValue(null);
+            pendingTypeFilterSignatureRef.current = null;
+          }
+
+          if (pendingFlagFilterSignatureRef.current === activeSignature) {
+            setIsFlagFilterLoading(false);
+            pendingFlagFilterSignatureRef.current = null;
+            endPendingFlagFilterSync();
+            toast.error("Failed to load flagged documents");
+          }
+        }
         return;
       }
 
-      if (activeSignature !== latestFilterSignatureRef.current) {
+      if (!isLatestSignature) {
         return;
       }
 
@@ -661,8 +697,10 @@ export default function Documents() {
       }
 
       if (pendingFlagFilterSignatureRef.current === activeSignature) {
+        // Flag-filter UX completes on head data; backend reconciliation continues in background authority mode.
         setIsFlagFilterLoading(false);
         pendingFlagFilterSignatureRef.current = null;
+        endPendingFlagFilterSync();
       }
 
       lastHeadFetchAtRef.current = Date.now();
@@ -688,6 +726,7 @@ export default function Documents() {
     currentFilterSignature,
     clearDeferredReconciliation,
     scheduleDeferredReconciliation,
+    endPendingFlagFilterSync,
     availableFilterValues.length,
     hasDocumentPermissionRestrictions,
     limit,
@@ -777,6 +816,12 @@ export default function Documents() {
   };
 
   // Remove a specific filter
+  useEffect(() => {
+    if (!isFlagFilterLoading) {
+      endPendingFlagFilterSync();
+    }
+  }, [isFlagFilterLoading, endPendingFlagFilterSync]);
+
   const removeFilter = (filterValue) => {
     setActiveTypeFilterValue(filterValue);
     setIsTypeFilterLoading(true);
@@ -923,7 +968,11 @@ export default function Documents() {
     }
   };
 
-  const showSkeleton = loading && !isManualRefreshing && filteredDocuments?.length === 0;
+  const canRequestDocuments = !(hasDocumentPermissionRestrictions && availableFilterValues.length === 0);
+  const hasVisibleDocuments = (filteredDocuments?.length || 0) > 0;
+  // Initial empty state should stay in loading mode until the first list request resolves.
+  const isInitialDocumentsLoading = canRequestDocuments && !hasVisibleDocuments && (!lastFetchParams || (loading && !lastFetched));
+  const showSkeleton = loading && !isManualRefreshing && !isInitialDocumentsLoading && !hasVisibleDocuments;
   const displayedTotalDocuments = useMemo(() => {
     if (countsLoading) return null;
 
@@ -1268,7 +1317,8 @@ export default function Documents() {
 
   useEffect(() => () => {
     clearDeferredReconciliation();
-  }, [clearDeferredReconciliation]);
+    endPendingFlagFilterSync();
+  }, [clearDeferredReconciliation, endPendingFlagFilterSync]);
 
   useAppResumeSync(handleResumeSync, { debounceMs: 300 });
 
@@ -1600,9 +1650,12 @@ export default function Documents() {
         <Button
           onClick={() => {
             const nextFlagFilter = flagFilter === null ? true : null;
+            const nextSignature = buildFilterSignature({ isFlagged: nextFlagFilter === true ? true : null });
+
             setFlagFilter(nextFlagFilter);
             setIsFlagFilterLoading(true);
-            pendingFlagFilterSignatureRef.current = buildFilterSignature({ isFlagged: nextFlagFilter === true ? true : null });
+            pendingFlagFilterSignatureRef.current = nextSignature;
+            beginFlagFilterSyncForSignature(nextSignature);
           }}
           variant="outline"
           size="sm"
@@ -1741,7 +1794,16 @@ export default function Documents() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {showSkeleton ? (
+              {isInitialDocumentsLoading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="h-64 text-center">
+                    <div className="flex flex-col items-center justify-center text-gray-400">
+                      <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
+                      <p className="text-xs mt-2">Loading documents...</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : showSkeleton ? (
                 <DocumentTableSkeleton
                   rows={skeletonRows}
                   showFlag
