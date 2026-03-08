@@ -61,6 +61,14 @@ import { clearDocumentCountCache } from "../utils/documentCountCache";
 const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
 const ALL_DOCUMENTS_START_DATE = "1970-01-01";
 const FAST_HEAD_PAGE_LIMIT = 200;
+const FLAG_FILTER_LOADING_MESSAGES = [
+  "Loading flagged documents...",
+  "Scanning recent uploads...",
+  "Matching flagged entries...",
+  "Merging results...",
+  "Preparing document table...",
+  "Almost there...",
+];
 
 const isValidDateValue = (value) => value instanceof Date && isValid(value);
 
@@ -142,8 +150,13 @@ export default function Documents() {
   const pendingTypeFilterSignatureRef = useRef(null);
   const pendingFlagFilterSignatureRef = useRef(null);
   const pendingFlagFilterSyncSignatureRef = useRef(null);
+  const flagFilterLoadingIntervalRef = useRef(null);
   const hasResolvedInitialDocumentsFetchRef = useRef(false);
   const [hasResolvedInitialDocumentsFetch, setHasResolvedInitialDocumentsFetch] = useState(false);
+  const [activeFlagFilterLoadingSignature, setActiveFlagFilterLoadingSignature] = useState(null);
+  const [resolvedFlagFilterLoadingSignature, setResolvedFlagFilterLoadingSignature] = useState(null);
+  const [reconciledFlagFilterLoadingSignature, setReconciledFlagFilterLoadingSignature] = useState(null);
+  const [flagFilterLoadingMessage, setFlagFilterLoadingMessage] = useState("");
 
   const [searchParams] = useSearchParams();
 
@@ -520,9 +533,45 @@ export default function Documents() {
     if (!pendingFlagFilterSyncSignatureRef.current) return;
     if (signature && pendingFlagFilterSyncSignatureRef.current !== signature) return;
 
+    const completedSignature = pendingFlagFilterSyncSignatureRef.current;
     pendingFlagFilterSyncSignatureRef.current = null;
+    setReconciledFlagFilterLoadingSignature(completedSignature);
     dispatch(endDocumentSync("flagFilter"));
   }, [dispatch]);
+
+  const stopFlagFilterLoadingMessages = useCallback((signature = null) => {
+    // Ignore stale completions so an older response cannot stop the latest loading loop.
+    if (signature && signature !== activeFlagFilterLoadingSignature) return;
+
+    if (flagFilterLoadingIntervalRef.current) {
+      clearInterval(flagFilterLoadingIntervalRef.current);
+      flagFilterLoadingIntervalRef.current = null;
+    }
+
+    setFlagFilterLoadingMessage("");
+    if (!signature || signature === activeFlagFilterLoadingSignature) {
+      setActiveFlagFilterLoadingSignature(null);
+    }
+  }, [activeFlagFilterLoadingSignature]);
+
+  const startFlagFilterLoadingMessages = useCallback((signature) => {
+    if (flagFilterLoadingIntervalRef.current) {
+      clearInterval(flagFilterLoadingIntervalRef.current);
+      flagFilterLoadingIntervalRef.current = null;
+    }
+
+    setActiveFlagFilterLoadingSignature(signature);
+    setResolvedFlagFilterLoadingSignature(null);
+    setReconciledFlagFilterLoadingSignature(null);
+    // Flag-filter requests can take longer to materialize rows, so explicit progress text avoids a "stuck" feeling.
+    setFlagFilterLoadingMessage(FLAG_FILTER_LOADING_MESSAGES[0]);
+
+    let messageIndex = 0;
+    flagFilterLoadingIntervalRef.current = window.setInterval(() => {
+      messageIndex = (messageIndex + 1) % FLAG_FILTER_LOADING_MESSAGES.length;
+      setFlagFilterLoadingMessage(FLAG_FILTER_LOADING_MESSAGES[messageIndex]);
+    }, 1000);
+  }, []);
 
   const beginFlagFilterSyncForSignature = useCallback((signature) => {
     if (pendingFlagFilterSyncSignatureRef.current === signature) return;
@@ -716,10 +765,12 @@ export default function Documents() {
       if (!fetchDocumentsHead.fulfilled.match(headResult)) {
         // Latest-signature failures must close fast loading/sync loops; otherwise stale pending state can leave the UI spinning forever.
         if (isLatestSignature) {
+          setResolvedFlagFilterLoadingSignature(activeSignature);
           clearFastFilterLoadingForSignature(activeSignature);
           if (pendingFlagFilterSyncSignatureRef.current === activeSignature) {
             endPendingFlagFilterSync(activeSignature);
           }
+          stopFlagFilterLoadingMessages(activeSignature);
           toast.error("Failed to load documents. Please try again.");
         }
         return;
@@ -730,6 +781,7 @@ export default function Documents() {
       }
 
       // Type/flag filter spinners track the fast head fetch completion, not the heavy backend reconciliation.
+      setResolvedFlagFilterLoadingSignature(activeSignature);
       clearFastFilterLoadingForSignature(activeSignature);
 
       lastHeadFetchAtRef.current = Date.now();
@@ -757,6 +809,7 @@ export default function Documents() {
     scheduleDeferredReconciliation,
     clearFastFilterLoadingForSignature,
     endPendingFlagFilterSync,
+    stopFlagFilterLoadingMessages,
     availableFilterValues.length,
     hasDocumentPermissionRestrictions,
     limit,
@@ -996,13 +1049,53 @@ export default function Documents() {
 
   const canRequestDocuments = !(hasDocumentPermissionRestrictions && availableFilterValues.length === 0);
   const hasVisibleDocuments = (filteredDocuments?.length || 0) > 0;
+  const isLatestFlagFilterLoadingSignature =
+    !!activeFlagFilterLoadingSignature &&
+    activeFlagFilterLoadingSignature === latestFilterSignatureRef.current;
+  const isFlagFilterTableReadyWithRows = isLatestFlagFilterLoadingSignature && hasVisibleDocuments;
+  // Head fetch completion alone is insufficient; we also need either visible rows or a fully reconciled empty result.
+  const isFlagFilterTableReadyWithFinalEmpty =
+    isLatestFlagFilterLoadingSignature &&
+    resolvedFlagFilterLoadingSignature === activeFlagFilterLoadingSignature &&
+    reconciledFlagFilterLoadingSignature === activeFlagFilterLoadingSignature &&
+    !hasVisibleDocuments;
+  const showFlagFilterTablePreparationLoader =
+    isLatestFlagFilterLoadingSignature &&
+    flagFilter === true &&
+    page === 1 &&
+    !isFlagFilterTableReadyWithRows &&
+    !isFlagFilterTableReadyWithFinalEmpty;
+
+  useEffect(() => {
+    if (isFlagFilterTableReadyWithRows || isFlagFilterTableReadyWithFinalEmpty || flagFilter !== true) {
+      stopFlagFilterLoadingMessages(activeFlagFilterLoadingSignature);
+    }
+  }, [
+    isFlagFilterTableReadyWithRows,
+    isFlagFilterTableReadyWithFinalEmpty,
+    flagFilter,
+    activeFlagFilterLoadingSignature,
+    stopFlagFilterLoadingMessages,
+  ]);
+
+  useEffect(() => () => {
+    if (flagFilterLoadingIntervalRef.current) {
+      clearInterval(flagFilterLoadingIntervalRef.current);
+      flagFilterLoadingIntervalRef.current = null;
+    }
+  }, []);
+
   // Keep initial view in loader state until the first request resolves; only then can an empty result mean "No documents found".
   const showInitialDocumentsLoader =
     canRequestDocuments &&
     !hasVisibleDocuments &&
     (loading || !hasResolvedInitialDocumentsFetch);
   const showSkeleton = loading && !isManualRefreshing && !showInitialDocumentsLoader && !hasVisibleDocuments;
-  const showEmptyDocumentsState = !loading && hasResolvedInitialDocumentsFetch && !hasVisibleDocuments;
+  const showEmptyDocumentsState =
+    !loading &&
+    hasResolvedInitialDocumentsFetch &&
+    !hasVisibleDocuments &&
+    !showFlagFilterTablePreparationLoader;
   const displayedTotalDocuments = useMemo(() => {
     if (countsLoading) return null;
 
@@ -1686,6 +1779,14 @@ export default function Documents() {
             setIsFlagFilterLoading(true);
             pendingFlagFilterSignatureRef.current = nextSignature;
             beginFlagFilterSyncForSignature(nextSignature);
+            if (nextFlagFilter === true) {
+              startFlagFilterLoadingMessages(nextSignature);
+              return;
+            }
+
+            stopFlagFilterLoadingMessages();
+            setResolvedFlagFilterLoadingSignature(null);
+            setReconciledFlagFilterLoadingSignature(null);
           }}
           variant="outline"
           size="sm"
@@ -1842,6 +1943,15 @@ export default function Documents() {
                   rowHeightClass="h-9"
                   showActionColumn
                 />
+              ) : showFlagFilterTablePreparationLoader ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="h-64 text-center">
+                    <div className="flex flex-col items-center justify-center text-gray-400">
+                      <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
+                      <p className="text-xs mt-2">{flagFilterLoadingMessage || FLAG_FILTER_LOADING_MESSAGES[0]}</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
               ) : showEmptyDocumentsState ? (
                 <TableRow>
                   <TableCell colSpan={8} className="h-64 text-center">
