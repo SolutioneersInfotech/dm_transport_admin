@@ -225,6 +225,22 @@ function formatLastSeen(lastSeen) {
   });
 }
 
+
+function resolveReplyTargetId(message) {
+  if (!message) return null;
+
+  if (typeof message.replyToId === "string" && message.replyToId.trim()) {
+    return message.replyToId;
+  }
+
+  if (typeof message.replyTo === "string" && message.replyTo.trim()) {
+    return message.replyTo;
+  }
+
+  const nestedId = message.replyTo?.id ?? message.replyTo?.msgId ?? null;
+  return typeof nestedId === "string" && nestedId.trim() ? nestedId : null;
+}
+
 export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
   const { user } = useAuth();
   const dispatch = useAppDispatch();
@@ -883,9 +899,13 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
                 msg.type === 1 &&
                 (prevMsg.sendername ?? "") === (msg.sendername ?? "");
               const showSenderName = !prevMsg || !sameType || !sameAdmin;
-              const replyToMessage = msg.replyTo
-                ? messages.find((m) => m.msgId === msg.replyTo)
+              const replyTargetId = resolveReplyTargetId(msg);
+              // Prefer resolving the live target from currently loaded thread messages.
+              const liveReplyTarget = replyTargetId
+                ? messages.find((m) => m.msgId === replyTargetId)
                 : null;
+              // Fall back to legacy/mobile reply snapshot when the target message is not loaded.
+              const replyToMessage = liveReplyTarget || msg.replyToSnapshot || null;
               return (
                 <div
                   key={msg.msgId}
@@ -920,12 +940,15 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
                       senderName={senderName}
                       showSenderName={showSenderName}
                       replyToMessage={replyToMessage}
+                      replyTargetId={replyTargetId}
                       isLastMessageInChat={isLastMessageInChat}
                       onReplyClick={(msgId) => {
+                        if (!msgId) return;
                         const el = document.getElementById(`msg-${msgId}`);
-                        el?.scrollIntoView({ behavior: "smooth", block: "center" });
-                        el?.classList.add("ring-2", "ring-blue-500");
-                        setTimeout(() => el?.classList.remove("ring-2", "ring-blue-500"), 1200);
+                        if (!el) return;
+                        el.scrollIntoView({ behavior: "smooth", block: "center" });
+                        el.classList.add("ring-2", "ring-blue-500");
+                        setTimeout(() => el.classList.remove("ring-2", "ring-blue-500"), 1200);
                       }}
                       onImageClick={(url) =>
                         setLightboxMedia({
