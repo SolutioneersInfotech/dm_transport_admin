@@ -470,7 +470,7 @@ export default function Documents() {
       startDate,
       endDate,
       page: 1,
-      limit: 100,
+      limit: 200,
       search: searchDebounced,
       isSeen: isSeenParam,
       isFlagged: isFlaggedParam,
