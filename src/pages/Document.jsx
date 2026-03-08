@@ -482,6 +482,7 @@ export default function Documents() {
       startDate,
       endDate,
       page: 1,
+      // Page-1 head fetch and backend reconciliation must share the same page size contract.
       limit: FAST_HEAD_PAGE_LIMIT,
       search: searchDebounced,
       isSeen: isSeenParam,
@@ -696,7 +697,7 @@ export default function Documents() {
           isFlagged: isFlaggedParam,
           category: categoryParam,
           filters: typeFilters,
-          // Keep head fetch limit aligned with page-1 reconciliation for consistent first paint.
+          // Page-1 head fetch and backend reconciliation must share the same page size contract.
           limit: FAST_HEAD_PAGE_LIMIT,
         })
       );
