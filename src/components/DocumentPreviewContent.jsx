@@ -5,7 +5,7 @@ import { Button } from "./ui/button";
 import { Copy, Flag, X, Check, MessageCircle, Send, CheckCircle2, Circle, Trash2, Pencil, Plus, Download, Redo2, Undo2 } from "lucide-react";
 import { fetchDocumentByIdRoute } from "../utils/apiRoutes";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
-import { updateDocument, deleteDocumentThunk, changeDocumentType } from "../store/slices/documentsSlice";
+import { updateDocument, deleteDocumentThunk, changeDocumentType, optimisticUpdateDocumentRow } from "../store/slices/documentsSlice";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "./ui/select";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "./ui/tooltip";
 import { Popover, PopoverTrigger, PopoverContent } from "./ui/popover";
@@ -58,6 +58,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   const [pdfLoadError, setPdfLoadError] = useState("");
   const [docSizeMb, setDocSizeMb] = useState(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [docActionInFlight, setDocActionInFlight] = useState({});
 
   // Format date for In time / Out time display
   const formatDateTime = (value) => {
@@ -291,15 +292,35 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     }
   };
 
+  const isActionPending = (documentId, actionType) => docActionInFlight[`${documentId}:${actionType}`] === true;
+
+  const setActionPending = (documentId, actionType, isPending) => {
+    if (!documentId) return;
+    setDocActionInFlight((prev) => {
+      const key = `${documentId}:${actionType}`;
+      if (isPending) return { ...prev, [key]: true };
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
   const handleFlagDocument = async () => {
     const doc = fullDoc || selectedDoc;
+    if (!doc || isActionPending(doc.id, "flag")) return;
     const reason = flagReason.trim();
     const flagData = {
       flagged: true,
       reason,
     };
+    const previousFlag = doc.flag ?? { flagged: false, reason: "" };
+
+    // Optimistic row update keeps preview and table state in sync immediately.
+    dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { flag: flagData } }));
 
     try {
+      setActionPending(doc.id, "flag", true);
       const result = await dispatch(updateDocument({ 
         document: doc, 
         flag: flagData 
@@ -316,22 +337,31 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
         setFlagReason("");
         toast.success("Document flagged successfully");
       } else {
+        dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { flag: previousFlag } }));
         toast.error(result.payload || "Failed to flag document");
       }
     } catch (error) {
+      dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { flag: previousFlag } }));
       console.error("Failed to flag document:", error);
       toast.error("Failed to flag document. Please try again.");
+    } finally {
+      setActionPending(doc.id, "flag", false);
     }
   };
 
   const handleUnflagDocument = async () => {
     const doc = fullDoc || selectedDoc;
+    if (!doc || isActionPending(doc.id, "flag")) return;
     const flagData = {
       flagged: false,
       reason: "",
     };
+    const previousFlag = doc.flag ?? { flagged: true, reason: doc.flag?.reason ?? "" };
+
+    dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { flag: flagData } }));
 
     try {
+      setActionPending(doc.id, "flag", true);
       const result = await dispatch(updateDocument({ 
         document: doc, 
         flag: flagData 
@@ -346,20 +376,29 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
         }
         toast.success("Document unflagged successfully");
       } else {
+        dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { flag: previousFlag } }));
         toast.error(result.payload || "Failed to unflag document");
       }
     } catch (error) {
+      dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { flag: previousFlag } }));
       console.error("Failed to unflag document:", error);
       toast.error("Failed to unflag document. Please try again.");
+    } finally {
+      setActionPending(doc.id, "flag", false);
     }
   };
 
   const handleToggleSeenStatus = async () => {
     const doc = fullDoc || selectedDoc;
+    if (!doc || isActionPending(doc.id, "seen")) return;
     // Toggle seen status
     const newSeenStatus = doc.seen === true ? false : true;
+    const previousSeen = doc.seen;
+
+    dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { seen: newSeenStatus } }));
     
     try {
+      setActionPending(doc.id, "seen", true);
       const result = await dispatch(updateDocument({ 
         document: doc, 
         seen: newSeenStatus 
@@ -374,11 +413,15 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
         }
         toast.success(newSeenStatus ? "Document marked as seen" : "Document marked as unseen");
       } else {
+        dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { seen: previousSeen } }));
         toast.error(result.payload || "Failed to update seen status");
       }
     } catch (error) {
+      dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { seen: previousSeen } }));
       console.error("Failed to update seen status:", error);
       toast.error("Failed to update seen status. Please try again.");
+    } finally {
+      setActionPending(doc.id, "seen", false);
     }
   };
 
@@ -966,6 +1009,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                 <Button
                   onClick={handleFlagDocument}
                   size="sm"
+                  disabled={isActionPending(doc.id, "flag")}
                   className="bg-[#1f6feb] hover:bg-[#1a5fd4] text-white"
                 >
                   Flag Document
@@ -1058,6 +1102,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
               <TooltipTrigger asChild>
                 <Button 
                   onClick={handleToggleSeenStatus}
+                  disabled={isActionPending(doc.id, "seen")}
                   size="icon"
                   className={`h-10 w-10 cursor-pointer flex-1 ${
                     doc.seen === true 
@@ -1128,6 +1173,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
               <TooltipTrigger asChild>
                 <Button
                   onClick={handleToggleFlagStatus}
+                  disabled={isActionPending(doc.id, "flag")}
                   size="icon"
                   variant="outline"
                   className={`h-10 w-10 cursor-pointer flex-1 ${

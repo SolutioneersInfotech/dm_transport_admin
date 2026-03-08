@@ -18,6 +18,7 @@ import {
   setHeadDocuments,
   beginDocumentSync,
   endDocumentSync,
+  optimisticUpdateDocumentRow,
   selectIsDocumentSyncActive,
 } from "../store/slices/documentsSlice";
 import DocumentPreviewContent from "../components/DocumentPreviewContent";
@@ -121,6 +122,7 @@ export default function Documents() {
   const spinnerShowTimerRef = useRef(null);
   const spinnerHideTimerRef = useRef(null);
   const lastHeadFetchAtRef = useRef(0);
+  const [rowActionInFlight, setRowActionInFlight] = useState({});
   const [isFlagUpdating, setIsFlagUpdating] = useState(false);
   const [isFlagFilterLoading, setIsFlagFilterLoading] = useState(false);
   const hasFlagFilterRequestStartedRef = useRef(false);
@@ -129,6 +131,8 @@ export default function Documents() {
   const hasTypeFilterRequestStartedRef = useRef(false);
   const isResumeFetchInFlightRef = useRef(false);
   const lastReconcileAtRef = useRef(0);
+  const countPollIntervalRef = useRef(null);
+  const deferredCountKickoffRef = useRef(null);
 
   const [searchParams] = useSearchParams();
 
@@ -144,6 +148,28 @@ export default function Documents() {
 
   const hasDocumentPermissionRestrictions = Array.isArray(user?.permissions);
 
+
+  const isDocActionPending = useCallback((documentId, actionType) => {
+    if (!documentId) return false;
+    return rowActionInFlight[`${documentId}:${actionType}`] === true;
+  }, [rowActionInFlight]);
+
+  const setDocActionPending = useCallback((documentId, actionType, isPending) => {
+    if (!documentId) return;
+
+    setRowActionInFlight((prev) => {
+      const key = `${documentId}:${actionType}`;
+      if (isPending) {
+        return { ...prev, [key]: true };
+      }
+
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
+
   const availableFilterValues = useMemo(
     () => availableFilterOptions.map((option) => option.filterValue),
     [availableFilterOptions]
@@ -151,28 +177,39 @@ export default function Documents() {
 
 
   const handleToggleFlag = useCallback(async (doc) => {
-    if (!doc || isFlagUpdating) return;
+    if (!doc) return;
+
+    const docActionKey = "flag";
+    if (isDocActionPending(doc.id, docActionKey)) return;
 
     const isFlagged = doc.flag?.flagged || doc.flagged || doc.isFlagged;
     const reason = doc.flag?.reason ?? doc.flagged_reason ?? "";
+    const previousFlag = doc.flag ?? { flagged: isFlagged, reason };
     const nextFlag = {
       flagged: !isFlagged,
       reason: !isFlagged ? reason : "",
     };
 
+    // Optimistic row updates keep page interactions instant while backend write is in flight.
+    dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { flag: nextFlag } }));
+
     try {
+      setDocActionPending(doc.id, docActionKey, true);
       setIsFlagUpdating(true);
       const result = await dispatch(updateDocument({ document: doc, flag: nextFlag }));
       if (!updateDocument.fulfilled.match(result)) {
+        dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { flag: previousFlag } }));
         toast.error(result.payload || "Failed to update flag status");
       }
     } catch (error) {
+      dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { flag: previousFlag } }));
       console.error("Failed to update flag status:", error);
       toast.error("Failed to update flag status");
     } finally {
+      setDocActionPending(doc.id, docActionKey, false);
       setIsFlagUpdating(false);
     }
-  }, [dispatch, isFlagUpdating]);
+  }, [dispatch, isDocActionPending, setDocActionPending]);
 
   // Sync selectedDoc with Redux state when document is updated
   useEffect(() => {
@@ -519,10 +556,33 @@ export default function Documents() {
 
     const isStale = lastFetched && Date.now() - lastFetched > 30 * 1000;
 
-    if ((paramsChanged || isStale) && !loading) {
-      dispatch(resetPagination());
-      dispatch(fetchDocuments(currentFetchArgs));
+    if (!(paramsChanged || isStale) || loading) {
+      return;
     }
+
+    dispatch(resetPagination());
+
+    const runHeadFirstFetch = async () => {
+      // Page-1 is head-first so the table paints immediately while backend pagination reconciles in the background.
+      await dispatch(
+        fetchDocumentsHead({
+          startDate,
+          endDate,
+          search: searchDebounced,
+          isSeen: isSeenParam,
+          isFlagged: isFlaggedParam,
+          category: categoryParam,
+          filters: typeFilters,
+          limit,
+        })
+      );
+      lastHeadFetchAtRef.current = Date.now();
+
+      // Deeper pages still rely on authoritative backend pagination metadata and ordering.
+      dispatch(fetchDocuments(currentFetchArgs));
+    };
+
+    runHeadFirstFetch();
   }, [
     dispatch,
     startDate,
@@ -538,6 +598,7 @@ export default function Documents() {
     currentFetchArgs,
     availableFilterValues.length,
     hasDocumentPermissionRestrictions,
+    limit,
   ]);
 
   const handleManualRefresh = useCallback(async () => {
@@ -551,7 +612,7 @@ export default function Documents() {
 
     try {
       if (page === 1) {
-        // Head-first refresh keeps page-1 feeling instant while backend pagination remains authoritative.
+        // Manual refresh is head-first on page-1 for immediate visual feedback.
         await dispatch(
           fetchDocumentsHead({
             startDate,
@@ -564,15 +625,19 @@ export default function Documents() {
             limit,
           })
         ).unwrap();
+        lastHeadFetchAtRef.current = Date.now();
       }
 
-      await dispatch(
-        fetchDocuments({
-          ...currentFetchArgs,
-          page,
-          limit,
-        })
-      ).unwrap();
+      const shouldReconcileWithBackend = page > 1 || Date.now() - lastHeadFetchAtRef.current > 1200;
+      if (shouldReconcileWithBackend) {
+        await dispatch(
+          fetchDocuments({
+            ...currentFetchArgs,
+            page,
+            limit,
+          })
+        ).unwrap();
+      }
     } finally {
       dispatch(endDocumentSync("manualRefresh"));
       setIsManualRefreshing(false);
@@ -990,10 +1055,45 @@ export default function Documents() {
       }
     };
 
-    pollCounts();
-    const intervalId = setInterval(pollCounts, pollIntervalMs);
+    if (countPollIntervalRef.current) {
+      clearInterval(countPollIntervalRef.current);
+      countPollIntervalRef.current = null;
+    }
+    if (deferredCountKickoffRef.current) {
+      if (typeof deferredCountKickoffRef.current === "number") {
+        clearTimeout(deferredCountKickoffRef.current);
+      } else {
+        window.cancelIdleCallback?.(deferredCountKickoffRef.current);
+      }
+      deferredCountKickoffRef.current = null;
+    }
 
-    return () => clearInterval(intervalId);
+    // Defer counts so first visible rows render first; counts are secondary metadata.
+    const kickoffPolling = () => {
+      pollCounts();
+      countPollIntervalRef.current = setInterval(pollCounts, pollIntervalMs);
+    };
+
+    if ("requestIdleCallback" in window) {
+      deferredCountKickoffRef.current = window.requestIdleCallback(kickoffPolling, { timeout: 1000 });
+    } else {
+      deferredCountKickoffRef.current = window.setTimeout(kickoffPolling, 700);
+    }
+
+    return () => {
+      if (countPollIntervalRef.current) {
+        clearInterval(countPollIntervalRef.current);
+        countPollIntervalRef.current = null;
+      }
+      if (deferredCountKickoffRef.current) {
+        if (typeof deferredCountKickoffRef.current === "number") {
+          clearTimeout(deferredCountKickoffRef.current);
+        } else {
+          window.cancelIdleCallback?.(deferredCountKickoffRef.current);
+        }
+        deferredCountKickoffRef.current = null;
+      }
+    };
   }, [dispatch, startDate, endDate, isSeenParam, isFlaggedParam, loading, loadingMore]);
 
   const handleResumeSync = useCallback(async () => {
@@ -1589,11 +1689,27 @@ export default function Documents() {
                         } ${
                           isSelected && !isActive ? "bg-[#1f6feb]/10 ring-1 ring-inset ring-[#1f6feb]/30" : ""
                         }`}
-                        onClick={() => {
+                        onClick={async () => {
                           setSelectedDoc(doc);
                           setIsPreviewOpen(true);
-                          if (doc.seen !== true) {
-                            dispatch(updateDocument({ document: doc, seen: true }));
+                          if (doc.seen !== true && !isDocActionPending(doc.id, "seen")) {
+                            const previousSeen = doc.seen;
+                            // Optimistically flipping seen state removes click latency for row-open interactions.
+                            dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { seen: true } }));
+                            setDocActionPending(doc.id, "seen", true);
+                            try {
+                              const result = await dispatch(updateDocument({ document: doc, seen: true }));
+                              if (!updateDocument.fulfilled.match(result)) {
+                                dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { seen: previousSeen } }));
+                                toast.error(result.payload || "Failed to update seen status");
+                              }
+                            } catch (error) {
+                              console.error("Failed to update seen status", error);
+                              dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { seen: previousSeen } }));
+                              toast.error("Failed to update seen status");
+                            } finally {
+                              setDocActionPending(doc.id, "seen", false);
+                            }
                           }
                         }}
                       >
@@ -1642,7 +1758,7 @@ export default function Documents() {
                             }}
                             aria-label={doc.flag?.flagged || doc.flagged || doc.isFlagged ? "Unflag document" : "Flag document"}
                             title={doc.flag?.flagged || doc.flagged || doc.isFlagged ? "Unflag document" : "Flag document"}
-                            disabled={isFlagUpdating}
+                            disabled={isDocActionPending(doc.id, "flag") || isFlagUpdating}
                           >
                             {doc.flag?.flagged || doc.flagged || doc.isFlagged ? (
                               <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-red-500 transition-colors duration-200 group-hover:animate-pulse" fill="#ef4444" />
