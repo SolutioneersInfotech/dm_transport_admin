@@ -8,6 +8,7 @@ import {
   fetchDocumentsHead,
   fetchMoreDocuments,
   resetPagination,
+  preparePageOneFilterTransition,
   updateDocument,
   deleteDocumentThunk,
   deleteDocumentsThunk,
@@ -685,9 +686,11 @@ export default function Documents() {
     }
 
     dispatch(resetPagination());
+    // Page-1 filter transitions clear stale backend rows so head overlay data becomes the immediate visible source.
+    dispatch(preparePageOneFilterTransition());
 
     const runHeadFirstFetch = async () => {
-      // Page-1 is head-first so the table paints immediately while backend pagination reconciles in the background.
+      // Page-1 is head-first so fast head results paint first while backend reconciliation remains authoritative in the background.
       const headResult = await dispatch(
         fetchDocumentsHead({
           startDate,
