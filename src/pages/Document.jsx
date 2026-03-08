@@ -514,8 +514,10 @@ export default function Documents() {
     [startDate, endDate, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters]
   );
 
-  const endPendingFlagFilterSync = useCallback(() => {
+  const endPendingFlagFilterSync = useCallback((signature = null) => {
     if (!pendingFlagFilterSyncSignatureRef.current) return;
+    if (signature && pendingFlagFilterSyncSignatureRef.current !== signature) return;
+
     pendingFlagFilterSyncSignatureRef.current = null;
     dispatch(endDocumentSync("flagFilter"));
   }, [dispatch]);
@@ -580,7 +582,7 @@ export default function Documents() {
             signature === latestFilterSignatureRef.current &&
             pendingFlagFilterSyncSignatureRef.current === signature
           ) {
-            endPendingFlagFilterSync();
+            endPendingFlagFilterSync(signature);
           }
         });
       };
@@ -701,18 +703,18 @@ export default function Documents() {
 
       const isLatestSignature = activeSignature === latestFilterSignatureRef.current;
 
-      // Initial empty-state must wait for first head/list attempt to resolve so we don't flash "No documents found" too early.
+      // Initial empty-state must wait for first request resolution so we never flash "No documents found" before data returns.
       if (isLatestSignature && !hasResolvedInitialDocumentsFetchRef.current) {
         hasResolvedInitialDocumentsFetchRef.current = true;
         setHasResolvedInitialDocumentsFetch(true);
       }
 
       if (!fetchDocumentsHead.fulfilled.match(headResult)) {
-        // Latest-signature failures must close the fast-loading loop and flag sync spinner so filter UX cannot get stuck.
+        // Latest-signature failures must close fast loading/sync loops; otherwise stale pending state can leave the UI spinning forever.
         if (isLatestSignature) {
           clearFastFilterLoadingForSignature(activeSignature);
           if (pendingFlagFilterSyncSignatureRef.current === activeSignature) {
-            endPendingFlagFilterSync();
+            endPendingFlagFilterSync(activeSignature);
           }
           toast.error("Failed to load documents. Please try again.");
         }
@@ -990,7 +992,7 @@ export default function Documents() {
 
   const canRequestDocuments = !(hasDocumentPermissionRestrictions && availableFilterValues.length === 0);
   const hasVisibleDocuments = (filteredDocuments?.length || 0) > 0;
-  // Initial empty state should stay loading until the first head/list request actually resolves.
+  // Keep initial view in loader state until the first request resolves; only then can an empty result mean "No documents found".
   const isInitialDocumentsLoading = canRequestDocuments && !hasVisibleDocuments && !hasResolvedInitialDocumentsFetch;
   const showSkeleton = loading && !isManualRefreshing && !isInitialDocumentsLoading && !hasVisibleDocuments;
   const displayedTotalDocuments = useMemo(() => {
