@@ -112,6 +112,28 @@ const getVisibleDocuments = (state) => {
   return mergeVisiblePageOne(state);
 };
 
+const patchOverlayDocument = (overlayById = {}, documentId, changes = {}) => {
+  if (!documentId || !overlayById[documentId]) return overlayById;
+
+  return {
+    ...overlayById,
+    [documentId]: {
+      ...overlayById[documentId],
+      ...changes,
+    },
+  };
+};
+
+const patchCollectionDocument = (collection = [], documentId, changes = {}) => {
+  const index = collection.findIndex((doc) => doc.id === documentId);
+  if (index < 0) return;
+
+  collection[index] = {
+    ...collection[index],
+    ...changes,
+  };
+};
+
 const beginSyncSource = (state, source) => {
   state.documentSyncInFlightCount += 1;
   state.documentSyncInFlightSources[source] = (state.documentSyncInFlightSources[source] || 0) + 1;
@@ -377,6 +399,16 @@ const documentsSlice = createSlice({
     endDocumentSync: (state, action) => {
       endSyncSource(state, action.payload || "unknown");
     },
+    optimisticUpdateDocumentRow: (state, action) => {
+      const { documentId, changes } = action.payload || {};
+      if (!documentId || !changes) return;
+
+      patchCollectionDocument(state.backendDocuments, documentId, changes);
+      patchCollectionDocument(state.documents, documentId, changes);
+      state.headOverlayById = patchOverlayDocument(state.headOverlayById, documentId, changes);
+      state.liveOverlayById = patchOverlayDocument(state.liveOverlayById, documentId, changes);
+      state.documents = getVisibleDocuments(state);
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -533,6 +565,7 @@ export const {
   trimVisibleDocumentsToPageSize,
   beginDocumentSync,
   endDocumentSync,
+  optimisticUpdateDocumentRow,
 } = documentsSlice.actions;
 
 export const selectIsDocumentSyncActive = createSelector([(state) => state.documents.documentSyncInFlightCount], (count) => count > 0);
