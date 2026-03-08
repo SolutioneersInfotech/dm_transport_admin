@@ -59,7 +59,7 @@ import { clearDocumentCountCache } from "../utils/documentCountCache";
 
 const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
 const ALL_DOCUMENTS_START_DATE = "1970-01-01";
-const FAST_HEAD_PAGE_LIMIT = 100;
+const FAST_HEAD_PAGE_LIMIT = 200;
 
 const isValidDateValue = (value) => value instanceof Date && isValid(value);
 
@@ -482,7 +482,7 @@ export default function Documents() {
       startDate,
       endDate,
       page: 1,
-      limit: 200,
+      limit: FAST_HEAD_PAGE_LIMIT,
       search: searchDebounced,
       isSeen: isSeenParam,
       isFlagged: isFlaggedParam,
@@ -696,7 +696,7 @@ export default function Documents() {
           isFlagged: isFlaggedParam,
           category: categoryParam,
           filters: typeFilters,
-          // 50 keeps first paint dense enough for admins while staying safely responsive.
+          // Keep head fetch limit aligned with page-1 reconciliation for consistent first paint.
           limit: FAST_HEAD_PAGE_LIMIT,
         })
       );
@@ -993,8 +993,12 @@ export default function Documents() {
   const canRequestDocuments = !(hasDocumentPermissionRestrictions && availableFilterValues.length === 0);
   const hasVisibleDocuments = (filteredDocuments?.length || 0) > 0;
   // Keep initial view in loader state until the first request resolves; only then can an empty result mean "No documents found".
-  const isInitialDocumentsLoading = canRequestDocuments && !hasVisibleDocuments && !hasResolvedInitialDocumentsFetch;
-  const showSkeleton = loading && !isManualRefreshing && !isInitialDocumentsLoading && !hasVisibleDocuments;
+  const showInitialDocumentsLoader =
+    canRequestDocuments &&
+    !hasVisibleDocuments &&
+    (loading || !hasResolvedInitialDocumentsFetch);
+  const showSkeleton = loading && !isManualRefreshing && !showInitialDocumentsLoader && !hasVisibleDocuments;
+  const showEmptyDocumentsState = !loading && hasResolvedInitialDocumentsFetch && !hasVisibleDocuments;
   const displayedTotalDocuments = useMemo(() => {
     if (countsLoading) return null;
 
@@ -1816,7 +1820,7 @@ export default function Documents() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isInitialDocumentsLoading ? (
+              {showInitialDocumentsLoader ? (
                 <TableRow>
                   <TableCell colSpan={8} className="h-64 text-center">
                     <div className="flex flex-col items-center justify-center text-gray-400">
@@ -1834,7 +1838,7 @@ export default function Documents() {
                   rowHeightClass="h-9"
                   showActionColumn
                 />
-              ) : Object.keys(groupedDocuments).length === 0 ? (
+              ) : showEmptyDocumentsState ? (
                 <TableRow>
                   <TableCell colSpan={8} className="h-64 text-center">
                     <div className="flex flex-col items-center justify-center text-gray-400">
