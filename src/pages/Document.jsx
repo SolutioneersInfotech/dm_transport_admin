@@ -55,6 +55,7 @@ import { useAuth } from "../context/AuthContext";
 import useAppResumeSync from "../hooks/useAppResumeSync";
 import { subscribeToLiveDocuments } from "../services/documentRealtimeOverlay";
 import { invalidateDocumentRequestCache } from "../services/documentRequestCache";
+import { clearDocumentCountCache } from "../utils/documentCountCache";
 
 const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
 const ALL_DOCUMENTS_START_DATE = "1970-01-01";
@@ -739,6 +740,8 @@ export default function Documents() {
     dispatch(beginDocumentSync("manualRefresh"));
 
     try {
+      // Manual refresh intentionally bypasses the 6-minute count cache and list cache.
+      clearDocumentCountCache();
       const forceRefresh = true;
       if (page === 1) {
         // Manual refresh stays head-first for immediate paint, but must still reconcile with backend authority.

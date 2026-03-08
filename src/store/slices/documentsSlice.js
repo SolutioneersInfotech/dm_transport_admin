@@ -3,6 +3,7 @@ import { fetchDocumentsRoute, fetchDocumentCountRoute, updateDocumentRoute, chan
 import { deleteDocument, deleteDocuments } from "../../services/documentDeleteAPI";
 import { fetchDocumentsHeadAPI } from "../../services/documentHeadAPI";
 import { buildDocumentCacheKey, getCachedDocumentRequest, setCachedDocumentRequest } from "../../services/documentRequestCache";
+import { buildCountCacheKey, getCachedDocumentCount, setCachedDocumentCount } from "../../utils/documentCountCache";
 
 const SYNC_SOURCE = {
   backendFetch: "backendFetch",
@@ -136,13 +137,8 @@ const patchCollectionDocument = (collection = [], documentId, changes = {}) => {
 };
 
 const LIST_CACHE_TTL_MS = 8 * 1000;
-const COUNT_CACHE_TTL_MS = 5 * 1000;
-
 const createDocumentsCacheKey = ({ startDate, endDate, page = 1, limit = 10, search = "", isSeen = null, isFlagged = null, category = null, filters = [] }) =>
   buildDocumentCacheKey("documentsList", { startDate, endDate, page, limit, search, isSeen, isFlagged, category, filters });
-
-const createCountsCacheKey = ({ start_date, end_date, search = "", isSeen = null, isFlagged = null, category = null, filters = [] }) =>
-  buildDocumentCacheKey("documentsCount", { start_date, end_date, search, isSeen, isFlagged, category, filters });
 
 const beginSyncSource = (state, source) => {
   state.documentSyncInFlightCount += 1;
@@ -252,10 +248,20 @@ export const fetchDocumentsHead = createAsyncThunk(
 
 export const fetchDocumentCount = createAsyncThunk("documents/fetchDocumentCount", async ({ start_date, end_date, search = "", isSeen = null, isFlagged = null, category = null, filters = [], bypassCache = false, requestSignature = "" }, { rejectWithValue }) => {
   try {
-    const cacheKey = createCountsCacheKey({ start_date, end_date, search, isSeen, isFlagged, category, filters });
+    const cacheKey = buildCountCacheKey({
+      types: filters,
+      isFlagged,
+      startDate: start_date,
+      endDate: end_date,
+      category,
+      search,
+      isSeen,
+    });
+
     if (!bypassCache) {
-      const cached = getCachedDocumentRequest(cacheKey, COUNT_CACHE_TTL_MS);
-      if (cached) {
+      // Counts are expensive and usually unchanged between polls, so reuse filter-scoped cached totals for up to 360 seconds.
+      const cached = getCachedDocumentCount(cacheKey);
+      if (cached !== null) {
         return { ...cached, requestSignature };
       }
     }
@@ -271,7 +277,7 @@ export const fetchDocumentCount = createAsyncThunk("documents/fetchDocumentCount
     if (!res.ok) return rejectWithValue(data.message || "Failed to fetch document counts");
 
     const payload = { counts: data.counts || {}, total: data.total || 0, filters: data.filters || {} };
-    setCachedDocumentRequest(cacheKey, payload);
+    setCachedDocumentCount(cacheKey, payload);
     return { ...payload, requestSignature };
   } catch (error) {
     return rejectWithValue(error.message || "Failed to fetch document counts");
