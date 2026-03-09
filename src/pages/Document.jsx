@@ -97,6 +97,7 @@ export default function Documents() {
     documents: allDocuments,
     loading,
     loadingMore,
+    error,
     hasMore,
     page,
     limit,
@@ -148,7 +149,8 @@ export default function Documents() {
   const deferredReconcileTypeRef = useRef(null);
   const latestFilterSignatureRef = useRef("");
   const lastPreparedSignatureRef = useRef(null);
-  const currentVisibleRowsRef = useRef([]);
+  // Stores the last successfully rendered page-1 table rows so transition snapshots survive Redux clears.
+  const lastStableTableRowsRef = useRef([]);
   const pendingTypeFilterSignatureRef = useRef(null);
   const pendingFlagFilterSignatureRef = useRef(null);
   const pendingFlagFilterSyncSignatureRef = useRef(null);
@@ -734,9 +736,9 @@ export default function Documents() {
     clearDeferredReconciliation();
 
     if (lastPreparedSignatureRef.current !== activeSignature) {
-      // Preserve currently visible page-1 rows during a new server-side filter request to avoid empty-table flashes.
-      const visibleRowsSnapshot = Array.isArray(currentVisibleRowsRef.current)
-        ? [...currentVisibleRowsRef.current]
+      // Preserve rows from the last stable render snapshot so resetPagination/transition clears cannot blank the table.
+      const visibleRowsSnapshot = Array.isArray(lastStableTableRowsRef.current)
+        ? [...lastStableTableRowsRef.current]
         : [];
       setPreservedTableRows(visibleRowsSnapshot);
       setPreservedTableSignature(activeSignature);
@@ -835,13 +837,13 @@ export default function Documents() {
   ]);
 
   useEffect(() => {
-    // Clear preserved rows only after the latest in-flight signature settles.
-    if (loading) return;
+    // Keep preserved rows through failures; only release once the latest signature has settled successfully.
+    if (loading || error) return;
     if (preservedTableSignature !== latestFilterSignatureRef.current) return;
 
     setPreservedTableRows([]);
     setPreservedTableSignature(null);
-  }, [loading, preservedTableSignature]);
+  }, [loading, error, preservedTableSignature]);
 
   const handleManualRefresh = useCallback(async () => {
     if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
@@ -950,8 +952,13 @@ export default function Documents() {
   }, [allDocuments, availableFilterValues, hasDocumentPermissionRestrictions]);
 
   useEffect(() => {
-    currentVisibleRowsRef.current = filteredDocuments || [];
-  }, [filteredDocuments]);
+    // Snapshot only real, successfully rendered page-1 rows; never overwrite with empty/loading transition state.
+    if (loading || page !== 1 || !Array.isArray(filteredDocuments) || filteredDocuments.length === 0) {
+      return;
+    }
+
+    lastStableTableRowsRef.current = filteredDocuments;
+  }, [filteredDocuments, loading, page]);
 
   // During page-1 filter transitions, keep rendering the previous rows until the latest signature finishes loading.
   const shouldUsePreservedRows =
@@ -960,6 +967,8 @@ export default function Documents() {
     preservedTableSignature === latestFilterSignatureRef.current &&
     Array.isArray(preservedTableRows) &&
     preservedTableRows.length > 0;
+  // Sync overlay should layer on top of preserved rows, not replace them.
+  const showPreservedRowsSyncOverlay = shouldUsePreservedRows;
 
   const tableDocuments = shouldUsePreservedRows ? preservedTableRows : filteredDocuments;
 
@@ -1921,7 +1930,15 @@ export default function Documents() {
               }`}
             >
             <div ref={tableScrollRef} className="flex-1 overflow-auto chat-list-scroll flex flex-col">
-              <div className="flex-1">
+              <div className="relative flex-1">
+                {showPreservedRowsSyncOverlay && (
+                  <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-[#0b0f14]/35">
+                    <div className="flex flex-col items-center justify-center rounded-md border border-gray-700/70 bg-[#11161d]/85 px-4 py-3 text-gray-200 shadow-lg">
+                      <Loader2 className="h-5 w-5 animate-spin text-gray-200" />
+                      <p className="mt-1 text-xs">Syncing...</p>
+                    </div>
+                  </div>
+                )}
                 <Table containerClassName="h-full overflow-visible">
             <TableHeader className="sticky top-0 z-30 border-b border-gray-700 [&_th]:sticky [&_th]:top-0 [&_th]:z-30 [&_th]:bg-[#161b22]">
               <TableRow className="hover:bg-transparent border-gray-700">
