@@ -386,6 +386,7 @@ const initialState = {
   countsLoading: false,
   countsError: null,
   countsTotal: 0,
+  lastSuccessfulCountsTotal: null,
   lastCountsFetched: null,
   lastCountRequestSignature: "",
   lastListRequestSignature: "",
@@ -553,6 +554,8 @@ const documentsSlice = createSlice({
         state.countsLoading = false;
         state.documentCounts = action.payload.counts;
         state.countsTotal = action.payload.total;
+        // Totals should be stable across transient loading/failure and must not regress to 0 unless 0 is confirmed by success response.
+        state.lastSuccessfulCountsTotal = action.payload.total;
         state.total = action.payload.total;
         state.totalDocuments = action.payload.total;
         state.countsError = null;

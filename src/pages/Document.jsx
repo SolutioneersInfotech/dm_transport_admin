@@ -96,6 +96,7 @@ export default function Documents() {
   const {
     documents: allDocuments,
     loading,
+    error,
     loadingMore,
     hasMore,
     page,
@@ -105,7 +106,7 @@ export default function Documents() {
     lastFetchParams,
     lastFetched,
     countsTotal,
-    countsLoading,
+    lastSuccessfulCountsTotal,
   } = useAppSelector((state) => state.documents);
   const { users } = useAppSelector((state) => state.users);
   const isDocumentSyncActive = useAppSelector(selectIsDocumentSyncActive);
@@ -158,6 +159,8 @@ export default function Documents() {
   const [resolvedFlagFilterLoadingSignature, setResolvedFlagFilterLoadingSignature] = useState(null);
   const [reconciledFlagFilterLoadingSignature, setReconciledFlagFilterLoadingSignature] = useState(null);
   const [flagFilterLoadingMessage, setFlagFilterLoadingMessage] = useState("");
+  const [preservedPageOneRows, setPreservedPageOneRows] = useState([]);
+  const [preservedPageOneSignature, setPreservedPageOneSignature] = useState(null);
 
   const [searchParams] = useSearchParams();
 
@@ -738,6 +741,10 @@ export default function Documents() {
       endPendingFlagFilterSync();
     }
 
+    // Preserve previous page-1 table during filter transitions so the UI never collapses to empty while new data is loading.
+    setPreservedPageOneRows(filteredDocuments || []);
+    setPreservedPageOneSignature(activeSignature);
+
     dispatch(resetPagination());
     // Page-1 filter transitions clear stale backend rows so head overlay data becomes the immediate visible source.
     dispatch(preparePageOneFilterTransition());
@@ -769,6 +776,7 @@ export default function Documents() {
       if (!fetchDocumentsHead.fulfilled.match(headResult)) {
         // Latest-signature failures must close fast loading/sync loops; otherwise stale pending state can leave the UI spinning forever.
         if (isLatestSignature) {
+          setPreservedPageOneSignature(null);
           setResolvedFlagFilterLoadingSignature(activeSignature);
           clearFastFilterLoadingForSignature(activeSignature);
           if (pendingFlagFilterSyncSignatureRef.current === activeSignature) {
@@ -817,6 +825,7 @@ export default function Documents() {
     availableFilterValues.length,
     hasDocumentPermissionRestrictions,
     limit,
+    filteredDocuments,
   ]);
 
   const handleManualRefresh = useCallback(async () => {
@@ -925,6 +934,17 @@ export default function Documents() {
     return (allDocuments || []).filter((document) => allowedTypes.has(document?.type));
   }, [allDocuments, availableFilterValues, hasDocumentPermissionRestrictions]);
 
+  const isPageOneServerTransitionLoading =
+    loading &&
+    page === 1 &&
+    preservedPageOneSignature !== null &&
+    preservedPageOneSignature === latestFilterSignatureRef.current;
+  const shouldUsePreservedPageOneRows =
+    isPageOneServerTransitionLoading &&
+    Array.isArray(preservedPageOneRows) &&
+    preservedPageOneRows.length > 0;
+  const tableDocuments = shouldUsePreservedPageOneRows ? preservedPageOneRows : filteredDocuments;
+
   function resetDates() {
     setDateRange({
       from: undefined,
@@ -935,7 +955,7 @@ export default function Documents() {
   // Group documents by date
   const groupedDocuments = useMemo(() => {
     const groups = {};
-    filteredDocuments?.forEach((doc) => {
+    tableDocuments?.forEach((doc) => {
       const d = new Date(doc.date);
       const today = new Date();
       const yesterday = new Date();
@@ -954,12 +974,12 @@ export default function Documents() {
       groups[label].push(doc);
     });
     return groups;
-  }, [filteredDocuments]);
+  }, [tableDocuments]);
 
   // Select all functionality
   const allDocIds = useMemo(() => {
-    return new Set(filteredDocuments?.map((doc) => doc.id) || []);
-  }, [filteredDocuments]);
+    return new Set(tableDocuments?.map((doc) => doc.id) || []);
+  }, [tableDocuments]);
 
   const isAllSelected = allDocIds.size > 0 && selectedDocIds.size === allDocIds.size;
   const isIndeterminate = selectedDocIds.size > 0 && selectedDocIds.size < allDocIds.size;
@@ -984,8 +1004,8 @@ export default function Documents() {
   };
 
   const getSelectedDocs = useCallback(() => {
-    return filteredDocuments?.filter((doc) => selectedDocIds.has(doc.id)) || [];
-  }, [filteredDocuments, selectedDocIds]);
+    return tableDocuments?.filter((doc) => selectedDocIds.has(doc.id)) || [];
+  }, [tableDocuments, selectedDocIds]);
 
   const handleBulkDownload = async () => {
     const docsToDownload = getSelectedDocs();
@@ -1052,7 +1072,7 @@ export default function Documents() {
   };
 
   const canRequestDocuments = !(hasDocumentPermissionRestrictions && availableFilterValues.length === 0);
-  const hasVisibleDocuments = (filteredDocuments?.length || 0) > 0;
+  const hasVisibleDocuments = (tableDocuments?.length || 0) > 0;
   const isLatestFlagFilterLoadingSignature =
     !!activeFlagFilterLoadingSignature &&
     activeFlagFilterLoadingSignature === latestFilterSignatureRef.current;
@@ -1094,25 +1114,51 @@ export default function Documents() {
     canRequestDocuments &&
     !hasVisibleDocuments &&
     (loading || !hasResolvedInitialDocumentsFetch);
-  const showSkeleton = loading && !isManualRefreshing && !showInitialDocumentsLoader && !hasVisibleDocuments;
+  const showSkeleton =
+    loading &&
+    !isManualRefreshing &&
+    !showInitialDocumentsLoader &&
+    !hasVisibleDocuments &&
+    !shouldUsePreservedPageOneRows;
+  const showPageOneTransitionOverlay = isPageOneServerTransitionLoading && shouldUsePreservedPageOneRows;
+  const showTableLoadingOverlay = showPageOneTransitionOverlay || showFlagFilterTablePreparationLoader;
+  const tableLoadingMessage =
+    showFlagFilterTablePreparationLoader ? (flagFilterLoadingMessage || FLAG_FILTER_LOADING_MESSAGES[0]) : "Loading documents...";
+  // Empty state must never compete with in-flight document requests.
   const showEmptyDocumentsState =
     !loading &&
     hasResolvedInitialDocumentsFetch &&
+    !showTableLoadingOverlay &&
+    !error &&
     !hasVisibleDocuments &&
     !showFlagFilterTablePreparationLoader;
   const displayedTotalDocuments = useMemo(() => {
-    if (countsLoading) return null;
-
     if (typeof countsTotal === "number") {
       return countsTotal;
     }
 
-    if (typeof total === "number") {
+    // Totals should be stable across transient loading/failure and must not regress to 0 unless 0 is confirmed by success response.
+    if (typeof lastSuccessfulCountsTotal === "number") {
+      return lastSuccessfulCountsTotal;
+    }
+
+    if (typeof total === "number" && total > 0) {
       return total;
     }
 
-    return filteredDocuments?.length || 0;
-  }, [countsLoading, countsTotal, total, filteredDocuments]);
+    return null;
+  }, [countsTotal, lastSuccessfulCountsTotal, total]);
+
+  useEffect(() => {
+    if (!preservedPageOneSignature) return;
+    if (preservedPageOneSignature !== latestFilterSignatureRef.current) return;
+    if (loading) return;
+
+    setPreservedPageOneSignature(null);
+    if (!error) {
+      setPreservedPageOneRows([]);
+    }
+  }, [loading, error, preservedPageOneSignature]);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -1533,7 +1579,7 @@ export default function Documents() {
                             toggleFilter(filterValue);
                           }}
                           className={`relative w-full text-left px-3 py-2 text-sm hover:bg-[#1d232a] transition-colors flex items-center gap-2 rounded ${
-                            isSelected ? "text-[#1f6feb] bg-[#1d232a]" : "text-gray-300"
+                            isSelected ? "text-[#1f6feb] bg-[#1d232a] hover:bg-[#1f6feb]/20" : "text-gray-300"
                           }`}
                         >
                           <span className={`w-4 h-4 border rounded flex items-center justify-center ${
@@ -1603,7 +1649,7 @@ export default function Documents() {
                 size="sm"
                 className={`relative overflow-hidden rounded-full text-xs md:text-sm whitespace-nowrap ${
                   isSelected
-                    ? "bg-[#1f6feb] border-[#1f6feb] text-white"
+                    ? "bg-[#1f6feb] border-[#1f6feb] text-white hover:bg-[#1f6feb]/80 hover:border-[#1f6feb] hover:text-white"
                     : "border-gray-600 bg-[#161b22] text-gray-300 hover:bg-[#1d232a]"
                 }`}
               >
@@ -1663,7 +1709,7 @@ export default function Documents() {
                 size="sm"
                 className={`min-w-[36px] sm:min-w-[40px] h-8 sm:h-9 text-xs sm:text-sm ${
                   isSelected
-                    ? "bg-[#1f6feb] text-white border-[#1f6feb] hover:bg-[#1a5fd4]"
+                    ? "bg-[#1f6feb] text-white border-[#1f6feb] hover:bg-[#1f6feb]/80 hover:border-[#1f6feb] hover:text-white"
                     : "bg-[#161b22] border-gray-700 text-gray-300 hover:bg-[#1d232a] hover:border-gray-600"
                 }`}
               >
@@ -1877,7 +1923,15 @@ export default function Documents() {
               }`}
             >
             <div ref={tableScrollRef} className="flex-1 overflow-auto chat-list-scroll flex flex-col">
-              <div className="flex-1">
+              <div className="relative flex-1">
+                {showTableLoadingOverlay && (
+                  <div className="pointer-events-none select-none absolute inset-0 z-20 flex items-center justify-center bg-[#0d1117]/35">
+                    <div className="flex items-center gap-2 text-xs text-gray-200">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>{tableLoadingMessage}</span>
+                    </div>
+                  </div>
+                )}
                 <Table containerClassName="h-full overflow-visible">
             <TableHeader className="sticky top-0 z-30 border-b border-gray-700 [&_th]:sticky [&_th]:top-0 [&_th]:z-30 [&_th]:bg-[#161b22]">
               <TableRow className="hover:bg-transparent border-gray-700">
@@ -1932,7 +1986,7 @@ export default function Documents() {
               {showInitialDocumentsLoader ? (
                 <TableRow>
                   <TableCell colSpan={8} className="h-64 text-center">
-                    <div className="flex flex-col items-center justify-center text-gray-400">
+                    <div className="pointer-events-none select-none flex flex-col items-center justify-center text-gray-400">
                       <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
                       <p className="text-xs mt-2">Loading documents...</p>
                     </div>
@@ -1950,7 +2004,7 @@ export default function Documents() {
               ) : showFlagFilterTablePreparationLoader ? (
                 <TableRow>
                   <TableCell colSpan={8} className="h-64 text-center">
-                    <div className="flex flex-col items-center justify-center text-gray-400">
+                    <div className="pointer-events-none select-none flex flex-col items-center justify-center text-gray-400">
                       <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
                       <p className="text-xs mt-2">{flagFilterLoadingMessage || FLAG_FILTER_LOADING_MESSAGES[0]}</p>
                     </div>
@@ -1959,7 +2013,7 @@ export default function Documents() {
               ) : showEmptyDocumentsState ? (
                 <TableRow>
                   <TableCell colSpan={8} className="h-64 text-center">
-                    <div className="flex flex-col items-center justify-center text-gray-400">
+                    <div className="pointer-events-none select-none flex flex-col items-center justify-center text-gray-400">
                       <p className="text-sm font-medium">No documents found</p>
                       <p className="text-xs mt-1">Try adjusting your filters</p>
                     </div>
@@ -2210,7 +2264,7 @@ export default function Documents() {
               )}
 
               {/* End of Results */}
-              {!hasMore && !loading && filteredDocuments?.length > 0 && (
+              {!hasMore && !loading && tableDocuments?.length > 0 && (
                 <TableRow>
                   <TableCell colSpan={8} className="h-12 text-center">
                     <p className="text-xs text-gray-500">No more documents to load</p>
@@ -2225,14 +2279,16 @@ export default function Documents() {
                 <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                   <span className="inline-flex items-center gap-1.5">
                     <span>
-                      Showing: <span className="font-semibold text-white">{filteredDocuments?.length || 0}</span> of
+                      Showing: <span className="font-semibold text-white">{tableDocuments?.length || 0}</span> of
                     </span>
                     {displayedTotalDocuments === null ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-300" aria-label="Loading total document count" />
+                      <span className="text-gray-500">documents</span>
                     ) : (
-                      <span className="font-semibold text-white">{displayedTotalDocuments}</span>
+                      <>
+                        <span className="font-semibold text-white">{displayedTotalDocuments}</span>
+                        <span>documents</span>
+                      </>
                     )}
-                    <span>documents</span>
                   </span>
                   {selectedDocIds.size > 0 && (
                     <span>
