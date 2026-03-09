@@ -607,6 +607,28 @@ export default function Documents() {
 
   const currentFilterSignature = useMemo(() => buildFilterSignature(), [buildFilterSignature]);
 
+  // Derived table data must be declared before effects/memos that read it,
+  // otherwise Document.jsx can hit temporal-dead-zone runtime errors.
+  const filteredDocuments = useMemo(() => {
+    if (!hasDocumentPermissionRestrictions) {
+      return allDocuments;
+    }
+
+    const allowedTypes = new Set(availableFilterValues);
+    return (allDocuments || []).filter((document) => allowedTypes.has(document?.type));
+  }, [allDocuments, availableFilterValues, hasDocumentPermissionRestrictions]);
+
+  const isPageOneServerTransitionLoading =
+    loading &&
+    page === 1 &&
+    preservedPageOneSignature !== null &&
+    preservedPageOneSignature === latestFilterSignatureRef.current;
+  const shouldUsePreservedPageOneRows =
+    isPageOneServerTransitionLoading &&
+    Array.isArray(preservedPageOneRows) &&
+    preservedPageOneRows.length > 0;
+  const tableDocuments = shouldUsePreservedPageOneRows ? preservedPageOneRows : filteredDocuments;
+
   const clearDeferredReconciliation = useCallback(() => {
     if (!deferredReconcileRef.current) return;
 
@@ -923,27 +945,6 @@ export default function Documents() {
       return nextFilters;
     });
   };
-
-  // Keep visible documents aligned with current admin document permissions
-  const filteredDocuments = useMemo(() => {
-    if (!hasDocumentPermissionRestrictions) {
-      return allDocuments;
-    }
-
-    const allowedTypes = new Set(availableFilterValues);
-    return (allDocuments || []).filter((document) => allowedTypes.has(document?.type));
-  }, [allDocuments, availableFilterValues, hasDocumentPermissionRestrictions]);
-
-  const isPageOneServerTransitionLoading =
-    loading &&
-    page === 1 &&
-    preservedPageOneSignature !== null &&
-    preservedPageOneSignature === latestFilterSignatureRef.current;
-  const shouldUsePreservedPageOneRows =
-    isPageOneServerTransitionLoading &&
-    Array.isArray(preservedPageOneRows) &&
-    preservedPageOneRows.length > 0;
-  const tableDocuments = shouldUsePreservedPageOneRows ? preservedPageOneRows : filteredDocuments;
 
   function resetDates() {
     setDateRange({
