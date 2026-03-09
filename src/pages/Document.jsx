@@ -165,6 +165,7 @@ export default function Documents() {
   const [preservedTableRows, setPreservedTableRows] = useState([]);
   const [preservedTableSignature, setPreservedTableSignature] = useState(null);
   const [isTypeFilterTransitionActive, setIsTypeFilterTransitionActive] = useState(false);
+  const [resolvedTypeFilterTransitionSignature, setResolvedTypeFilterTransitionSignature] = useState(null);
 
   const [searchParams] = useSearchParams();
 
@@ -750,6 +751,7 @@ export default function Documents() {
 
     const typeFilterChanged =
       lastPreparedTypeFilterSignatureRef.current !== typeFilterSignature;
+    const isTypeFilterTransition = typeFilterChanged;
 
     if (typeFilterChanged) {
       // Preserve rows only for document-type filter transitions; other filters intentionally keep existing behavior.
@@ -758,7 +760,9 @@ export default function Documents() {
         : [];
       setPreservedTableRows(visibleRowsSnapshot);
       setPreservedTableSignature(activeSignature);
-      setIsTypeFilterTransitionActive(visibleRowsSnapshot.length > 0);
+      // Preserve rows must survive resetPagination/preparePageOneFilterTransition before loading flips true.
+      setIsTypeFilterTransitionActive(true);
+      setResolvedTypeFilterTransitionSignature(null);
       // Snapshot once per type signature to avoid repeated preserve writes and render loops.
       lastPreparedTypeFilterSignatureRef.current = typeFilterSignature;
     } else {
@@ -824,6 +828,11 @@ export default function Documents() {
       setResolvedFlagFilterLoadingSignature(activeSignature);
       clearFastFilterLoadingForSignature(activeSignature);
 
+      if (isTypeFilterTransition) {
+        // !loading alone is too early; only mark resolved after the matching type-filter request succeeds.
+        setResolvedTypeFilterTransitionSignature(activeSignature);
+      }
+
       lastHeadFetchAtRef.current = Date.now();
 
       // Keep backend authority, but defer page-1 reconciliation so perceived filter transitions stay fast.
@@ -857,14 +866,17 @@ export default function Documents() {
   ]);
 
   useEffect(() => {
-    // Keep preserved rows through failures; only release once the latest signature has settled successfully.
+    // Keep preserved rows through the reset/loading gap and failures; clear only after the matching request resolves.
     if (loading || error) return;
+    if (!preservedTableSignature) return;
     if (preservedTableSignature !== latestFilterSignatureRef.current) return;
+    if (resolvedTypeFilterTransitionSignature !== preservedTableSignature) return;
 
     setPreservedTableRows([]);
     setPreservedTableSignature(null);
     setIsTypeFilterTransitionActive(false);
-  }, [loading, error, preservedTableSignature]);
+    setResolvedTypeFilterTransitionSignature(null);
+  }, [loading, error, preservedTableSignature, resolvedTypeFilterTransitionSignature]);
 
   const handleManualRefresh = useCallback(async () => {
     if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
