@@ -1926,7 +1926,7 @@ export default function Documents() {
                     disabled={isManualRefreshing}
                     title="Refresh"
                     aria-label="Refresh"
-                    className="h-7 w-7 text-gray-400 hover:text-gray-200 hover:bg-[#1d232a] disabled:opacity-60"
+                    className="h-7 w-7 text-gray-400 hover:text-gray-200 disabled:opacity-60"
                   >
                     <RefreshCw className={`h-3.5 w-3.5 ${showSyncSpinner ? "animate-spin" : ""}`} />
                   </Button>
@@ -1961,7 +1961,7 @@ export default function Documents() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ) : showEmptyDocumentsState ? (
+              ) : showEmptyDocumentsState && !showSyncSpinner ? (
                 <TableRow>
                   <TableCell colSpan={8} className="h-64 text-center">
                     <div className="flex flex-col items-center justify-center text-gray-400">
