@@ -9,6 +9,7 @@ import {
   fetchMoreDocuments,
   resetPagination,
   preparePageOneFilterTransition,
+  preparePageOneTypeFilterTransition,
   updateDocument,
   deleteDocumentThunk,
   deleteDocumentsThunk,
@@ -149,8 +150,6 @@ export default function Documents() {
   const deferredReconcileTypeRef = useRef(null);
   const latestFilterSignatureRef = useRef("");
   const lastPreparedTypeFilterSignatureRef = useRef(null);
-  // Stores the last successfully rendered page-1 table rows so transition snapshots survive Redux clears.
-  const lastStableTableRowsRef = useRef([]);
   const pendingTypeFilterSignatureRef = useRef(null);
   const pendingFlagFilterSignatureRef = useRef(null);
   const pendingFlagFilterSyncSignatureRef = useRef(null);
@@ -162,8 +161,6 @@ export default function Documents() {
   const [resolvedFlagFilterLoadingSignature, setResolvedFlagFilterLoadingSignature] = useState(null);
   const [reconciledFlagFilterLoadingSignature, setReconciledFlagFilterLoadingSignature] = useState(null);
   const [flagFilterLoadingMessage, setFlagFilterLoadingMessage] = useState("");
-  const [preservedTableRows, setPreservedTableRows] = useState([]);
-  const [preservedTableSignature, setPreservedTableSignature] = useState(null);
   const [isTypeFilterTransitionActive, setIsTypeFilterTransitionActive] = useState(false);
   const [resolvedTypeFilterTransitionSignature, setResolvedTypeFilterTransitionSignature] = useState(null);
 
@@ -754,16 +751,10 @@ export default function Documents() {
     const isTypeFilterTransition = typeFilterChanged;
 
     if (typeFilterChanged) {
-      // Preserve rows only for document-type filter transitions; other filters intentionally keep existing behavior.
-      const visibleRowsSnapshot = Array.isArray(lastStableTableRowsRef.current)
-        ? [...lastStableTableRowsRef.current]
-        : [];
-      setPreservedTableRows(visibleRowsSnapshot);
-      setPreservedTableSignature(activeSignature);
-      // Preserve rows must survive resetPagination/preparePageOneFilterTransition before loading flips true.
+      // Hard-clearing page-1 transition caused the empty-table regression for type filters.
       setIsTypeFilterTransitionActive(true);
       setResolvedTypeFilterTransitionSignature(null);
-      // Snapshot once per type signature to avoid repeated preserve writes and render loops.
+      // Track one transition per signature and keep all existing non-type filter behavior unchanged.
       lastPreparedTypeFilterSignatureRef.current = typeFilterSignature;
     } else {
       setIsTypeFilterTransitionActive(false);
@@ -779,8 +770,13 @@ export default function Documents() {
     }
 
     dispatch(resetPagination());
-    // Page-1 filter transitions clear stale backend rows so head overlay data becomes the immediate visible source.
-    dispatch(preparePageOneFilterTransition());
+    if (isTypeFilterTransition) {
+      // Type filters intentionally use a soft transition so current rows stay visible during loading.
+      dispatch(preparePageOneTypeFilterTransition());
+    } else {
+      // Other filters intentionally keep the existing hard-clearing behavior.
+      dispatch(preparePageOneFilterTransition());
+    }
 
     const runHeadFirstFetch = async () => {
       // Page-1 is head-first so fast head results paint first while backend reconciliation remains authoritative in the background.
@@ -866,17 +862,12 @@ export default function Documents() {
   ]);
 
   useEffect(() => {
-    // Keep preserved rows through the reset/loading gap and failures; clear only after the matching request resolves.
     if (loading || error) return;
-    if (!preservedTableSignature) return;
-    if (preservedTableSignature !== latestFilterSignatureRef.current) return;
-    if (resolvedTypeFilterTransitionSignature !== preservedTableSignature) return;
+    if (resolvedTypeFilterTransitionSignature !== latestFilterSignatureRef.current) return;
 
-    setPreservedTableRows([]);
-    setPreservedTableSignature(null);
     setIsTypeFilterTransitionActive(false);
     setResolvedTypeFilterTransitionSignature(null);
-  }, [loading, error, preservedTableSignature, resolvedTypeFilterTransitionSignature]);
+  }, [loading, error, resolvedTypeFilterTransitionSignature]);
 
   const handleManualRefresh = useCallback(async () => {
     if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
@@ -984,27 +975,15 @@ export default function Documents() {
     return (allDocuments || []).filter((document) => allowedTypes.has(document?.type));
   }, [allDocuments, availableFilterValues, hasDocumentPermissionRestrictions]);
 
-  useEffect(() => {
-    // Snapshot only real, successfully rendered page-1 rows; never overwrite with empty/loading transition state.
-    if (loading || page !== 1 || !Array.isArray(filteredDocuments) || filteredDocuments.length === 0) {
-      return;
-    }
-
-    lastStableTableRowsRef.current = filteredDocuments;
-  }, [filteredDocuments, loading, page]);
-
-  // During page-1 type-filter transitions, keep rendering the previous rows until the latest signature finishes loading.
-  const shouldUsePreservedRows =
+  // Type-filter loading now keeps Redux rows in place; overlay can render on top without preserved snapshot rows.
+  const shouldUsePreservedRows = false;
+  const showPreservedRowsSyncOverlay =
     loading &&
     page === 1 &&
     isTypeFilterTransitionActive &&
-    preservedTableSignature === latestFilterSignatureRef.current &&
-    Array.isArray(preservedTableRows) &&
-    preservedTableRows.length > 0;
-  // Sync overlay should layer on top of preserved rows, not replace them.
-  const showPreservedRowsSyncOverlay = shouldUsePreservedRows;
+    (filteredDocuments?.length || 0) > 0;
 
-  const tableDocuments = shouldUsePreservedRows ? preservedTableRows : filteredDocuments;
+  const tableDocuments = filteredDocuments;
 
   function resetDates() {
     setDateRange({
