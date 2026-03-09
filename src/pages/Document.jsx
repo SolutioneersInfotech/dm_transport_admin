@@ -147,6 +147,8 @@ export default function Documents() {
   const deferredReconcileRef = useRef(null);
   const deferredReconcileTypeRef = useRef(null);
   const latestFilterSignatureRef = useRef("");
+  const lastPreparedSignatureRef = useRef(null);
+  const currentVisibleRowsRef = useRef([]);
   const pendingTypeFilterSignatureRef = useRef(null);
   const pendingFlagFilterSignatureRef = useRef(null);
   const pendingFlagFilterSyncSignatureRef = useRef(null);
@@ -158,6 +160,8 @@ export default function Documents() {
   const [resolvedFlagFilterLoadingSignature, setResolvedFlagFilterLoadingSignature] = useState(null);
   const [reconciledFlagFilterLoadingSignature, setReconciledFlagFilterLoadingSignature] = useState(null);
   const [flagFilterLoadingMessage, setFlagFilterLoadingMessage] = useState("");
+  const [preservedTableRows, setPreservedTableRows] = useState([]);
+  const [preservedTableSignature, setPreservedTableSignature] = useState(null);
 
   const [searchParams] = useSearchParams();
 
@@ -729,6 +733,17 @@ export default function Documents() {
     latestFilterSignatureRef.current = activeSignature;
     clearDeferredReconciliation();
 
+    if (lastPreparedSignatureRef.current !== activeSignature) {
+      // Preserve currently visible page-1 rows during a new server-side filter request to avoid empty-table flashes.
+      const visibleRowsSnapshot = Array.isArray(currentVisibleRowsRef.current)
+        ? [...currentVisibleRowsRef.current]
+        : [];
+      setPreservedTableRows(visibleRowsSnapshot);
+      setPreservedTableSignature(activeSignature);
+      // Snapshot only once per signature so this transition cannot trigger repeated rerenders.
+      lastPreparedSignatureRef.current = activeSignature;
+    }
+
     // Cancel older flag-filter sync/loading loops when a newer signature starts so stale completions cannot stop latest spinner work.
     if (pendingFlagFilterSignatureRef.current && pendingFlagFilterSignatureRef.current !== activeSignature) {
       pendingFlagFilterSignatureRef.current = null;
@@ -818,6 +833,15 @@ export default function Documents() {
     hasDocumentPermissionRestrictions,
     limit,
   ]);
+
+  useEffect(() => {
+    // Clear preserved rows only after the latest in-flight signature settles.
+    if (loading) return;
+    if (preservedTableSignature !== latestFilterSignatureRef.current) return;
+
+    setPreservedTableRows([]);
+    setPreservedTableSignature(null);
+  }, [loading, preservedTableSignature]);
 
   const handleManualRefresh = useCallback(async () => {
     if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
@@ -925,6 +949,20 @@ export default function Documents() {
     return (allDocuments || []).filter((document) => allowedTypes.has(document?.type));
   }, [allDocuments, availableFilterValues, hasDocumentPermissionRestrictions]);
 
+  useEffect(() => {
+    currentVisibleRowsRef.current = filteredDocuments || [];
+  }, [filteredDocuments]);
+
+  // During page-1 filter transitions, keep rendering the previous rows until the latest signature finishes loading.
+  const shouldUsePreservedRows =
+    loading &&
+    page === 1 &&
+    preservedTableSignature === latestFilterSignatureRef.current &&
+    Array.isArray(preservedTableRows) &&
+    preservedTableRows.length > 0;
+
+  const tableDocuments = shouldUsePreservedRows ? preservedTableRows : filteredDocuments;
+
   function resetDates() {
     setDateRange({
       from: undefined,
@@ -935,7 +973,7 @@ export default function Documents() {
   // Group documents by date
   const groupedDocuments = useMemo(() => {
     const groups = {};
-    filteredDocuments?.forEach((doc) => {
+    tableDocuments?.forEach((doc) => {
       const d = new Date(doc.date);
       const today = new Date();
       const yesterday = new Date();
@@ -954,12 +992,12 @@ export default function Documents() {
       groups[label].push(doc);
     });
     return groups;
-  }, [filteredDocuments]);
+  }, [tableDocuments]);
 
   // Select all functionality
   const allDocIds = useMemo(() => {
-    return new Set(filteredDocuments?.map((doc) => doc.id) || []);
-  }, [filteredDocuments]);
+    return new Set(tableDocuments?.map((doc) => doc.id) || []);
+  }, [tableDocuments]);
 
   const isAllSelected = allDocIds.size > 0 && selectedDocIds.size === allDocIds.size;
   const isIndeterminate = selectedDocIds.size > 0 && selectedDocIds.size < allDocIds.size;
@@ -984,8 +1022,8 @@ export default function Documents() {
   };
 
   const getSelectedDocs = useCallback(() => {
-    return filteredDocuments?.filter((doc) => selectedDocIds.has(doc.id)) || [];
-  }, [filteredDocuments, selectedDocIds]);
+    return tableDocuments?.filter((doc) => selectedDocIds.has(doc.id)) || [];
+  }, [tableDocuments, selectedDocIds]);
 
   const handleBulkDownload = async () => {
     const docsToDownload = getSelectedDocs();
@@ -1052,7 +1090,7 @@ export default function Documents() {
   };
 
   const canRequestDocuments = !(hasDocumentPermissionRestrictions && availableFilterValues.length === 0);
-  const hasVisibleDocuments = (filteredDocuments?.length || 0) > 0;
+  const hasVisibleDocuments = (tableDocuments?.length || 0) > 0;
   const isLatestFlagFilterLoadingSignature =
     !!activeFlagFilterLoadingSignature &&
     activeFlagFilterLoadingSignature === latestFilterSignatureRef.current;
@@ -1098,6 +1136,7 @@ export default function Documents() {
   const showEmptyDocumentsState =
     // empty state must never render while document requests are still loading
     !loading &&
+    !shouldUsePreservedRows &&
     !loadingMore &&
     !isManualRefreshing &&
     hasResolvedInitialDocumentsFetch &&
@@ -1114,8 +1153,8 @@ export default function Documents() {
       return total;
     }
 
-    return filteredDocuments?.length || 0;
-  }, [countsLoading, countsTotal, total, filteredDocuments]);
+    return tableDocuments?.length || 0;
+  }, [countsLoading, countsTotal, total, tableDocuments]);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -2226,7 +2265,7 @@ export default function Documents() {
               )}
 
               {/* End of Results */}
-              {!hasMore && !loading && filteredDocuments?.length > 0 && (
+              {!hasMore && !loading && tableDocuments?.length > 0 && (
                 <TableRow>
                   <TableCell colSpan={8} className="h-12 text-center">
                     <p className="text-xs text-gray-500">No more documents to load</p>
@@ -2241,7 +2280,7 @@ export default function Documents() {
                 <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                   <span className="inline-flex items-center gap-1.5">
                     <span>
-                      Showing: <span className="font-semibold text-white">{filteredDocuments?.length || 0}</span> of
+                      Showing: <span className="font-semibold text-white">{tableDocuments?.length || 0}</span> of
                     </span>
                     {displayedTotalDocuments === null ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-300" aria-label="Loading total document count" />
