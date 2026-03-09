@@ -424,6 +424,11 @@ const documentsSlice = createSlice({
       state.page = 1;
       state.hasMore = false;
     },
+    preparePageOneTypeFilterTransition: (state) => {
+      // Type-filter transitions intentionally keep current visible rows until fresh data arrives.
+      state.page = 1;
+      state.hasMore = false;
+    },
     setHeadDocuments: (state, action) => {
       state.headOverlayById = overlayMapFromDocuments(state.headOverlayById, action.payload || []);
       state.documents = getVisibleDocuments(state);
@@ -642,6 +647,7 @@ export const {
   markDocumentAsSeen,
   resetPagination,
   preparePageOneFilterTransition,
+  preparePageOneTypeFilterTransition,
   setHeadDocuments,
   upsertLiveDocument,
   removeLiveDocument,
