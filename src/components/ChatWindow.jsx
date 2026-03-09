@@ -225,6 +225,19 @@ function formatLastSeen(lastSeen) {
   });
 }
 
+function parseTimestampMs(value) {
+  if (!value) return null;
+
+  const sec = value?._seconds ?? value?.seconds;
+  if (typeof sec === "number") {
+    const ms = sec * 1000;
+    return Number.isFinite(ms) ? ms : null;
+  }
+
+  const direct = new Date(value).getTime();
+  return Number.isNaN(direct) ? null : direct;
+}
+
 
 function resolveReplyTargetId(message) {
   if (!message) return null;
@@ -743,6 +756,46 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
   /* ================= GROUP MESSAGES ================= */
   const grouped = groupMessagesByDate(messages);
 
+  const effectiveLastSeen = useMemo(() => {
+    const presenceCandidates = [
+      // Live presence metadata should win when available.
+      driver?.presence?.lastSeen,
+      driver?.presenceLastSeen,
+      driver?.lastActiveAt,
+      driver?.onlineAt,
+    ];
+
+    const messageCandidates = [
+      // Chat activity is fresher than profile-level lastSeen in many cases.
+      driver?.last_chat_time,
+      messages.length ? messages[messages.length - 1]?.dateTime : null,
+    ];
+
+    const fallbackCandidates = [
+      // Previous header used only driver.lastSeen, which can be stale.
+      driver?.lastSeen,
+    ];
+
+    const allCandidates = [
+      ...presenceCandidates,
+      ...messageCandidates,
+      ...fallbackCandidates,
+    ]
+      .map(parseTimestampMs)
+      .filter((ts) => typeof ts === "number" && Number.isFinite(ts));
+
+    if (!allCandidates.length) return null;
+    return new Date(Math.max(...allCandidates)).toISOString();
+  }, [
+    driver?.lastSeen,
+    driver?.last_chat_time,
+    driver?.lastActiveAt,
+    driver?.onlineAt,
+    driver?.presence,
+    driver?.presenceLastSeen,
+    messages,
+  ]);
+
   return (
     <div className="relative flex flex-col h-full overflow-hidden bg-[#0b141a]">
       {/* ================= HEADER (WhatsApp-like) ================= */}
@@ -791,7 +844,7 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
                 ) : null}
               </div>
             </div>
-            <div className="pt-1 text-xs text-gray-400">{formatLastSeen(driver?.lastSeen)}</div>
+            <div className="pt-1 text-xs text-gray-400">{formatLastSeen(effectiveLastSeen)}</div>
           </div>
         </div>
 

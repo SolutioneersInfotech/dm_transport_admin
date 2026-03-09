@@ -47,6 +47,7 @@ const Chat = () => {
       email: user.email || null,
       phone: user.phone || null,
       driver_image: user.profilePic || user.image || null,
+      // Profile-level lastSeen is kept as fallback; ChatWindow derives a fresher effective value.
       lastSeen: user.lastSeen || null,
       last_message: user.last_message || "",
       last_chat_time: user.last_chat_time || null,
