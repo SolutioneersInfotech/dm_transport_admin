@@ -1935,7 +1935,7 @@ export default function Documents() {
             </TableHeader>
             <TableBody>
               {showInitialDocumentsLoader ? (
-                <TableRow>
+                <TableRow className="hover:bg-transparent cursor-default">
                   <TableCell colSpan={8} className="h-64 text-center">
                     <div className="flex flex-col items-center justify-center text-gray-400">
                       <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
@@ -1953,7 +1953,7 @@ export default function Documents() {
                   showActionColumn
                 />
               ) : showFlagFilterTablePreparationLoader ? (
-                <TableRow>
+                <TableRow className="hover:bg-transparent cursor-default">
                   <TableCell colSpan={8} className="h-64 text-center">
                     <div className="flex flex-col items-center justify-center text-gray-400">
                       <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
@@ -1961,8 +1961,19 @@ export default function Documents() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ) : showEmptyDocumentsState && !showSyncSpinner ? (
-                <TableRow>
+              ) : showEmptyDocumentsState && showSyncSpinner ?
+              (
+                <TableRow className="hover:bg-transparent cursor-default">
+                  <TableCell colSpan={8} className="h-64 text-center">
+                    <div className="flex flex-col items-center justify-center text-gray-400">
+                      <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
+                      <p className="text-xs mt-2">Syncing...</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )
+              : showEmptyDocumentsState ? (
+                <TableRow className="hover:bg-transparent cursor-default">
                   <TableCell colSpan={8} className="h-64 text-center">
                     <div className="flex flex-col items-center justify-center text-gray-400">
                       <p className="text-sm font-medium">No documents found</p>
