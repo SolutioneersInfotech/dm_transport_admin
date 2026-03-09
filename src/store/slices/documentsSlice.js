@@ -248,6 +248,7 @@ export const fetchDocumentsHead = createAsyncThunk(
 
 export const fetchDocumentCount = createAsyncThunk("documents/fetchDocumentCount", async ({ start_date, end_date, search = "", isSeen = null, isFlagged = null, category = null, filters = [], bypassCache = false, requestSignature = "" }, { rejectWithValue }) => {
   try {
+    // count cache/request signatures must include flag filter, otherwise flagged totals reuse unfiltered counts
     const cacheKey = buildCountCacheKey({
       types: filters,
       isFlagged,

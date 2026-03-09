@@ -1096,7 +1096,10 @@ export default function Documents() {
     (loading || !hasResolvedInitialDocumentsFetch);
   const showSkeleton = loading && !isManualRefreshing && !showInitialDocumentsLoader && !hasVisibleDocuments;
   const showEmptyDocumentsState =
+    // empty state must never render while document requests are still loading
     !loading &&
+    !loadingMore &&
+    !isManualRefreshing &&
     hasResolvedInitialDocumentsFetch &&
     !hasVisibleDocuments &&
     !showFlagFilterTablePreparationLoader;
@@ -1532,8 +1535,10 @@ export default function Documents() {
                           onClick={() => {
                             toggleFilter(filterValue);
                           }}
-                          className={`relative w-full text-left px-3 py-2 text-sm hover:bg-[#1d232a] transition-colors flex items-center gap-2 rounded ${
-                            isSelected ? "text-[#1f6feb] bg-[#1d232a]" : "text-gray-300"
+                          className={`relative w-full text-left px-3 py-2 text-sm transition-colors flex items-center gap-2 rounded ${
+                            isSelected
+                              ? "text-white bg-[#1f6feb]/80 hover:bg-[#1f6feb]/80 hover:border-[#1f6feb] hover:text-white"
+                              : "text-gray-300 hover:bg-[#1d232a]"
                           }`}
                         >
                           <span className={`w-4 h-4 border rounded flex items-center justify-center ${
@@ -1603,7 +1608,7 @@ export default function Documents() {
                 size="sm"
                 className={`relative overflow-hidden rounded-full text-xs md:text-sm whitespace-nowrap ${
                   isSelected
-                    ? "bg-[#1f6feb] border-[#1f6feb] text-white"
+                    ? "bg-[#1f6feb] border-[#1f6feb] text-white hover:bg-[#1f6feb]/80 hover:border-[#1f6feb] hover:text-white"
                     : "border-gray-600 bg-[#161b22] text-gray-300 hover:bg-[#1d232a]"
                 }`}
               >

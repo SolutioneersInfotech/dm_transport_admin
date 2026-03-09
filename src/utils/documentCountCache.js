@@ -30,7 +30,7 @@ export function buildCountCacheKey(filters) {
   // Count cache key is derived from active filters so each filter combination is cached independently.
   return JSON.stringify({
     types: filters.types || [],
-    flags: filters.isFlagged,
+    isFlagged: filters.isFlagged,
     dateFrom: filters.startDate,
     dateTo: filters.endDate,
     category: filters.category,
