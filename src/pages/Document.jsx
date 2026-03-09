@@ -151,6 +151,8 @@ export default function Documents() {
   const pendingTypeFilterSignatureRef = useRef(null);
   const pendingFlagFilterSignatureRef = useRef(null);
   const pendingFlagFilterSyncSignatureRef = useRef(null);
+  const lastPreparedPageOneSignatureRef = useRef(null);
+  const currentVisibleTableRowsRef = useRef([]);
   const flagFilterLoadingIntervalRef = useRef(null);
   const activeFlagFilterLoadingSignatureRef = useRef(null);
   const hasResolvedInitialDocumentsFetchRef = useRef(false);
@@ -628,6 +630,14 @@ export default function Documents() {
     Array.isArray(preservedPageOneRows) &&
     preservedPageOneRows.length > 0;
   const tableDocuments = shouldUsePreservedPageOneRows ? preservedPageOneRows : filteredDocuments;
+  const currentVisibleTableRows = useMemo(
+    () => tableDocuments || filteredDocuments || [],
+    [tableDocuments, filteredDocuments]
+  );
+
+  useEffect(() => {
+    currentVisibleTableRowsRef.current = currentVisibleTableRows;
+  }, [currentVisibleTableRows]);
 
   const clearDeferredReconciliation = useCallback(() => {
     if (!deferredReconcileRef.current) return;
@@ -763,13 +773,18 @@ export default function Documents() {
       endPendingFlagFilterSync();
     }
 
-    // Preserve previous page-1 table during filter transitions so the UI never collapses to empty while new data is loading.
-    setPreservedPageOneRows(filteredDocuments || []);
-    setPreservedPageOneSignature(activeSignature);
+    // This page-1 reset flow must run once per filter signature to prevent dispatch/state feedback loops (maximum update depth).
+    if (lastPreparedPageOneSignatureRef.current !== activeSignature) {
+      lastPreparedPageOneSignatureRef.current = activeSignature;
 
-    dispatch(resetPagination());
-    // Page-1 filter transitions clear stale backend rows so head overlay data becomes the immediate visible source.
-    dispatch(preparePageOneFilterTransition());
+      // Use current visible rows as the one-time snapshot during page-1 transitions.
+      setPreservedPageOneRows(currentVisibleTableRowsRef.current || []);
+      setPreservedPageOneSignature(activeSignature);
+
+      dispatch(resetPagination());
+      // Derived row arrays must not drive this effect because these dispatches mutate document slice state.
+      dispatch(preparePageOneFilterTransition());
+    }
 
     const runHeadFirstFetch = async () => {
       // Page-1 is head-first so fast head results paint first while backend reconciliation remains authoritative in the background.
@@ -847,7 +862,6 @@ export default function Documents() {
     availableFilterValues.length,
     hasDocumentPermissionRestrictions,
     limit,
-    filteredDocuments,
   ]);
 
   const handleManualRefresh = useCallback(async () => {
