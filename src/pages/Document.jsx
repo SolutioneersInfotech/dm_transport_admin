@@ -148,7 +148,7 @@ export default function Documents() {
   const deferredReconcileRef = useRef(null);
   const deferredReconcileTypeRef = useRef(null);
   const latestFilterSignatureRef = useRef("");
-  const lastPreparedSignatureRef = useRef(null);
+  const lastPreparedTypeFilterSignatureRef = useRef(null);
   // Stores the last successfully rendered page-1 table rows so transition snapshots survive Redux clears.
   const lastStableTableRowsRef = useRef([]);
   const pendingTypeFilterSignatureRef = useRef(null);
@@ -164,6 +164,7 @@ export default function Documents() {
   const [flagFilterLoadingMessage, setFlagFilterLoadingMessage] = useState("");
   const [preservedTableRows, setPreservedTableRows] = useState([]);
   const [preservedTableSignature, setPreservedTableSignature] = useState(null);
+  const [isTypeFilterTransitionActive, setIsTypeFilterTransitionActive] = useState(false);
 
   const [searchParams] = useSearchParams();
 
@@ -473,6 +474,12 @@ export default function Documents() {
     return [];
   }, [availableFilterValues, hasDocumentPermissionRestrictions, selectedFilters]);
 
+  // Signature tracks only user-selected document types; other filter changes should not trigger row preservation.
+  const typeFilterSignature = useMemo(
+    () => JSON.stringify([...selectedFilters].sort()),
+    [selectedFilters]
+  );
+
   const shouldShowTypeFilterSpinner = useCallback((filterValue, isSelected) => {
     return isTypeFilterLoading && isSelected && activeTypeFilterValue === filterValue;
   }, [activeTypeFilterValue, isTypeFilterLoading]);
@@ -610,6 +617,12 @@ export default function Documents() {
 
   const currentFilterSignature = useMemo(() => buildFilterSignature(), [buildFilterSignature]);
 
+  useEffect(() => {
+    if (lastPreparedTypeFilterSignatureRef.current === null) {
+      lastPreparedTypeFilterSignatureRef.current = typeFilterSignature;
+    }
+  }, [typeFilterSignature]);
+
   const clearDeferredReconciliation = useCallback(() => {
     if (!deferredReconcileRef.current) return;
 
@@ -735,15 +748,21 @@ export default function Documents() {
     latestFilterSignatureRef.current = activeSignature;
     clearDeferredReconciliation();
 
-    if (lastPreparedSignatureRef.current !== activeSignature) {
-      // Preserve rows from the last stable render snapshot so resetPagination/transition clears cannot blank the table.
+    const typeFilterChanged =
+      lastPreparedTypeFilterSignatureRef.current !== typeFilterSignature;
+
+    if (typeFilterChanged) {
+      // Preserve rows only for document-type filter transitions; other filters intentionally keep existing behavior.
       const visibleRowsSnapshot = Array.isArray(lastStableTableRowsRef.current)
         ? [...lastStableTableRowsRef.current]
         : [];
       setPreservedTableRows(visibleRowsSnapshot);
       setPreservedTableSignature(activeSignature);
-      // Snapshot only once per signature so this transition cannot trigger repeated rerenders.
-      lastPreparedSignatureRef.current = activeSignature;
+      setIsTypeFilterTransitionActive(visibleRowsSnapshot.length > 0);
+      // Snapshot once per type signature to avoid repeated preserve writes and render loops.
+      lastPreparedTypeFilterSignatureRef.current = typeFilterSignature;
+    } else {
+      setIsTypeFilterTransitionActive(false);
     }
 
     // Cancel older flag-filter sync/loading loops when a newer signature starts so stale completions cannot stop latest spinner work.
@@ -826,6 +845,7 @@ export default function Documents() {
     loading,
     currentFetchArgs,
     currentFilterSignature,
+    typeFilterSignature,
     clearDeferredReconciliation,
     scheduleDeferredReconciliation,
     clearFastFilterLoadingForSignature,
@@ -843,6 +863,7 @@ export default function Documents() {
 
     setPreservedTableRows([]);
     setPreservedTableSignature(null);
+    setIsTypeFilterTransitionActive(false);
   }, [loading, error, preservedTableSignature]);
 
   const handleManualRefresh = useCallback(async () => {
@@ -960,10 +981,11 @@ export default function Documents() {
     lastStableTableRowsRef.current = filteredDocuments;
   }, [filteredDocuments, loading, page]);
 
-  // During page-1 filter transitions, keep rendering the previous rows until the latest signature finishes loading.
+  // During page-1 type-filter transitions, keep rendering the previous rows until the latest signature finishes loading.
   const shouldUsePreservedRows =
     loading &&
     page === 1 &&
+    isTypeFilterTransitionActive &&
     preservedTableSignature === latestFilterSignatureRef.current &&
     Array.isArray(preservedTableRows) &&
     preservedTableRows.length > 0;
