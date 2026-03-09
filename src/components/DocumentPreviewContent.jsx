@@ -2,12 +2,37 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "./ui/button";
-import { Copy, Flag, X, Check, MessageCircle, Send, CheckCircle2, Circle, Trash2, Pencil, Plus, Download, Redo2, Undo2 } from "lucide-react";
+import {
+  Copy,
+  Flag,
+  X,
+  Check,
+  MessageCircle,
+  Send,
+  CheckCircle2,
+  Circle,
+  Trash2,
+  Pencil,
+  Plus,
+  Download,
+  Redo2,
+  Undo2,
+} from "lucide-react";
 import { fetchDocumentByIdRoute } from "../utils/apiRoutes";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
-import { updateDocument, deleteDocumentThunk, changeDocumentType, optimisticUpdateDocumentRow } from "../store/slices/documentsSlice";
+import {
+  updateDocument,
+  deleteDocumentThunk,
+  changeDocumentType,
+  optimisticUpdateDocumentRow,
+} from "../store/slices/documentsSlice";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "./ui/select";
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "./ui/tooltip";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "./ui/tooltip";
 import { Popover, PopoverTrigger, PopoverContent } from "./ui/popover";
 import {
   fetchAcknowledgements,
@@ -16,7 +41,10 @@ import {
   deleteAcknowledgement,
   sendAcknowledgement,
 } from "../services/acknowledgementAPI";
-import { buildDocumentDownloadName, getDocumentTypeLabel } from "../utils/documentDownloadName";
+import {
+  buildDocumentDownloadName,
+  getDocumentTypeLabel,
+} from "../utils/documentDownloadName";
 
 // Document type mapping (same as in Document.jsx)
 const FILTER_MAP = {
@@ -30,7 +58,7 @@ const FILTER_MAP = {
   "DM Trans Inc Trip Envelope": "dm_trans_inc_trip_envelope",
   "DM Transport City Worksheet": "dm_transport_city_worksheet_trip_envelope",
   "Repair and Maintenance": "trip_envelope",
-  "CTPAT": "CTPAT",
+  CTPAT: "CTPAT",
 };
 
 export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
@@ -47,12 +75,16 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isChangingType, setIsChangingType] = useState(false);
   const [acknowledgements, setAcknowledgements] = useState([]);
-  const [showAcknowledgementDropdown, setShowAcknowledgementDropdown] = useState(false);
-  const [showAddAcknowledgementModal, setShowAddAcknowledgementModal] = useState(false);
+  const [showAcknowledgementDropdown, setShowAcknowledgementDropdown] =
+    useState(false);
+  const [showAddAcknowledgementModal, setShowAddAcknowledgementModal] =
+    useState(false);
   const [editingAcknowledgement, setEditingAcknowledgement] = useState(null);
   const [acknowledgementText, setAcknowledgementText] = useState("");
-  const [isLoadingAcknowledgements, setIsLoadingAcknowledgements] = useState(false);
-  const [isSendingAcknowledgement, setIsSendingAcknowledgement] = useState(false);
+  const [isLoadingAcknowledgements, setIsLoadingAcknowledgements] =
+    useState(false);
+  const [isSendingAcknowledgement, setIsSendingAcknowledgement] =
+    useState(false);
   const [isPdfLoading, setIsPdfLoading] = useState(true);
   const [pdfObjectUrl, setPdfObjectUrl] = useState("");
   const [pdfLoadError, setPdfLoadError] = useState("");
@@ -66,14 +98,29 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     try {
       if (value && typeof value.toDate === "function") {
         const d = value.toDate();
-        return isNaN(d.getTime()) ? "—" : d.toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" });
+        return isNaN(d.getTime())
+          ? "—"
+          : d.toLocaleString("en-US", {
+              dateStyle: "short",
+              timeStyle: "short",
+            });
       }
       if (value && typeof value.seconds === "number") {
         const d = new Date(value.seconds * 1000);
-        return isNaN(d.getTime()) ? "—" : d.toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" });
+        return isNaN(d.getTime())
+          ? "—"
+          : d.toLocaleString("en-US", {
+              dateStyle: "short",
+              timeStyle: "short",
+            });
       }
-      const d = typeof value === "string" || typeof value === "number" ? new Date(value) : value;
-      return isNaN(d.getTime()) ? "—" : d.toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" });
+      const d =
+        typeof value === "string" || typeof value === "number"
+          ? new Date(value)
+          : value;
+      return isNaN(d.getTime())
+        ? "—"
+        : d.toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" });
     } catch {
       return "—";
     }
@@ -106,12 +153,16 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     const controller = new AbortController();
     (async () => {
       try {
-        const res = await fetch(docUrl, { method: "HEAD", signal: controller.signal });
+        const res = await fetch(docUrl, {
+          method: "HEAD",
+          signal: controller.signal,
+        });
         if (cancelled) return;
         const len = res.headers.get("Content-Length");
         if (len != null) {
           const parsedBytes = parseInt(len, 10);
-          if (!isNaN(parsedBytes)) setDocSizeMb((parsedBytes / (1024 * 1024)).toFixed(2));
+          if (!isNaN(parsedBytes))
+            setDocSizeMb((parsedBytes / (1024 * 1024)).toFixed(2));
         }
       } catch {
         if (!cancelled) {
@@ -135,7 +186,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
       try {
         const token = localStorage.getItem("adminToken");
         const url = fetchDocumentByIdRoute(selectedDoc.id, selectedDoc.type);
-        
+
         const res = await fetch(url, {
           method: "GET",
           headers: {
@@ -176,7 +227,11 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     let nextObjectUrl = null;
 
     const currentUrl = fullDoc?.document_url || selectedDoc?.document_url;
-    const extFromUrl = currentUrl?.split("?")[0]?.split(".").pop()?.toLowerCase();
+    const extFromUrl = currentUrl
+      ?.split("?")[0]
+      ?.split(".")
+      .pop()
+      ?.toLowerCase();
 
     if (!currentUrl || extFromUrl !== "pdf") {
       setPdfLoadError("");
@@ -216,17 +271,24 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     };
   }, [fullDoc?.document_url, selectedDoc?.document_url]);
 
-
   // Prevent indefinite loader when embedded PDF renderer does not emit load events
   useEffect(() => {
     const currentUrl = fullDoc?.document_url || selectedDoc?.document_url;
-    const extFromUrl = currentUrl?.split("?")[0]?.split(".").pop()?.toLowerCase();
+    const extFromUrl = currentUrl
+      ?.split("?")[0]
+      ?.split(".")
+      .pop()
+      ?.toLowerCase();
 
     if (extFromUrl !== "pdf" || !isPdfLoading) return;
 
     const timeoutId = window.setTimeout(() => {
       setIsPdfLoading(false);
-      setPdfLoadError((prev) => prev || "PDF preview is taking longer than expected. Use Open PDF if needed.");
+      setPdfLoadError(
+        (prev) =>
+          prev ||
+          "PDF preview is taking longer than expected. Use Open PDF if needed.",
+      );
     }, 10000);
 
     return () => window.clearTimeout(timeoutId);
@@ -252,7 +314,8 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     ...(selectedDoc || {}),
   };
   const inVal = doc.in_date_time ?? doc.inTime ?? doc.in_time ?? doc.inDateTime;
-  const outVal = doc.out_date_time ?? doc.outTime ?? doc.out_time ?? doc.outDateTime;
+  const outVal =
+    doc.out_date_time ?? doc.outTime ?? doc.out_time ?? doc.outDateTime;
   const inFormatted = formatDateTime(inVal);
   const outFormatted = formatDateTime(outVal);
   const showInTime = inVal != null && inVal !== "" && inFormatted !== "—";
@@ -292,7 +355,8 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     }
   };
 
-  const isActionPending = (documentId, actionType) => docActionInFlight[`${documentId}:${actionType}`] === true;
+  const isActionPending = (documentId, actionType) =>
+    docActionInFlight[`${documentId}:${actionType}`] === true;
 
   const setActionPending = (documentId, actionType, isPending) => {
     if (!documentId) return;
@@ -317,15 +381,22 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     const previousFlag = doc.flag ?? { flagged: false, reason: "" };
 
     // Optimistic row update keeps preview and table state in sync immediately.
-    dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { flag: flagData } }));
+    dispatch(
+      optimisticUpdateDocumentRow({
+        documentId: doc.id,
+        changes: { flag: flagData },
+      }),
+    );
 
     try {
       setActionPending(doc.id, "flag", true);
-      const result = await dispatch(updateDocument({ 
-        document: doc, 
-        flag: flagData 
-      }));
-      
+      const result = await dispatch(
+        updateDocument({
+          document: doc,
+          flag: flagData,
+        }),
+      );
+
       if (updateDocument.fulfilled.match(result)) {
         // Update local state
         const updatedDoc = { ...doc, flag: flagData };
@@ -337,11 +408,21 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
         setFlagReason("");
         toast.success("Document flagged successfully");
       } else {
-        dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { flag: previousFlag } }));
+        dispatch(
+          optimisticUpdateDocumentRow({
+            documentId: doc.id,
+            changes: { flag: previousFlag },
+          }),
+        );
         toast.error(result.payload || "Failed to flag document");
       }
     } catch (error) {
-      dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { flag: previousFlag } }));
+      dispatch(
+        optimisticUpdateDocumentRow({
+          documentId: doc.id,
+          changes: { flag: previousFlag },
+        }),
+      );
       console.error("Failed to flag document:", error);
       toast.error("Failed to flag document. Please try again.");
     } finally {
@@ -356,17 +437,27 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
       flagged: false,
       reason: "",
     };
-    const previousFlag = doc.flag ?? { flagged: true, reason: doc.flag?.reason ?? "" };
+    const previousFlag = doc.flag ?? {
+      flagged: true,
+      reason: doc.flag?.reason ?? "",
+    };
 
-    dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { flag: flagData } }));
+    dispatch(
+      optimisticUpdateDocumentRow({
+        documentId: doc.id,
+        changes: { flag: flagData },
+      }),
+    );
 
     try {
       setActionPending(doc.id, "flag", true);
-      const result = await dispatch(updateDocument({ 
-        document: doc, 
-        flag: flagData 
-      }));
-      
+      const result = await dispatch(
+        updateDocument({
+          document: doc,
+          flag: flagData,
+        }),
+      );
+
       if (updateDocument.fulfilled.match(result)) {
         // Update local state
         const updatedDoc = { ...doc, flag: flagData };
@@ -376,11 +467,21 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
         }
         toast.success("Document unflagged successfully");
       } else {
-        dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { flag: previousFlag } }));
+        dispatch(
+          optimisticUpdateDocumentRow({
+            documentId: doc.id,
+            changes: { flag: previousFlag },
+          }),
+        );
         toast.error(result.payload || "Failed to unflag document");
       }
     } catch (error) {
-      dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { flag: previousFlag } }));
+      dispatch(
+        optimisticUpdateDocumentRow({
+          documentId: doc.id,
+          changes: { flag: previousFlag },
+        }),
+      );
       console.error("Failed to unflag document:", error);
       toast.error("Failed to unflag document. Please try again.");
     } finally {
@@ -395,15 +496,22 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     const newSeenStatus = doc.seen === true ? false : true;
     const previousSeen = doc.seen;
 
-    dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { seen: newSeenStatus } }));
-    
+    dispatch(
+      optimisticUpdateDocumentRow({
+        documentId: doc.id,
+        changes: { seen: newSeenStatus },
+      }),
+    );
+
     try {
       setActionPending(doc.id, "seen", true);
-      const result = await dispatch(updateDocument({ 
-        document: doc, 
-        seen: newSeenStatus 
-      }));
-      
+      const result = await dispatch(
+        updateDocument({
+          document: doc,
+          seen: newSeenStatus,
+        }),
+      );
+
       if (updateDocument.fulfilled.match(result)) {
         // Update local state
         const updatedDoc = { ...doc, seen: newSeenStatus };
@@ -411,13 +519,27 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
         if (onDocUpdate) {
           onDocUpdate(updatedDoc);
         }
-        toast.success(newSeenStatus ? "Document marked as seen" : "Document marked as unseen");
+        toast.success(
+          newSeenStatus
+            ? "Document marked as seen"
+            : "Document marked as unseen",
+        );
       } else {
-        dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { seen: previousSeen } }));
+        dispatch(
+          optimisticUpdateDocumentRow({
+            documentId: doc.id,
+            changes: { seen: previousSeen },
+          }),
+        );
         toast.error(result.payload || "Failed to update seen status");
       }
     } catch (error) {
-      dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { seen: previousSeen } }));
+      dispatch(
+        optimisticUpdateDocumentRow({
+          documentId: doc.id,
+          changes: { seen: previousSeen },
+        }),
+      );
       console.error("Failed to update seen status:", error);
       toast.error("Failed to update seen status. Please try again.");
     } finally {
@@ -441,29 +563,31 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   // Find driver by email or name from users list
   function findDriverByEmailOrName(email, name) {
     if (!users?.length) return null;
-    
+
     // First try to find by email
     if (email) {
-      const userByEmail = users.find((u) => 
-        u.email?.toLowerCase() === email.toLowerCase() ||
-        u.driver_email?.toLowerCase() === email.toLowerCase()
+      const userByEmail = users.find(
+        (u) =>
+          u.email?.toLowerCase() === email.toLowerCase() ||
+          u.driver_email?.toLowerCase() === email.toLowerCase(),
       );
       if (userByEmail) {
         return userByEmail;
       }
     }
-    
+
     // Then try to find by name
     if (name) {
-      const userByName = users.find((u) => 
-        u.name?.toLowerCase() === name.toLowerCase() ||
-        u.driver_name?.toLowerCase() === name.toLowerCase()
+      const userByName = users.find(
+        (u) =>
+          u.name?.toLowerCase() === name.toLowerCase() ||
+          u.driver_name?.toLowerCase() === name.toLowerCase(),
       );
       if (userByName) {
         return userByName;
       }
     }
-    
+
     return null;
   }
 
@@ -471,22 +595,26 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   const handleChatWithDriver = () => {
     const doc = fullDoc || selectedDoc;
     if (!doc) return;
-    
+
     // First check if document has a direct userid or driver_id field
-    let userId = doc.userid || doc.userId || doc.driver_id || doc.driverId || null;
-    
+    let userId =
+      doc.userid || doc.userId || doc.driver_id || doc.driverId || null;
+
     // If not found, try to find by email or name from users list
     if (!userId) {
-      const driverMatch = findDriverByEmailOrName(doc.driver_email, doc.driver_name);
+      const driverMatch = findDriverByEmailOrName(
+        doc.driver_email,
+        doc.driver_name,
+      );
       userId = getUserId(driverMatch);
     }
-    
+
     if (!userId) {
       console.error("Cannot navigate to chat: Driver user ID not found");
       toast.error("Driver information not found. Cannot open chat.");
       return;
     }
-    
+
     navigate(`/chat?userid=${userId}`);
     toast.success("Opening chat with driver");
   };
@@ -495,16 +623,19 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   const handleToggleMarkForResend = async () => {
     const doc = fullDoc || selectedDoc;
     if (!doc) return;
-    
+
     // Toggle between "markedForResend" and "sent"
-    const newState = doc.state === "markedForResend" ? "sent" : "markedForResend";
-    
+    const newState =
+      doc.state === "markedForResend" ? "sent" : "markedForResend";
+
     try {
-      const result = await dispatch(updateDocument({ 
-        document: doc, 
-        state: newState 
-      }));
-      
+      const result = await dispatch(
+        updateDocument({
+          document: doc,
+          state: newState,
+        }),
+      );
+
       if (updateDocument.fulfilled.match(result)) {
         // Update local state
         const updatedDoc = { ...doc, state: newState };
@@ -512,9 +643,15 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
         if (onDocUpdate) {
           onDocUpdate(updatedDoc);
         }
-        toast.success(newState === "markedForResend" ? "Document marked for resend" : "Mark for resend undone");
+        toast.success(
+          newState === "markedForResend"
+            ? "Document marked for resend"
+            : "Mark for resend undone",
+        );
       } else {
-        toast.error(result.payload || "Failed to update mark for resend status");
+        toast.error(
+          result.payload || "Failed to update mark for resend status",
+        );
       }
     } catch (error) {
       console.error("Failed to update mark for resend status:", error);
@@ -534,16 +671,18 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   const handleToggleCompleted = async () => {
     const doc = fullDoc || selectedDoc;
     if (!doc) return;
-    
+
     // Toggle between true and false
     const newCompletedStatus = doc.completed === true ? false : true;
-    
+
     try {
-      const result = await dispatch(updateDocument({ 
-        document: doc, 
-        completed: newCompletedStatus 
-      }));
-      
+      const result = await dispatch(
+        updateDocument({
+          document: doc,
+          completed: newCompletedStatus,
+        }),
+      );
+
       if (updateDocument.fulfilled.match(result)) {
         // Update local state
         const updatedDoc = { ...doc, completed: newCompletedStatus };
@@ -551,7 +690,11 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
         if (onDocUpdate) {
           onDocUpdate(updatedDoc);
         }
-        toast.success(newCompletedStatus ? "Document marked as done" : "Mark as done undone");
+        toast.success(
+          newCompletedStatus
+            ? "Document marked as done"
+            : "Mark as done undone",
+        );
       } else {
         toast.error(result.payload || "Failed to update completed status");
       }
@@ -569,7 +712,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     setIsDeleting(true);
     try {
       const result = await dispatch(deleteDocumentThunk({ document: doc }));
-      
+
       if (deleteDocumentThunk.fulfilled.match(result)) {
         // Close the modal and clear selection
         setShowDeleteModal(false);
@@ -605,7 +748,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
           documentId: doc.id,
           oldType: doc.type,
           newType: newType,
-        })
+        }),
       );
 
       if (changeDocumentType.fulfilled.match(result)) {
@@ -619,9 +762,9 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
         if (onDocUpdate) {
           onDocUpdate(updatedDoc);
         }
-        const newTypeLabel = Object.keys(FILTER_MAP).find(
-          (key) => FILTER_MAP[key] === newType
-        ) || newType;
+        const newTypeLabel =
+          Object.keys(FILTER_MAP).find((key) => FILTER_MAP[key] === newType) ||
+          newType;
         toast.success(`Document type changed to ${newTypeLabel}`);
       } else {
         toast.error(result.payload || "Failed to change document type");
@@ -639,7 +782,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     const doc = fullDoc || selectedDoc;
     if (!doc || !doc.type) return "Select Type";
     const label = Object.keys(FILTER_MAP).find(
-      (key) => FILTER_MAP[key] === doc.type
+      (key) => FILTER_MAP[key] === doc.type,
     );
     return label || doc.type;
   };
@@ -652,14 +795,14 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     setIsSendingAcknowledgement(true);
     try {
       await sendAcknowledgement(doc, acknowledgementText);
-      
+
       // Update local state
       const updatedDoc = { ...doc, acknowledgement: acknowledgementText };
       setFullDoc(updatedDoc);
       if (onDocUpdate) {
         onDocUpdate(updatedDoc);
       }
-      
+
       setShowAcknowledgementDropdown(false);
       toast.success("Acknowledgement sent successfully");
     } catch (error) {
@@ -697,7 +840,10 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     }
 
     try {
-      await updateAcknowledgement(editingAcknowledgement.id, acknowledgementText.trim());
+      await updateAcknowledgement(
+        editingAcknowledgement.id,
+        acknowledgementText.trim(),
+      );
       await loadAcknowledgements(); // Reload list
       setShowAddAcknowledgementModal(false);
       setEditingAcknowledgement(null);
@@ -711,7 +857,11 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
   // Handle delete acknowledgement template
   const handleDeleteAcknowledgement = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this acknowledgement template?")) {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this acknowledgement template?",
+      )
+    ) {
       return;
     }
 
@@ -749,9 +899,15 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
       const blob = await res.blob();
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      const ext = (doc.document_url?.split("?")[0]?.split(".").pop() || "file").toLowerCase();
+      const ext = (
+        doc.document_url?.split("?")[0]?.split(".").pop() || "file"
+      ).toLowerCase();
       const typeLabel = getDocumentTypeLabel(doc.type, FILTER_MAP);
-      const fileName = buildDocumentDownloadName({ doc, driverName, typeLabel });
+      const fileName = buildDocumentDownloadName({
+        doc,
+        driverName,
+        typeLabel,
+      });
       a.download = `${fileName}.${ext}`;
       a.click();
       URL.revokeObjectURL(a.href);
@@ -777,10 +933,19 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     </button>
   );
 
-  const matchedDriver = findDriverByEmailOrName(doc.driver_email, doc.driver_name);
-  const driverName = doc.driver_name || matchedDriver?.name || matchedDriver?.driver_name || "Unknown";
-  const driverEmail = doc.driver_email || matchedDriver?.email || matchedDriver?.driver_email;
-  const driverPhone = doc.driver_phone || doc.driver_mobile || doc.phone || matchedDriver?.phone;
+  const matchedDriver = findDriverByEmailOrName(
+    doc.driver_email,
+    doc.driver_name,
+  );
+  const driverName =
+    doc.driver_name ||
+    matchedDriver?.name ||
+    matchedDriver?.driver_name ||
+    "Unknown";
+  const driverEmail =
+    doc.driver_email || matchedDriver?.email || matchedDriver?.driver_email;
+  const driverPhone =
+    doc.driver_phone || doc.driver_mobile || doc.phone || matchedDriver?.phone;
   const driverImage =
     doc.driver_image ||
     matchedDriver?.profilePic ||
@@ -838,7 +1003,11 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
               {pdfLoadError && (
                 <div className="text-center p-8 space-y-4">
                   <p className="text-sm text-gray-400">{pdfLoadError}</p>
-                  <Button asChild variant="outline" className="border-gray-600 text-white hover:bg-gray-800">
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="border-gray-600 text-white hover:bg-gray-800"
+                  >
                     <a href={url} target="_blank" rel="noopener noreferrer">
                       Open PDF
                     </a>
@@ -853,12 +1022,12 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
               <p className="text-sm text-gray-400">
                 Unable to preview this file type.
               </p>
-              <Button asChild variant="outline" className="border-gray-600 text-white hover:bg-gray-800">
-                <a
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+              <Button
+                asChild
+                variant="outline"
+                className="border-gray-600 text-white hover:bg-gray-800"
+              >
+                <a href={url} target="_blank" rel="noopener noreferrer">
                   Open File
                 </a>
               </Button>
@@ -871,13 +1040,17 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               {showInTime && (
                 <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
-                  <span className="font-medium text-gray-400 uppercase tracking-wide">In:</span>
+                  <span className="font-medium text-gray-400 uppercase tracking-wide">
+                    In:
+                  </span>
                   <span className="text-white">{inFormatted}</span>
                 </div>
               )}
               {showOutTime && (
                 <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
-                  <span className="font-medium text-gray-400 uppercase tracking-wide">Out:</span>
+                  <span className="font-medium text-gray-400 uppercase tracking-wide">
+                    Out:
+                  </span>
                   <span className="text-white">{outFormatted}</span>
                 </div>
               )}
@@ -886,8 +1059,12 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
           )}
           <div className="flex items-center gap-x-2 sm:ml-auto">
             <div className="flex flex-wrap items-baseline gap-x-1 text-xs">
-              <span className="font-medium text-gray-400 uppercase tracking-wide">Size:</span>
-              <span className="text-white">{docSizeMb != null ? `${docSizeMb} MB` : "—"}</span>
+              <span className="font-medium text-gray-400 uppercase tracking-wide">
+                Size:
+              </span>
+              <span className="text-white">
+                {docSizeMb != null ? `${docSizeMb} MB` : "—"}
+              </span>
             </div>
             <TooltipProvider>
               <Tooltip>
@@ -914,7 +1091,6 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
       {/* Document Information */}
       <div className="space-y-4 p-4 rounded-lg border border-gray-700 bg-[#161b22]">
-
         <div className="space-y-1">
           <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
             Uploaded By
@@ -971,7 +1147,9 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
             <div className="w-full max-w-md rounded-lg border border-gray-700 bg-[#161b22] p-6 space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-white">Flag Document</h3>
+                <h3 className="text-lg font-semibold text-white">
+                  Flag Document
+                </h3>
                 <button
                   onClick={() => {
                     setShowFlagModal(false);
@@ -1100,18 +1278,23 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
             {/* Mark as Seen/Unseen */}
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button 
+                <Button
+                  variant="outline"
                   onClick={handleToggleSeenStatus}
                   disabled={isActionPending(doc.id, "seen")}
                   size="icon"
                   className={`h-10 w-10 cursor-pointer flex-1 ${
-                    doc.seen === true 
-                      ? "bg-blue-500 hover:bg-blue-600 text-white" 
-                      : "bg-[#1f6feb] hover:bg-[#1a5fd4] text-white"
+                    doc.seen === true
+                      ? "border-blue-500 text-green-500 bg-blue-500/10 hover:bg-blue-500/20 hover:border-blue-400 hover:text-blue-400"
+                      : "border-gray-600 text-blue-500 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500 hover:text-blue"
                   }`}
                 >
                   {doc.seen === true ? (
-                    <CheckCircle2 className="h-4 w-4" />
+                    <Circle
+                      className="h-4 w-4 text-green-500"
+                      fill="currentColor"
+                      stroke="none"
+                    />
                   ) : (
                     <Circle className="h-4 w-4" />
                   )}
@@ -1125,7 +1308,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
             {/* Mark for Resend */}
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button 
+                <Button
                   onClick={handleToggleMarkForResend}
                   size="icon"
                   variant="outline"
@@ -1143,14 +1326,18 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>{doc.state === "markedForResend" ? "Undo Mark for Resend" : "Mark for Resend"}</p>
+                <p>
+                  {doc.state === "markedForResend"
+                    ? "Undo Mark for Resend"
+                    : "Mark for Resend"}
+                </p>
               </TooltipContent>
             </Tooltip>
 
             {/* Mark as Done */}
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button 
+                <Button
                   onClick={handleToggleCompleted}
                   size="icon"
                   variant="outline"
@@ -1164,7 +1351,11 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>{doc.completed === true ? "Undo Mark as Done" : "Mark as Done"}</p>
+                <p>
+                  {doc.completed === true
+                    ? "Undo Mark as Done"
+                    : "Mark as Done"}
+                </p>
               </TooltipContent>
             </Tooltip>
 
@@ -1181,7 +1372,9 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                       ? "border-red-500 text-red-500 bg-red-500/10 hover:bg-red-500/20 hover:text-red-400"
                       : "border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500 hover:text-white"
                   }`}
-                  aria-label={doc.flag?.flagged ? "Unflag document" : "Flag document"}
+                  aria-label={
+                    doc.flag?.flagged ? "Unflag document" : "Flag document"
+                  }
                 >
                   <Flag
                     className="h-4 w-4"
@@ -1197,7 +1390,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
             {/* Delete Document */}
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button 
+                <Button
                   onClick={() => setShowDeleteModal(true)}
                   size="icon"
                   variant="outline"
@@ -1212,11 +1405,14 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
             </Tooltip>
 
             {/* Send Acknowledgement */}
-            <Popover open={showAcknowledgementDropdown} onOpenChange={setShowAcknowledgementDropdown}>
+            <Popover
+              open={showAcknowledgementDropdown}
+              onOpenChange={setShowAcknowledgementDropdown}
+            >
               <Tooltip>
                 <TooltipTrigger asChild>
                   <PopoverTrigger asChild>
-                    <Button 
+                    <Button
                       size="icon"
                       variant="outline"
                       className="h-10 w-10 cursor-pointer flex-1 border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500 hover:text-white"
@@ -1233,7 +1429,9 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                 <div className="max-h-[400px] overflow-y-auto">
                   {/* Header */}
                   <div className="p-3 border-b border-gray-700 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-white">Acknowledgements</h3>
+                    <h3 className="text-sm font-semibold text-white">
+                      Acknowledgements
+                    </h3>
                     <Button
                       onClick={handleAddAcknowledgement}
                       size="sm"
@@ -1253,50 +1451,56 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   )}
 
                   {/* Templates List */}
-                  {!isLoadingAcknowledgements && acknowledgements.length === 0 && (
-                    <div className="p-4 text-center text-gray-400 text-sm">
-                      No acknowledgement templates found
-                    </div>
-                  )}
+                  {!isLoadingAcknowledgements &&
+                    acknowledgements.length === 0 && (
+                      <div className="p-4 text-center text-gray-400 text-sm">
+                        No acknowledgement templates found
+                      </div>
+                    )}
 
-                  {!isLoadingAcknowledgements && acknowledgements.length > 0 && (
-                    <div className="p-2">
-                      {acknowledgements.map((ack) => (
-                        <div
-                          key={ack.id}
-                          className="group p-2 rounded hover:bg-[#1d232a] transition-colors"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <button
-                              onClick={() => handleSendAcknowledgement(ack.data)}
-                              disabled={isSendingAcknowledgement}
-                              className="flex-1 text-left text-sm text-gray-300 hover:text-white transition-colors disabled:opacity-50"
-                            >
-                              <p className="line-clamp-2">{ack.data}</p>
-                            </button>
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Button
-                                onClick={() => handleEditAcknowledgement(ack)}
-                                size="icon"
-                                variant="ghost"
-                                className="h-6 w-6 text-gray-400 hover:text-white"
+                  {!isLoadingAcknowledgements &&
+                    acknowledgements.length > 0 && (
+                      <div className="p-2">
+                        {acknowledgements.map((ack) => (
+                          <div
+                            key={ack.id}
+                            className="group p-2 rounded hover:bg-[#1d232a] transition-colors"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <button
+                                onClick={() =>
+                                  handleSendAcknowledgement(ack.data)
+                                }
+                                disabled={isSendingAcknowledgement}
+                                className="flex-1 text-left text-sm text-gray-300 hover:text-white transition-colors disabled:opacity-50"
                               >
-                                <Pencil className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                onClick={() => handleDeleteAcknowledgement(ack.id)}
-                                size="icon"
-                                variant="ghost"
-                                className="h-6 w-6 text-gray-400 hover:text-red-500"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
+                                <p className="line-clamp-2">{ack.data}</p>
+                              </button>
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button
+                                  onClick={() => handleEditAcknowledgement(ack)}
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6 text-gray-400 hover:text-white"
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  onClick={() =>
+                                    handleDeleteAcknowledgement(ack.id)
+                                  }
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6 text-gray-400 hover:text-red-500"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    )}
                 </div>
               </PopoverContent>
             </Popover>
@@ -1309,7 +1513,9 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="w-full max-w-md rounded-lg border border-gray-700 bg-[#161b22] p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-white">Delete Document</h3>
+              <h3 className="text-lg font-semibold text-white">
+                Delete Document
+              </h3>
               <button
                 onClick={() => setShowDeleteModal(false)}
                 className="text-gray-400 hover:text-white"
@@ -1320,10 +1526,12 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
             </div>
             <div className="space-y-2">
               <p className="text-sm text-gray-300">
-                Are you sure you want to delete this document permanently? This action cannot be undone.
+                Are you sure you want to delete this document permanently? This
+                action cannot be undone.
               </p>
               <p className="text-xs text-gray-400">
-                The document will be removed permanently and cannot be recovered.
+                The document will be removed permanently and cannot be
+                recovered.
               </p>
             </div>
             <div className="flex items-center gap-2 justify-end">
@@ -1355,7 +1563,9 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
           <div className="w-full max-w-md rounded-lg border border-gray-700 bg-[#161b22] p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-white">
-                {editingAcknowledgement ? "Edit Acknowledgement" : "Add Acknowledgement Template"}
+                {editingAcknowledgement
+                  ? "Edit Acknowledgement"
+                  : "Add Acknowledgement Template"}
               </h3>
               <button
                 onClick={() => {
@@ -1394,7 +1604,11 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                 Cancel
               </Button>
               <Button
-                onClick={editingAcknowledgement ? handleUpdateAcknowledgement : handleCreateAcknowledgement}
+                onClick={
+                  editingAcknowledgement
+                    ? handleUpdateAcknowledgement
+                    : handleCreateAcknowledgement
+                }
                 size="sm"
                 disabled={!acknowledgementText.trim()}
                 className="bg-[#1f6feb] hover:bg-[#1a5fd4] text-white disabled:opacity-50 disabled:cursor-not-allowed"
