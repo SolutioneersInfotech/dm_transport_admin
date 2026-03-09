@@ -151,6 +151,7 @@ export default function Documents() {
   const pendingFlagFilterSignatureRef = useRef(null);
   const pendingFlagFilterSyncSignatureRef = useRef(null);
   const flagFilterLoadingIntervalRef = useRef(null);
+  const activeFlagFilterLoadingSignatureRef = useRef(null);
   const hasResolvedInitialDocumentsFetchRef = useRef(false);
   const [hasResolvedInitialDocumentsFetch, setHasResolvedInitialDocumentsFetch] = useState(false);
   const [activeFlagFilterLoadingSignature, setActiveFlagFilterLoadingSignature] = useState(null);
@@ -541,7 +542,7 @@ export default function Documents() {
 
   const stopFlagFilterLoadingMessages = useCallback((signature = null) => {
     // Ignore stale completions so an older response cannot stop the latest loading loop.
-    if (signature && signature !== activeFlagFilterLoadingSignature) return;
+    if (signature && signature !== activeFlagFilterLoadingSignatureRef.current) return;
 
     if (flagFilterLoadingIntervalRef.current) {
       clearInterval(flagFilterLoadingIntervalRef.current);
@@ -549,10 +550,11 @@ export default function Documents() {
     }
 
     setFlagFilterLoadingMessage("");
-    if (!signature || signature === activeFlagFilterLoadingSignature) {
+    if (!signature || signature === activeFlagFilterLoadingSignatureRef.current) {
+      activeFlagFilterLoadingSignatureRef.current = null;
       setActiveFlagFilterLoadingSignature(null);
     }
-  }, [activeFlagFilterLoadingSignature]);
+  }, []);
 
   const startFlagFilterLoadingMessages = useCallback((signature) => {
     if (flagFilterLoadingIntervalRef.current) {
@@ -560,17 +562,19 @@ export default function Documents() {
       flagFilterLoadingIntervalRef.current = null;
     }
 
+    activeFlagFilterLoadingSignatureRef.current = signature;
     setActiveFlagFilterLoadingSignature(signature);
     setResolvedFlagFilterLoadingSignature(null);
     setReconciledFlagFilterLoadingSignature(null);
     // Flag-filter requests can take longer to materialize rows, so explicit progress text avoids a "stuck" feeling.
+    // Loading phrase rotation is intentionally slower to avoid visual churn during longer backend work.
     setFlagFilterLoadingMessage(FLAG_FILTER_LOADING_MESSAGES[0]);
 
     let messageIndex = 0;
     flagFilterLoadingIntervalRef.current = window.setInterval(() => {
       messageIndex = (messageIndex + 1) % FLAG_FILTER_LOADING_MESSAGES.length;
       setFlagFilterLoadingMessage(FLAG_FILTER_LOADING_MESSAGES[messageIndex]);
-    }, 1000);
+    }, 3000);
   }, []);
 
   const beginFlagFilterSyncForSignature = useCallback((signature) => {
