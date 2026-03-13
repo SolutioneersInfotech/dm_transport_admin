@@ -705,8 +705,9 @@ export default function Documents() {
 
   const realtimeFilters = useMemo(
     () => ({
-      startDate,
-      endDate,
+      // Realtime overlay must share the same UTC boundary contract as list/head/count.
+      startDateTimeUtc,
+      endDateTimeUtc,
       search: searchDebounced,
       isSeen: isSeenParam,
       isFlagged: isFlaggedParam,
@@ -716,8 +717,8 @@ export default function Documents() {
       allowedTypes: hasDocumentPermissionRestrictions ? availableFilterValues : [],
     }),
     [
-      startDate,
-      endDate,
+      startDateTimeUtc,
+      endDateTimeUtc,
       searchDebounced,
       isSeenParam,
       isFlaggedParam,
@@ -731,8 +732,9 @@ export default function Documents() {
   const realtimeOverlayQuerySignature = useMemo(
     () =>
       JSON.stringify({
-        startDate,
-        endDate,
+        // Mixing date-only and UTC-boundary semantics causes timezone-specific realtime mismatches.
+        startDateTimeUtc,
+        endDateTimeUtc,
         search: searchDebounced,
         isSeen: isSeenParam,
         isFlagged: isFlaggedParam,
@@ -741,8 +743,8 @@ export default function Documents() {
         allowedTypes: hasDocumentPermissionRestrictions ? availableFilterValues : [],
       }),
     [
-      startDate,
-      endDate,
+      startDateTimeUtc,
+      endDateTimeUtc,
       searchDebounced,
       isSeenParam,
       isFlaggedParam,
@@ -954,8 +956,21 @@ export default function Documents() {
   useEffect(() => {
     const parseDateParam = (value) => {
       if (!value) return null;
-      const parsed = new Date(value);
-      return Number.isNaN(parsed.getTime()) ? null : parsed;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+
+      // URL date-only params represent local calendar days; new Date("YYYY-MM-DD") is interpreted as UTC.
+      const [year, month, day] = value.split("-").map(Number);
+      const parsed = new Date(year, month - 1, day, 0, 0, 0, 0);
+
+      if (
+        parsed.getFullYear() !== year ||
+        parsed.getMonth() !== month - 1 ||
+        parsed.getDate() !== day
+      ) {
+        return null;
+      }
+
+      return parsed;
     };
 
     const startParam = parseDateParam(searchParams.get("start"));
