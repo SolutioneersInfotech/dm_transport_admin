@@ -518,15 +518,23 @@ export default function Documents() {
     return formatLocalDate(new Date());
   }, [dateRange, hasCustomDateRange]);
 
-  const { startDateTimeUtc, endDateTimeUtc } = useMemo(() => {
+  const utcDateRange = useMemo(() => {
     if (hasCustomDateRange) {
       return buildLocalDayUtcBoundaries(dateRange.from, dateRange.to);
     }
 
     // Date-only strings are timezone-ambiguous; even default/all-documents boundaries must be explicit UTC instants.
-    const [year, month, day] = ALL_DOCUMENTS_START_DATE.split("-").map(Number);
-    return buildLocalDayUtcBoundaries(new Date(year, month - 1, day), new Date());
-  }, [dateRange, hasCustomDateRange]);
+    const [startYear, startMonth, startDay] = ALL_DOCUMENTS_START_DATE.split("-").map(Number);
+    const [endYear, endMonth, endDay] = endDate.split("-").map(Number);
+
+    return buildLocalDayUtcBoundaries(
+      new Date(startYear, startMonth - 1, startDay),
+      new Date(endYear, endMonth - 1, endDay)
+    );
+  }, [hasCustomDateRange, dateRange?.from?.getTime(), dateRange?.to?.getTime(), endDate]);
+
+  const startDateTimeUtc = utcDateRange?.startDateTimeUtc ?? null;
+  const endDateTimeUtc = utcDateRange?.endDateTimeUtc ?? null;
 
   const currentFetchArgs = useMemo(
     () => ({
