@@ -8,6 +8,7 @@ import {
   update,
 } from "firebase/database";
 import { database } from "../firebase/firebaseApp";
+import { sendChatMessageRoute } from "../utils/apiRoutes";
 
 const ADMIN_GENERAL_PATH = "chat/users/admin/general";
 const USER_MIRROR_BASE = "chat/users";
@@ -367,42 +368,43 @@ export async function sendMessage(chatTarget, text, adminUser = getAdminUser(), 
     throw new Error("Missing chat target id.");
   }
 
-  const messageId = push(ref(database, `${ADMIN_GENERAL_PATH}/${contactId}`)).key;
-
-  if (!messageId) {
-    throw new Error("Unable to generate message id.");
-  }
-
   const messageText = typeof text === "string" ? text : (text != null ? String(text) : "");
   const replyTo = replyToMsgId != null && replyToMsgId !== "" ? replyToMsgId : null;
   const attachment = typeof attachmentUrl === "string" && attachmentUrl.trim() ? attachmentUrl.trim() : "";
+  const token = getToken();
+
+  const response = await fetch(sendChatMessageRoute, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      userid,
+      message: messageText,
+      replyTo,
+      attachmentUrl: attachment,
+      sendername: adminUser?.name || adminUser?.userid || "Admin",
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.message || "Failed to send message.");
+  }
+
+  const messageId = data?.message?.id || data?.id || push(ref(database, `${ADMIN_GENERAL_PATH}/${contactId}`)).key;
 
   const payload = {
     id: messageId,
-    dateTime: new Date().toISOString(),
+    dateTime: data?.message?.dateTime || data?.message?.datetime || new Date().toISOString(),
     content: { message: messageText, attachmentUrl: attachment },
-    status: 0,
+    status: data?.message?.status ?? 0,
     type: 0,
     contactId: userid,
-    sendername: adminUser?.name || adminUser?.userid || "Admin",
+    sendername: data?.message?.sendername || adminUser?.name || adminUser?.userid || "Admin",
     replyTo,
   };
-
-  const userPayload = {
-    ...payload,
-    type: 1,
-  };
-
-  const writes = [
-    set(ref(database, `${ADMIN_GENERAL_PATH}/${contactId}/${messageId}`), payload),
-    set(ref(database, `${USER_MIRROR_BASE}/${contactId}/admin/${messageId}`), userPayload),
-  ];
-
-  if (userid !== contactId) {
-    writes.push(set(ref(database, `${USER_MIRROR_BASE}/${userid}/admin/${messageId}`), userPayload));
-  }
-
-  await Promise.all(writes);
 
   return { message: payload };
 }
