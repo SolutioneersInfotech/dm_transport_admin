@@ -4,8 +4,8 @@ import { buildDocumentCacheKey, getCachedDocumentRequest, setCachedDocumentReque
 const HEAD_CACHE_TTL_MS = 5 * 1000;
 
 export const fetchDocumentsHeadAPI = async ({
-  startDate,
-  endDate,
+  startDateTimeUtc,
+  endDateTimeUtc,
   search = "",
   isSeen = null,
   isFlagged = null,
@@ -15,8 +15,8 @@ export const fetchDocumentsHeadAPI = async ({
   bypassCache = false,
 }) => {
   const cacheKey = buildDocumentCacheKey("documentsHead", {
-    startDate,
-    endDate,
+    startDateTimeUtc,
+    endDateTimeUtc,
     search,
     isSeen,
     isFlagged,
@@ -31,7 +31,7 @@ export const fetchDocumentsHeadAPI = async ({
   }
 
   const token = localStorage.getItem("adminToken");
-  const url = fetchDocumentsHeadRoute(startDate, endDate, {
+  const url = fetchDocumentsHeadRoute({ startDateTimeUtc, endDateTimeUtc }, {
     search,
     isSeen,
     isFlagged,

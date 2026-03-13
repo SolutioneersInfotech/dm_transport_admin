@@ -29,15 +29,14 @@ export const deleteChatHistoryRoute = `${baseBackendUrl}/deletechathistory`;
 export const deleteSpecificChatRoute = `${baseBackendUrl}/deletespecificchats`;
 
 // Document routes
-export const fetchDocumentsRoute = (startDate, endDate, options = {}) => {
+export const fetchDocumentsRoute = ({ startDateTimeUtc, endDateTimeUtc } = {}, options = {}) => {
   const baseUrl = `${baseBackendUrl}/fetchdocuments`;
   const params = new URLSearchParams();
 
   // Required parameters
-  if (startDate && endDate) {
-    params.append("start_date", startDate);
-    params.append("end_date", endDate);
-    params.append("tz_offset", String(new Date().getTimezoneOffset()));
+  if (startDateTimeUtc && endDateTimeUtc) {
+    params.append("startDateTimeUtc", startDateTimeUtc);
+    params.append("endDateTimeUtc", endDateTimeUtc);
   }
 
   // Pagination
@@ -83,14 +82,13 @@ export const fetchDocumentsRoute = (startDate, endDate, options = {}) => {
   return queryString ? `${baseUrl}?${queryString}` : baseUrl;
 };
 
-export const fetchDocumentsHeadRoute = (startDate, endDate, options = {}) => {
+export const fetchDocumentsHeadRoute = ({ startDateTimeUtc, endDateTimeUtc } = {}, options = {}) => {
   const baseUrl = `${baseBackendUrl}/fetchdocumentshead`;
   const params = new URLSearchParams();
 
-  if (startDate && endDate) {
-    params.append("start_date", startDate);
-    params.append("end_date", endDate);
-    params.append("tz_offset", String(new Date().getTimezoneOffset()));
+  if (startDateTimeUtc && endDateTimeUtc) {
+    params.append("startDateTimeUtc", startDateTimeUtc);
+    params.append("endDateTimeUtc", endDateTimeUtc);
   }
 
   if (options.limit) {
@@ -127,15 +125,14 @@ export const fetchDocumentsHeadRoute = (startDate, endDate, options = {}) => {
 };
 
 // Document count route
-export const fetchDocumentCountRoute = (startDate, endDate, options = {}) => {
+export const fetchDocumentCountRoute = ({ startDateTimeUtc, endDateTimeUtc } = {}, options = {}) => {
   const baseUrl = `${baseBackendUrl}/fetchdocumentcount`;
   const params = new URLSearchParams();
 
   // Required parameters
-  if (startDate && endDate) {
-    params.append("start_date", startDate);
-    params.append("end_date", endDate);
-    params.append("tz_offset", String(new Date().getTimezoneOffset()));
+  if (startDateTimeUtc && endDateTimeUtc) {
+    params.append("startDateTimeUtc", startDateTimeUtc);
+    params.append("endDateTimeUtc", endDateTimeUtc);
   }
 
   // Status filters

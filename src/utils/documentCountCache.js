@@ -31,8 +31,8 @@ export function buildCountCacheKey(filters) {
   return JSON.stringify({
     types: filters.types || [],
     isFlagged: filters.isFlagged,
-    dateFrom: filters.startDate,
-    dateTo: filters.endDate,
+    startDateTimeUtc: filters.startDateTimeUtc,
+    endDateTimeUtc: filters.endDateTimeUtc,
     category: filters.category,
     search: filters.search,
     isSeen: filters.isSeen,

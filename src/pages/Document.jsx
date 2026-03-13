@@ -74,6 +74,17 @@ const FLAG_FILTER_LOADING_MESSAGES = [
 
 const isValidDateValue = (value) => value instanceof Date && isValid(value);
 
+const buildLocalDayUtcBoundaries = (from, to) => {
+  // Calendar dates picked by users are local-day concepts; convert local day boundaries to UTC instants for API filters.
+  const localStart = new Date(from.getFullYear(), from.getMonth(), from.getDate(), 0, 0, 0, 0);
+  const localEnd = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999);
+
+  return {
+    startDateTimeUtc: localStart.toISOString(),
+    endDateTimeUtc: localEnd.toISOString(),
+  };
+};
+
 // Last 60 Days
 function getDefaultDates() {
   const today = new Date();
@@ -507,10 +518,28 @@ export default function Documents() {
     return formatLocalDate(new Date());
   }, [dateRange, hasCustomDateRange]);
 
+  const utcDateRange = useMemo(() => {
+    if (hasCustomDateRange) {
+      return buildLocalDayUtcBoundaries(dateRange.from, dateRange.to);
+    }
+
+    // Date-only strings are timezone-ambiguous; even default/all-documents boundaries must be explicit UTC instants.
+    const [startYear, startMonth, startDay] = ALL_DOCUMENTS_START_DATE.split("-").map(Number);
+    const [endYear, endMonth, endDay] = endDate.split("-").map(Number);
+
+    return buildLocalDayUtcBoundaries(
+      new Date(startYear, startMonth - 1, startDay),
+      new Date(endYear, endMonth - 1, endDay)
+    );
+  }, [hasCustomDateRange, dateRange?.from?.getTime(), dateRange?.to?.getTime(), endDate]);
+
+  const startDateTimeUtc = utcDateRange?.startDateTimeUtc ?? null;
+  const endDateTimeUtc = utcDateRange?.endDateTimeUtc ?? null;
+
   const currentFetchArgs = useMemo(
     () => ({
-      startDate,
-      endDate,
+      startDateTimeUtc,
+      endDateTimeUtc,
       page: 1,
       // Page-1 head fetch and backend reconciliation must share the same page size contract.
       limit: FAST_HEAD_PAGE_LIMIT,
@@ -521,8 +550,8 @@ export default function Documents() {
       filters: typeFilters,
     }),
     [
-      startDate,
-      endDate,
+      startDateTimeUtc,
+      endDateTimeUtc,
       searchDebounced,
       isSeenParam,
       isFlaggedParam,
@@ -534,15 +563,15 @@ export default function Documents() {
   const buildFilterSignature = useCallback(
     ({ filters = typeFilters, isFlagged = isFlaggedParam } = {}) =>
       JSON.stringify({
-        startDate,
-        endDate,
+        startDateTimeUtc,
+        endDateTimeUtc,
         search: searchDebounced,
         isSeen: isSeenParam,
         isFlagged,
         category: categoryParam,
         filters,
       }),
-    [startDate, endDate, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters]
+    [startDateTimeUtc, endDateTimeUtc, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters]
   );
 
   const endPendingFlagFilterSync = useCallback((signature = null) => {
@@ -676,8 +705,9 @@ export default function Documents() {
 
   const realtimeFilters = useMemo(
     () => ({
-      startDate,
-      endDate,
+      // Realtime overlay must share the same UTC boundary contract as list/head/count.
+      startDateTimeUtc,
+      endDateTimeUtc,
       search: searchDebounced,
       isSeen: isSeenParam,
       isFlagged: isFlaggedParam,
@@ -687,8 +717,8 @@ export default function Documents() {
       allowedTypes: hasDocumentPermissionRestrictions ? availableFilterValues : [],
     }),
     [
-      startDate,
-      endDate,
+      startDateTimeUtc,
+      endDateTimeUtc,
       searchDebounced,
       isSeenParam,
       isFlaggedParam,
@@ -702,8 +732,9 @@ export default function Documents() {
   const realtimeOverlayQuerySignature = useMemo(
     () =>
       JSON.stringify({
-        startDate,
-        endDate,
+        // Mixing date-only and UTC-boundary semantics causes timezone-specific realtime mismatches.
+        startDateTimeUtc,
+        endDateTimeUtc,
         search: searchDebounced,
         isSeen: isSeenParam,
         isFlagged: isFlaggedParam,
@@ -712,8 +743,8 @@ export default function Documents() {
         allowedTypes: hasDocumentPermissionRestrictions ? availableFilterValues : [],
       }),
     [
-      startDate,
-      endDate,
+      startDateTimeUtc,
+      endDateTimeUtc,
       searchDebounced,
       isSeenParam,
       isFlaggedParam,
@@ -732,8 +763,8 @@ export default function Documents() {
 
     const paramsChanged =
       !lastFetchParams ||
-      lastFetchParams.startDate !== startDate ||
-      lastFetchParams.endDate !== endDate ||
+      lastFetchParams.startDateTimeUtc !== startDateTimeUtc ||
+      lastFetchParams.endDateTimeUtc !== endDateTimeUtc ||
       lastFetchParams.search !== searchDebounced ||
       lastFetchParams.isSeen !== isSeenParam ||
       lastFetchParams.isFlagged !== isFlaggedParam ||
@@ -786,8 +817,8 @@ export default function Documents() {
       // Page-1 is head-first so fast head results paint first while backend reconciliation remains authoritative in the background.
       const headResult = await dispatch(
         fetchDocumentsHead({
-          startDate,
-          endDate,
+          startDateTimeUtc,
+          endDateTimeUtc,
           search: searchDebounced,
           isSeen: isSeenParam,
           isFlagged: isFlaggedParam,
@@ -842,8 +873,8 @@ export default function Documents() {
     runHeadFirstFetch();
   }, [
     dispatch,
-    startDate,
-    endDate,
+    startDateTimeUtc,
+    endDateTimeUtc,
     searchDebounced,
     isSeenParam,
     isFlaggedParam,
@@ -890,8 +921,8 @@ export default function Documents() {
         // Manual refresh stays head-first for immediate paint, but must still reconcile with backend authority.
         await dispatch(
           fetchDocumentsHead({
-            startDate,
-            endDate,
+            startDateTimeUtc,
+            endDateTimeUtc,
             search: searchDebounced,
             isSeen: isSeenParam,
             isFlagged: isFlaggedParam,
@@ -920,13 +951,26 @@ export default function Documents() {
       dispatch(endDocumentSync("manualRefresh"));
       setIsManualRefreshing(false);
     }
-  }, [dispatch, currentFetchArgs, isManualRefreshing, availableFilterValues.length, hasDocumentPermissionRestrictions, page, limit, startDate, endDate, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters, buildFilterSignature]);
+  }, [dispatch, currentFetchArgs, isManualRefreshing, availableFilterValues.length, hasDocumentPermissionRestrictions, page, limit, startDateTimeUtc, endDateTimeUtc, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters, buildFilterSignature]);
 
   useEffect(() => {
     const parseDateParam = (value) => {
       if (!value) return null;
-      const parsed = new Date(value);
-      return Number.isNaN(parsed.getTime()) ? null : parsed;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+
+      // URL date-only params represent local calendar days; new Date("YYYY-MM-DD") is interpreted as UTC.
+      const [year, month, day] = value.split("-").map(Number);
+      const parsed = new Date(year, month - 1, day, 0, 0, 0, 0);
+
+      if (
+        parsed.getFullYear() !== year ||
+        parsed.getMonth() !== month - 1 ||
+        parsed.getDate() !== day
+      ) {
+        return null;
+      }
+
+      return parsed;
     };
 
     const startParam = parseDateParam(searchParams.get("start"));
@@ -1359,8 +1403,8 @@ export default function Documents() {
     if (hasMore && !loadingMore && !loading) {
       dispatch(
         fetchMoreDocuments({
-          startDate,
-          endDate,
+          startDateTimeUtc,
+          endDateTimeUtc,
           page: page + 1,
           limit: FAST_HEAD_PAGE_LIMIT,
           search: searchDebounced,
@@ -1376,8 +1420,8 @@ export default function Documents() {
     hasMore,
     loadingMore,
     loading,
-    startDate,
-    endDate,
+    startDateTimeUtc,
+    endDateTimeUtc,
     page,
     searchDebounced,
     isSeenParam,
@@ -1483,8 +1527,8 @@ export default function Documents() {
     const pollIntervalMs = 30 * 1000;
 
     const activeCountFilterSignature = JSON.stringify({
-      startDate,
-      endDate,
+      startDateTimeUtc,
+      endDateTimeUtc,
       search: searchDebounced,
       isSeen: isSeenParam,
       isFlagged: isFlaggedParam,
@@ -1501,8 +1545,8 @@ export default function Documents() {
       try {
         await dispatch(
           fetchDocumentCount({
-            start_date: startDate,
-            end_date: endDate,
+            startDateTimeUtc,
+            endDateTimeUtc,
             search: searchDebounced,
             isSeen: isSeenParam,
             isFlagged: isFlaggedParam,
@@ -1562,7 +1606,7 @@ export default function Documents() {
         deferredCountTypeRef.current = null;
       }
     };
-  }, [dispatch, startDate, endDate, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters, loading, loadingMore]);
+  }, [dispatch, startDateTimeUtc, endDateTimeUtc, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters, loading, loadingMore]);
 
   const handleResumeSync = useCallback(async () => {
     if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
@@ -1591,8 +1635,8 @@ export default function Documents() {
       if (shouldRunHead) {
         await dispatch(
           fetchDocumentsHead({
-            startDate,
-            endDate,
+            startDateTimeUtc,
+            endDateTimeUtc,
             search: searchDebounced,
             isSeen: isSeenParam,
             isFlagged: isFlaggedParam,
@@ -1625,8 +1669,8 @@ export default function Documents() {
     loading,
     loadingMore,
     dispatch,
-    startDate,
-    endDate,
+    startDateTimeUtc,
+    endDateTimeUtc,
     searchDebounced,
     isSeenParam,
     isFlaggedParam,

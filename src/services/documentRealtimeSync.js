@@ -83,21 +83,18 @@ const matchesSeen = (document, isSeen) => {
   return Boolean(document?.seen) === Boolean(isSeen);
 };
 
-const matchesDateRange = (document, startDate, endDate) => {
+const matchesDateRange = (document, startDateTimeUtc, endDateTimeUtc) => {
   const docDate = getDocumentDate(document);
   if (!docDate) return false;
 
-  if (startDate) {
-    const start = normalizeDateValue(startDate);
+  if (startDateTimeUtc) {
+    const start = normalizeDateValue(startDateTimeUtc);
     if (start && docDate < start) return false;
   }
 
-  if (endDate) {
-    const end = normalizeDateValue(endDate);
-    if (end) {
-      end.setHours(23, 59, 59, 999);
-      if (docDate > end) return false;
-    }
+  if (endDateTimeUtc) {
+    const end = normalizeDateValue(endDateTimeUtc);
+    if (end && docDate > end) return false;
   }
 
   return true;
@@ -113,7 +110,8 @@ export const documentMatchesRealtimeFilters = (document, filters = {}) => {
     matchesSeen(document, filters.isSeen) &&
     matchesFlag(document, filters.isFlagged) &&
     matchesCategory(document, filters.category) &&
-    matchesDateRange(document, filters.startDate, filters.endDate)
+    // Realtime filter window must match list/head/count UTC-boundary params exactly.
+    matchesDateRange(document, filters.startDateTimeUtc, filters.endDateTimeUtc)
   );
 };
 

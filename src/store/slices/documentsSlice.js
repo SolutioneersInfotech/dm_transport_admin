@@ -137,8 +137,8 @@ const patchCollectionDocument = (collection = [], documentId, changes = {}) => {
 };
 
 const LIST_CACHE_TTL_MS = 8 * 1000;
-const createDocumentsCacheKey = ({ startDate, endDate, page = 1, limit = 10, search = "", isSeen = null, isFlagged = null, category = null, filters = [] }) =>
-  buildDocumentCacheKey("documentsList", { startDate, endDate, page, limit, search, isSeen, isFlagged, category, filters });
+const createDocumentsCacheKey = ({ startDateTimeUtc, endDateTimeUtc, page = 1, limit = 10, search = "", isSeen = null, isFlagged = null, category = null, filters = [] }) =>
+  buildDocumentCacheKey("documentsList", { startDateTimeUtc, endDateTimeUtc, page, limit, search, isSeen, isFlagged, category, filters });
 
 const beginSyncSource = (state, source) => {
   state.documentSyncInFlightCount += 1;
@@ -157,9 +157,9 @@ const endSyncSource = (state, source) => {
 
 export const fetchDocuments = createAsyncThunk(
   "documents/fetchDocuments",
-  async ({ startDate, endDate, page = 1, limit = 10, search = "", isSeen = null, isFlagged = null, category = null, filters = [], bypassCache = false, requestSignature = "" }, { rejectWithValue }) => {
+  async ({ startDateTimeUtc, endDateTimeUtc, page = 1, limit = 10, search = "", isSeen = null, isFlagged = null, category = null, filters = [], bypassCache = false, requestSignature = "" }, { rejectWithValue }) => {
     try {
-      const cacheKey = createDocumentsCacheKey({ startDate, endDate, page, limit, search, isSeen, isFlagged, category, filters });
+      const cacheKey = createDocumentsCacheKey({ startDateTimeUtc, endDateTimeUtc, page, limit, search, isSeen, isFlagged, category, filters });
       if (!bypassCache) {
         const cached = getCachedDocumentRequest(cacheKey, LIST_CACHE_TTL_MS);
         if (cached) {
@@ -168,7 +168,7 @@ export const fetchDocuments = createAsyncThunk(
       }
 
       const token = localStorage.getItem("adminToken");
-      const url = fetchDocumentsRoute(startDate, endDate, { page, limit, search, isSeen, isFlagged, category, filters });
+      const url = fetchDocumentsRoute({ startDateTimeUtc, endDateTimeUtc }, { page, limit, search, isSeen, isFlagged, category, filters });
       const res = await fetch(url, {
         method: "GET",
         cache: "no-store",
@@ -196,9 +196,9 @@ export const fetchDocuments = createAsyncThunk(
 
 export const fetchMoreDocuments = createAsyncThunk(
   "documents/fetchMoreDocuments",
-  async ({ startDate, endDate, page, limit = 10, search = "", isSeen = null, isFlagged = null, category = null, filters = [], bypassCache = false }, { rejectWithValue }) => {
+  async ({ startDateTimeUtc, endDateTimeUtc, page, limit = 10, search = "", isSeen = null, isFlagged = null, category = null, filters = [], bypassCache = false }, { rejectWithValue }) => {
     try {
-      const cacheKey = createDocumentsCacheKey({ startDate, endDate, page, limit, search, isSeen, isFlagged, category, filters });
+      const cacheKey = createDocumentsCacheKey({ startDateTimeUtc, endDateTimeUtc, page, limit, search, isSeen, isFlagged, category, filters });
       if (!bypassCache) {
         const cached = getCachedDocumentRequest(cacheKey, LIST_CACHE_TTL_MS);
         if (cached) {
@@ -207,7 +207,7 @@ export const fetchMoreDocuments = createAsyncThunk(
       }
 
       const token = localStorage.getItem("adminToken");
-      const url = fetchDocumentsRoute(startDate, endDate, { page, limit, search, isSeen, isFlagged, category, filters });
+      const url = fetchDocumentsRoute({ startDateTimeUtc, endDateTimeUtc }, { page, limit, search, isSeen, isFlagged, category, filters });
       const res = await fetch(url, {
         method: "GET",
         cache: "no-store",
@@ -235,9 +235,9 @@ export const fetchMoreDocuments = createAsyncThunk(
 
 export const fetchDocumentsHead = createAsyncThunk(
   "documents/fetchDocumentsHead",
-  async ({ startDate, endDate, search = "", isSeen = null, isFlagged = null, category = null, filters = [], limit = 100, bypassCache = false }, { rejectWithValue }) => {
+  async ({ startDateTimeUtc, endDateTimeUtc, search = "", isSeen = null, isFlagged = null, category = null, filters = [], limit = 100, bypassCache = false }, { rejectWithValue }) => {
     try {
-      const data = await fetchDocumentsHeadAPI({ startDate, endDate, search, isSeen, isFlagged, category, filters, limit, bypassCache });
+      const data = await fetchDocumentsHeadAPI({ startDateTimeUtc, endDateTimeUtc, search, isSeen, isFlagged, category, filters, limit, bypassCache });
       const documents = (data.documents || data.head || []).filter((document) => !isDeletedDocument(document));
       return { documents, limit };
     } catch (error) {
@@ -246,14 +246,14 @@ export const fetchDocumentsHead = createAsyncThunk(
   }
 );
 
-export const fetchDocumentCount = createAsyncThunk("documents/fetchDocumentCount", async ({ start_date, end_date, search = "", isSeen = null, isFlagged = null, category = null, filters = [], bypassCache = false, requestSignature = "" }, { rejectWithValue }) => {
+export const fetchDocumentCount = createAsyncThunk("documents/fetchDocumentCount", async ({ startDateTimeUtc, endDateTimeUtc, search = "", isSeen = null, isFlagged = null, category = null, filters = [], bypassCache = false, requestSignature = "" }, { rejectWithValue }) => {
   try {
     // count cache/request signatures must include flag filter, otherwise flagged totals reuse unfiltered counts
     const cacheKey = buildCountCacheKey({
       types: filters,
       isFlagged,
-      startDate: start_date,
-      endDate: end_date,
+      startDateTimeUtc,
+      endDateTimeUtc,
       category,
       search,
       isSeen,
@@ -268,7 +268,7 @@ export const fetchDocumentCount = createAsyncThunk("documents/fetchDocumentCount
     }
 
     const token = localStorage.getItem("adminToken");
-    const url = fetchDocumentCountRoute(start_date, end_date, { search, isSeen, isFlagged, category, filters });
+    const url = fetchDocumentCountRoute({ startDateTimeUtc, endDateTimeUtc }, { search, isSeen, isFlagged, category, filters });
     const res = await fetch(url, {
       method: "GET",
       cache: "no-store",
