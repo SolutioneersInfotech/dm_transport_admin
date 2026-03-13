@@ -18,7 +18,6 @@ import {
   Redo2,
   Undo2,
 } from "lucide-react";
-import { fetchDocumentByIdRoute } from "../utils/apiRoutes";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import {
   updateDocument,
@@ -65,9 +64,6 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const { users } = useAppSelector((state) => state.users);
-  const [fullDoc, setFullDoc] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
   const [copiedValue, setCopiedValue] = useState("");
   const [showFlagModal, setShowFlagModal] = useState(false);
   const [flagReason, setFlagReason] = useState("");
@@ -138,9 +134,9 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   };
 
   // Fetch document size via HEAD request (when doc URL is available)
-  const docUrl = fullDoc?.document_url || selectedDoc?.document_url;
+  const docUrl = selectedDoc?.document_url;
   useEffect(() => {
-    const bytes = fullDoc?.file_size_bytes ?? selectedDoc?.file_size_bytes;
+    const bytes = selectedDoc?.file_size_bytes;
     if (typeof bytes === "number" && !Number.isNaN(bytes)) {
       setDocSizeMb((bytes / (1024 * 1024)).toFixed(2));
       return;
@@ -174,45 +170,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
       cancelled = true;
       controller.abort();
     };
-  }, [docUrl, fullDoc?.file_size_bytes, selectedDoc?.file_size_bytes]);
-
-  useEffect(() => {
-    if (!selectedDoc?.id) return;
-
-    const fetchFullDocument = async () => {
-      setLoading(true);
-      setError(null);
-      setIsPdfLoading(true); // Reset PDF loading state
-      try {
-        const token = localStorage.getItem("adminToken");
-        const url = fetchDocumentByIdRoute(selectedDoc.id, selectedDoc.type);
-
-        const res = await fetch(url, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        const data = await res.json();
-
-        if (!res.ok) {
-          throw new Error(data.message || "Failed to fetch document details");
-        }
-
-        setFullDoc(data.document || selectedDoc);
-      } catch (err) {
-        setError(err.message);
-        // Fallback to selectedDoc if API fails
-        setFullDoc(selectedDoc);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchFullDocument();
-  }, [selectedDoc?.id]);
+  }, [docUrl, selectedDoc?.file_size_bytes]);
 
   // Fetch acknowledgements when dropdown opens
   useEffect(() => {
@@ -226,7 +184,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     let cancelled = false;
     let nextObjectUrl = null;
 
-    const currentUrl = fullDoc?.document_url || selectedDoc?.document_url;
+    const currentUrl = selectedDoc?.document_url;
     const extFromUrl = currentUrl
       ?.split("?")[0]
       ?.split(".")
@@ -269,11 +227,11 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
       cancelled = true;
       if (nextObjectUrl) URL.revokeObjectURL(nextObjectUrl);
     };
-  }, [fullDoc?.document_url, selectedDoc?.document_url]);
+  }, [selectedDoc?.document_url]);
 
   // Prevent indefinite loader when embedded PDF renderer does not emit load events
   useEffect(() => {
-    const currentUrl = fullDoc?.document_url || selectedDoc?.document_url;
+    const currentUrl = selectedDoc?.document_url;
     const extFromUrl = currentUrl
       ?.split("?")[0]
       ?.split(".")
@@ -292,7 +250,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     }, 10000);
 
     return () => window.clearTimeout(timeoutId);
-  }, [fullDoc?.document_url, selectedDoc?.document_url, isPdfLoading]);
+  }, [selectedDoc?.document_url, isPdfLoading]);
 
   const loadAcknowledgements = async () => {
     setIsLoadingAcknowledgements(true);
@@ -309,10 +267,14 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
   if (!selectedDoc) return null;
 
-  const doc = {
-    ...(fullDoc || {}),
-    ...(selectedDoc || {}),
-  };
+  const doc = selectedDoc || {};
+  const isFlagged = Boolean(doc.flag?.flagged ?? doc.flagged ?? doc.isFlagged);
+  const resolvedFlagReason =
+    doc.flag?.reason ??
+    doc.flag?.note ??
+    doc.flagReason ??
+    doc.note ??
+    "";
   const inVal = doc.in_date_time ?? doc.inTime ?? doc.in_time ?? doc.inDateTime;
   const outVal =
     doc.out_date_time ?? doc.outTime ?? doc.out_time ?? doc.outDateTime;
@@ -330,17 +292,6 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   const pdfPreviewUrl = pdfObjectUrl
     ? `${pdfObjectUrl}#toolbar=1&navpanes=0&scrollbar=1`
     : "";
-
-  if (loading) {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="w-8 h-8 border-2 border-gray-600 border-t-blue-500 rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading document details...</p>
-        </div>
-      </div>
-    );
-  }
 
   const handleCopy = async (value) => {
     if (!value) return;
@@ -371,7 +322,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   };
 
   const handleFlagDocument = async () => {
-    const doc = fullDoc || selectedDoc;
+    const doc = selectedDoc;
     if (!doc || isActionPending(doc.id, "flag")) return;
     const reason = flagReason.trim();
     const flagData = {
@@ -400,7 +351,6 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
       if (updateDocument.fulfilled.match(result)) {
         // Update local state
         const updatedDoc = { ...doc, flag: flagData };
-        setFullDoc(updatedDoc);
         if (onDocUpdate) {
           onDocUpdate(updatedDoc);
         }
@@ -431,7 +381,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   };
 
   const handleUnflagDocument = async () => {
-    const doc = fullDoc || selectedDoc;
+    const doc = selectedDoc;
     if (!doc || isActionPending(doc.id, "flag")) return;
     const flagData = {
       flagged: false,
@@ -461,7 +411,6 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
       if (updateDocument.fulfilled.match(result)) {
         // Update local state
         const updatedDoc = { ...doc, flag: flagData };
-        setFullDoc(updatedDoc);
         if (onDocUpdate) {
           onDocUpdate(updatedDoc);
         }
@@ -490,7 +439,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   };
 
   const handleToggleSeenStatus = async () => {
-    const doc = fullDoc || selectedDoc;
+    const doc = selectedDoc;
     if (!doc || isActionPending(doc.id, "seen")) return;
     // Toggle seen status
     const newSeenStatus = doc.seen === true ? false : true;
@@ -515,7 +464,6 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
       if (updateDocument.fulfilled.match(result)) {
         // Update local state
         const updatedDoc = { ...doc, seen: newSeenStatus };
-        setFullDoc(updatedDoc);
         if (onDocUpdate) {
           onDocUpdate(updatedDoc);
         }
@@ -593,7 +541,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
   // Navigate to chat page with driver's user ID
   const handleChatWithDriver = () => {
-    const doc = fullDoc || selectedDoc;
+    const doc = selectedDoc;
     if (!doc) return;
 
     // First check if document has a direct userid or driver_id field
@@ -621,7 +569,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
   // Toggle mark for resend status
   const handleToggleMarkForResend = async () => {
-    const doc = fullDoc || selectedDoc;
+    const doc = selectedDoc;
     if (!doc) return;
 
     // Toggle between "markedForResend" and "sent"
@@ -639,7 +587,6 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
       if (updateDocument.fulfilled.match(result)) {
         // Update local state
         const updatedDoc = { ...doc, state: newState };
-        setFullDoc(updatedDoc);
         if (onDocUpdate) {
           onDocUpdate(updatedDoc);
         }
@@ -669,7 +616,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
   // Toggle completed status
   const handleToggleCompleted = async () => {
-    const doc = fullDoc || selectedDoc;
+    const doc = selectedDoc;
     if (!doc) return;
 
     // Toggle between true and false
@@ -686,7 +633,6 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
       if (updateDocument.fulfilled.match(result)) {
         // Update local state
         const updatedDoc = { ...doc, completed: newCompletedStatus };
-        setFullDoc(updatedDoc);
         if (onDocUpdate) {
           onDocUpdate(updatedDoc);
         }
@@ -706,7 +652,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
   // Handle document deletion
   const handleDeleteDocument = async () => {
-    const doc = fullDoc || selectedDoc;
+    const doc = selectedDoc;
     if (!doc) return;
 
     setIsDeleting(true);
@@ -734,7 +680,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
   // Handle document type change
   const handleChangeDocumentType = async (newType) => {
-    const doc = fullDoc || selectedDoc;
+    const doc = selectedDoc;
     if (!doc || !doc.id || !doc.type) return;
 
     if (doc.type === newType) {
@@ -758,7 +704,6 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
           type: newType,
           document_url: result.payload.documentUrl || doc.document_url,
         };
-        setFullDoc(updatedDoc);
         if (onDocUpdate) {
           onDocUpdate(updatedDoc);
         }
@@ -779,7 +724,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
   // Get current document type label
   const getCurrentTypeLabel = () => {
-    const doc = fullDoc || selectedDoc;
+    const doc = selectedDoc;
     if (!doc || !doc.type) return "Select Type";
     const label = Object.keys(FILTER_MAP).find(
       (key) => FILTER_MAP[key] === doc.type,
@@ -789,7 +734,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
   // Handle send acknowledgement
   const handleSendAcknowledgement = async (acknowledgementText) => {
-    const doc = fullDoc || selectedDoc;
+    const doc = selectedDoc;
     if (!doc) return;
 
     setIsSendingAcknowledgement(true);
@@ -798,7 +743,6 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
       // Update local state
       const updatedDoc = { ...doc, acknowledgement: acknowledgementText };
-      setFullDoc(updatedDoc);
       if (onDocUpdate) {
         onDocUpdate(updatedDoc);
       }
@@ -891,7 +835,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
   // Download document file
   const handleDownload = async () => {
-    const doc = fullDoc || selectedDoc;
+    const doc = selectedDoc;
     if (!doc?.document_url) return;
     setIsDownloading(true);
     try {
@@ -955,12 +899,6 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
   return (
     <div className="space-y-6 text-white">
-      {error && (
-        <div className="p-3 rounded-lg bg-yellow-900/20 border border-yellow-700 text-yellow-400 text-sm">
-          {error}
-        </div>
-      )}
-
       {/* Preview Area */}
       <div className="w-full rounded-lg overflow-hidden bg-black/20 border border-gray-700">
         <div className="min-h-[500px] flex items-center justify-center relative">
@@ -1193,6 +1131,18 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                   Flag Document
                 </Button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {isFlagged && resolvedFlagReason && (
+          <div className="pt-4 border-t border-gray-700">
+            <span className="text-xs font-medium text-gray-400 uppercase tracking-wide block mb-2">
+              Flag Reason
+            </span>
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-sm text-gray-300">{resolvedFlagReason}</p>
+              {renderCopyButton(resolvedFlagReason, "flag reason")}
             </div>
           </div>
         )}

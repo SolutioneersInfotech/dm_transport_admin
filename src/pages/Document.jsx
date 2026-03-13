@@ -58,6 +58,7 @@ import useAppResumeSync from "../hooks/useAppResumeSync";
 import { subscribeToLiveDocuments } from "../services/documentRealtimeOverlay";
 import { invalidateDocumentRequestCache } from "../services/documentRequestCache";
 import { clearDocumentCountCache } from "../utils/documentCountCache";
+import { fetchDocumentDetailAPI } from "../services/documentDetailAPI";
 
 const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
 const ALL_DOCUMENTS_START_DATE = "1970-01-01";
@@ -164,7 +165,7 @@ export default function Documents() {
   const [isTypeFilterTransitionActive, setIsTypeFilterTransitionActive] = useState(false);
   const [resolvedTypeFilterTransitionSignature, setResolvedTypeFilterTransitionSignature] = useState(null);
 
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [dateRange, setDateRange] = useState(() => ({
     from: defaultDates.from,
@@ -172,6 +173,9 @@ export default function Documents() {
   }));
 
   const [selectedFilters, setSelectedFilters] = useState([]); // Array of filter values
+  const [isDocDetailLoading, setIsDocDetailLoading] = useState(false);
+  const docDetailRequestRef = useRef(0);
+  const hasHydratedFiltersFromParamsRef = useRef(false);
   const availableFilterOptions = useMemo(() => {
     return getAvailableDocumentFilterOptions(user?.permissions);
   }, [user?.permissions]);
@@ -919,20 +923,95 @@ export default function Documents() {
   }, [dispatch, currentFetchArgs, isManualRefreshing, availableFilterValues.length, hasDocumentPermissionRestrictions, page, limit, startDate, endDate, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters, buildFilterSignature]);
 
   useEffect(() => {
-    const typeParam = searchParams.get("type");
+    const parseDateParam = (value) => {
+      if (!value) return null;
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    };
+
+    const startParam = parseDateParam(searchParams.get("start"));
+    const endParam = parseDateParam(searchParams.get("end"));
+    if (startParam && endParam) {
+      setDateRange({ from: startParam, to: endParam });
+    }
+
+    const queryParam = searchParams.get("q");
+    setSearch(queryParam ?? "");
+
     const statusParam = searchParams.get("status");
+    setStatusFilter(["all", "seen", "unseen"].includes(statusParam) ? statusParam : "all");
 
-    // Handle single type from URL params (for backward compatibility)
-    if (typeParam && availableFilterValues.includes(typeParam)) {
-      setSelectedFilters([typeParam]);
-    }
-
-    if (["all", "seen", "unseen"].includes(statusParam)) {
-      setStatusFilter(statusParam);
+    const categoryParam = searchParams.get("category");
+    if (categoryParam) {
+      const categories = categoryParam
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      setCategoryFilter(categories);
     } else {
-      setStatusFilter("all");
+      setCategoryFilter([]);
     }
+
+    const flagParam = searchParams.get("flag");
+    if (flagParam === "true") {
+      setFlagFilter(true);
+    } else if (flagParam === "false") {
+      setFlagFilter(false);
+    } else {
+      setFlagFilter(null);
+    }
+
+    const typesParam = searchParams.get("types") || searchParams.get("type");
+    if (typesParam) {
+      const types = typesParam
+        .split(",")
+        .map((item) => item.trim())
+        .filter((item) => availableFilterValues.includes(item));
+      setSelectedFilters(types);
+    } else {
+      setSelectedFilters([]);
+    }
+
+    hasHydratedFiltersFromParamsRef.current = true;
   }, [availableFilterValues, searchParams]);
+
+  useEffect(() => {
+    if (!hasHydratedFiltersFromParamsRef.current) return;
+
+    const nextParams = new URLSearchParams(searchParams);
+
+    const syncParam = (key, value) => {
+      if (value === null || value === undefined || value === "") {
+        nextParams.delete(key);
+      } else {
+        nextParams.set(key, String(value));
+      }
+    };
+
+    syncParam("start", hasCustomDateRange ? startDate : null);
+    syncParam("end", hasCustomDateRange ? endDate : null);
+    syncParam("q", searchDebounced?.trim() ? searchDebounced.trim() : null);
+    syncParam("status", statusFilter !== "all" ? statusFilter : null);
+    syncParam("category", categoryFilter.length ? categoryFilter.join(",") : null);
+    syncParam("flag", flagFilter === null ? null : String(flagFilter));
+    syncParam("types", selectedFilters.length ? selectedFilters.join(",") : null);
+    nextParams.delete("type");
+
+    if (nextParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [
+    categoryFilter,
+    endDate,
+    flagFilter,
+    hasCustomDateRange,
+    searchDebounced,
+    searchParams,
+    selectedFilters,
+    setSearchParams,
+    startDate,
+    statusFilter,
+  ]);
 
   useEffect(() => {
     setSelectedFilters((prevFilters) =>
@@ -964,6 +1043,60 @@ export default function Documents() {
       return nextFilters;
     });
   };
+
+  const handleOpenDocument = useCallback(async (doc) => {
+    if (!doc?.id) return;
+
+    const requestId = Date.now();
+    docDetailRequestRef.current = requestId;
+    setSelectedDoc({ ...doc, __isPartial: true });
+    setIsPreviewOpen(true);
+    setIsDocDetailLoading(true);
+
+    try {
+      const fullDocument = await fetchDocumentDetailAPI({
+        documentId: doc.id,
+        type: doc.type,
+      });
+
+      if (docDetailRequestRef.current !== requestId) return;
+      if (fullDocument) {
+        setSelectedDoc((prev) => {
+          if (!prev || prev.id !== doc.id) return prev;
+          return { ...prev, ...fullDocument, __isPartial: false };
+        });
+      }
+    } catch (detailError) {
+      if (docDetailRequestRef.current === requestId) {
+        console.error("Failed to fetch full document details", detailError);
+      }
+    } finally {
+      if (docDetailRequestRef.current === requestId) {
+        setIsDocDetailLoading(false);
+      }
+    }
+
+    if (doc.seen !== true && !isDocActionPending(doc.id, "seen")) {
+      const previousSeen = doc.seen;
+      dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { seen: true } }));
+      setDocActionPending(doc.id, "seen", true);
+      try {
+        const result = await dispatch(updateDocument({ document: doc, seen: true }));
+        if (!updateDocument.fulfilled.match(result)) {
+          dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { seen: previousSeen } }));
+          toast.error(result.payload || "Failed to update seen status");
+        } else {
+          invalidateDocumentRequestCache();
+        }
+      } catch (error) {
+        console.error("Failed to update seen status", error);
+        dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { seen: previousSeen } }));
+        toast.error("Failed to update seen status");
+      } finally {
+        setDocActionPending(doc.id, "seen", false);
+      }
+    }
+  }, [dispatch, isDocActionPending, setDocActionPending]);
 
   // Keep visible documents aligned with current admin document permissions
   const filteredDocuments = useMemo(() => {
@@ -2080,31 +2213,7 @@ export default function Documents() {
                         } ${
                           isSelected && !isActive ? "bg-[#1f6feb]/10 ring-1 ring-inset ring-[#1f6feb]/30" : ""
                         }`}
-                        onClick={async () => {
-                          setSelectedDoc(doc);
-                          setIsPreviewOpen(true);
-                          if (doc.seen !== true && !isDocActionPending(doc.id, "seen")) {
-                            const previousSeen = doc.seen;
-                            // Optimistically flipping seen state removes click latency for row-open interactions.
-                            dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { seen: true } }));
-                            setDocActionPending(doc.id, "seen", true);
-                            try {
-                              const result = await dispatch(updateDocument({ document: doc, seen: true }));
-                              if (!updateDocument.fulfilled.match(result)) {
-                                dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { seen: previousSeen } }));
-                                toast.error(result.payload || "Failed to update seen status");
-                              } else {
-                                invalidateDocumentRequestCache();
-                              }
-                            } catch (error) {
-                              console.error("Failed to update seen status", error);
-                              dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { seen: previousSeen } }));
-                              toast.error("Failed to update seen status");
-                            } finally {
-                              setDocActionPending(doc.id, "seen", false);
-                            }
-                          }
-                        }}
+                        onClick={() => handleOpenDocument(doc)}
                       >
                         <TableCell className="px-1 sm:px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
                           <Checkbox
@@ -2344,6 +2453,8 @@ export default function Documents() {
               <button
                 type="button"
                 onClick={() => {
+                  docDetailRequestRef.current = 0;
+                  setIsDocDetailLoading(false);
                   setSelectedDoc(null);
                   setIsPreviewOpen(false);
                 }}
@@ -2355,11 +2466,19 @@ export default function Documents() {
               {/* Preview Content */}
               <div className="document-preview-scroll flex-1 overflow-y-auto p-0">
                 <div className="flex h-full flex-col p-4">
+                  {isDocDetailLoading && (
+                    <div className="mb-3 flex items-center gap-2 rounded-md border border-gray-700 bg-[#0f141a] px-3 py-2 text-xs text-gray-300">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Loading latest document details…</span>
+                    </div>
+                  )}
                   <DocumentPreviewContent
                     selectedDoc={selectedDoc}
                     onDocUpdate={(updatedDoc) => {
                       if (updatedDoc === null) {
                         // Document was deleted, close preview
+                        docDetailRequestRef.current = 0;
+                        setIsDocDetailLoading(false);
                         setSelectedDoc(null);
                         setIsPreviewOpen(false);
                       } else {
@@ -2423,7 +2542,16 @@ export default function Documents() {
 
       {/* Mobile Drawer for Document Preview */}
       {isMobile && (
-        <Drawer open={!!selectedDoc} onOpenChange={(open) => !open && setSelectedDoc(null)}>
+        <Drawer
+          open={!!selectedDoc}
+          onOpenChange={(open) => {
+            if (!open) {
+              docDetailRequestRef.current = 0;
+              setIsDocDetailLoading(false);
+              setSelectedDoc(null);
+            }
+          }}
+        >
           <DrawerContent className="max-h-[85vh] bg-[#161b22] border-gray-700">
             <DrawerHeader className="border-b border-gray-700">
               <div className="flex items-center justify-between">
@@ -2435,12 +2563,20 @@ export default function Documents() {
             </DrawerHeader>
             <div className="document-preview-scroll overflow-y-auto p-0">
               <div className="flex h-full flex-col p-4">
+                {isDocDetailLoading && (
+                  <div className="mb-3 flex items-center gap-2 rounded-md border border-gray-700 bg-[#0f141a] px-3 py-2 text-xs text-gray-300">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Loading latest document details…</span>
+                  </div>
+                )}
                 {selectedDoc && (
                   <DocumentPreviewContent
                     selectedDoc={selectedDoc}
                     onDocUpdate={(updatedDoc) => {
                       if (updatedDoc === null) {
                         // Document was deleted, close preview
+                        docDetailRequestRef.current = 0;
+                        setIsDocDetailLoading(false);
                         setSelectedDoc(null);
                       } else {
                         setSelectedDoc(updatedDoc);
