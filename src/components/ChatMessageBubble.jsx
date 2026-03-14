@@ -293,12 +293,13 @@
 // }
 
 import { useEffect, useState } from "react";
-import { Check, CheckCheck, Copy, Download, FileText } from "lucide-react";
+import { Check, CheckCheck, Download, ExternalLink, FileText, Copy } from "lucide-react";
 import {
   extractAttachmentDisplayName,
   getAttachmentKind,
   isGenericFileAttachment,
 } from "../utils/chatAttachments";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
 export default function ChatMessageBubble({
   msg,
@@ -382,6 +383,7 @@ export default function ChatMessageBubble({
   const isGenericFile = hasAttachment && isGenericFileAttachment({ mimeType: attachmentMimeType, url: attachment });
   const isHttpUrl = /^https?:\/\//i.test(attachment);
   const isKnownMediaAttachment = hasAttachment && (isImage || isVideo || isPDF);
+  // PDF attachments must be handled before generic file fallback so they get dedicated preview UI.
   const showFileAttachmentLink = hasAttachment && isGenericFile && isHttpUrl;
   // Display filename should be derived safely from metadata/url for readable cards.
   const attachmentDisplayName = extractAttachmentDisplayName({
@@ -589,16 +591,22 @@ export default function ChatMessageBubble({
                   <p className="truncate text-sm font-medium text-gray-100">{attachmentDisplayName}</p>
                   <p className="text-xs text-gray-400">PDF document</p>
                 </div>
-                <a
-                  href={attachment}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-full p-2 text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
-                  aria-label="Open or download PDF"
-                  title="Open or download PDF"
-                >
-                  <Download className="h-4 w-4" />
-                </a>
+                <TooltipProvider delayDuration={150}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <a
+                        href={attachment}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-full p-2 text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
+                        aria-label="Open PDF"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">Open PDF</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
             </div>
           )}
@@ -614,15 +622,21 @@ export default function ChatMessageBubble({
                 className="max-h-72 w-full rounded-lg bg-black"
               />
               {/* Video download uses a compact icon action to reduce visual clutter in bubbles. */}
-              <button
-                type="button"
-                className="absolute right-2 top-2 rounded-full bg-black/55 p-2 text-white transition-colors hover:bg-black/75"
-                onClick={() => onDownloadMedia?.(attachment)}
-                aria-label="Download video"
-                title="Download video"
-              >
-                <Download className="h-4 w-4" />
-              </button>
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="absolute right-2 top-2 rounded-full bg-black/55 p-2 text-white transition-colors hover:bg-black/75"
+                      onClick={() => onDownloadMedia?.(attachment)}
+                      aria-label="Download video"
+                    >
+                      <Download className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left">Download video</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           )}
 
