@@ -292,7 +292,7 @@
 //   );
 // }
 
-import { memo, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, CheckCheck, Download, ExternalLink, FileText, Copy } from "lucide-react";
 import { Document, Page, pdfjs } from "react-pdf";
 import {
@@ -306,6 +306,7 @@ let isPdfWorkerConfigured = false;
 
 function ensurePdfWorkerConfigured() {
   if (isPdfWorkerConfigured) return;
+  // Worker must come from the installed pdfjs-dist version to avoid API/worker mismatch errors.
   pdfjs.GlobalWorkerOptions.workerSrc = new URL(
     "pdfjs-dist/build/pdf.worker.min.mjs",
     import.meta.url,
@@ -317,10 +318,14 @@ ensurePdfWorkerConfigured();
 
 const PdfFirstPagePreview = memo(function PdfFirstPagePreview({ pdfData, onPreviewError }) {
   const [loaded, setLoaded] = useState(false);
+  // Memoize the file object so react-pdf does not treat each render as a new document input.
+  const pdfDocumentFile = useMemo(() => (pdfData ? { data: pdfData } : null), [pdfData]);
 
   useEffect(() => {
     setLoaded(false);
-  }, [pdfData]);
+  }, [pdfDocumentFile]);
+
+  if (!pdfDocumentFile) return null;
 
   return (
     <div className="relative h-44 w-full overflow-hidden rounded-t-lg bg-[#0b1220]">
@@ -328,7 +333,7 @@ const PdfFirstPagePreview = memo(function PdfFirstPagePreview({ pdfData, onPrevi
         <div className="absolute inset-0 animate-pulse bg-gradient-to-b from-[#0b1220] to-[#151f33]" />
       )}
       <Document
-        file={{ data: pdfData }}
+        file={pdfDocumentFile}
         loading={null}
         error={null}
         onLoadSuccess={() => setLoaded(true)}
@@ -459,6 +464,13 @@ export default function ChatMessageBubble({
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const [pdfPreviewFailed, setPdfPreviewFailed] = useState(false);
   const [pdfPreviewData, setPdfPreviewData] = useState(null);
+  const previewErrorLoggedRef = useRef("");
+
+  const logPdfPreviewFailure = useCallback((error) => {
+    if (previewErrorLoggedRef.current === attachment) return;
+    previewErrorLoggedRef.current = attachment;
+    console.error(`PDF preview failed for ${attachment}`, error);
+  }, [attachment]);
 
   useEffect(() => {
     setImageLoaded(false);
@@ -468,6 +480,7 @@ export default function ChatMessageBubble({
   useEffect(() => {
     setPdfPreviewFailed(false);
     setPdfPreviewData(null);
+    previewErrorLoggedRef.current = "";
 
     if (!hasAttachment || !isPDF) {
       return undefined;
@@ -496,7 +509,7 @@ export default function ChatMessageBubble({
       .catch((error) => {
         if (!isActive || error?.name === "AbortError") return;
         // Fallback card is intentional when PDF preview fetch/render fails.
-        console.error(`PDF preview failed for ${attachment}`, error);
+        logPdfPreviewFailure(error);
         setPdfPreviewFailed(true);
       });
 
@@ -504,7 +517,7 @@ export default function ChatMessageBubble({
       isActive = false;
       controller.abort();
     };
-  }, [attachment, hasAttachment, isPDF]);
+  }, [attachment, hasAttachment, isPDF, logPdfPreviewFailure]);
 
   /* ================= STYLES (WhatsApp-like) ================= */
   const containerAlign = isAdmin ? "justify-end" : "justify-start";
@@ -680,7 +693,7 @@ export default function ChatMessageBubble({
                 <PdfFirstPagePreview
                   pdfData={pdfPreviewData}
                   onPreviewError={(error) => {
-                    console.error(`PDF preview failed for ${attachment}`, error);
+                    logPdfPreviewFailure(error);
                     setPdfPreviewFailed(true);
                   }}
                 />

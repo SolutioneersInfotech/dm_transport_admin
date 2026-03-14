@@ -24,7 +24,7 @@
     "firebase": "^11.10.0",
     "framer-motion": "^12.29.0",
     "lucide-react": "^0.562.0",
-    "pdfjs-dist": "^5.5.207",
+    "pdfjs-dist": "5.4.296",
     "react": "^19.1.0",
     "react-day-picker": "^9.13.0",
     "react-dom": "^19.1.0",
