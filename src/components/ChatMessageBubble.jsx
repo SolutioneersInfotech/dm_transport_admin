@@ -560,30 +560,52 @@ export default function ChatMessageBubble({
 
           {/* 📄 PDF */}
           {hasAttachment && isPDF && (
-            <a
-              href={attachment}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mb-2 block w-[280px] max-w-full rounded-lg border border-red-400/30 bg-[#101828] p-3 transition-colors hover:bg-[#172036]"
-              aria-label={`Open ${attachmentDisplayName}`}
-              title={attachmentDisplayName}
-            >
-              <div className="flex items-center gap-3">
+            <div className="mb-2 w-[280px] max-w-full overflow-hidden rounded-lg border border-red-400/30 bg-[#101828]">
+              {/* PDFs should render in a dedicated preview/card instead of generic file fallback. */}
+              <a
+                href={attachment}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="relative block h-44 w-full bg-[#0b1220]"
+                aria-label={`Open ${attachmentDisplayName}`}
+                title={attachmentDisplayName}
+              >
+                <iframe
+                  src={`${attachment}#toolbar=0&navpanes=0&scrollbar=0`}
+                  title={`${attachmentDisplayName} preview`}
+                  className="h-full w-full"
+                />
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/35" />
+                <span className="absolute left-2 top-2 rounded bg-red-500/85 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-white">
+                  PDF
+                </span>
+              </a>
+
+              <div className="flex items-center gap-3 px-3 py-2.5">
                 <span className="rounded-md bg-red-500/20 p-2 text-red-300">
-                  <FileText className="h-5 w-5" />
+                  <FileText className="h-4 w-4" />
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-gray-100">{attachmentDisplayName}</p>
                   <p className="text-xs text-gray-400">PDF document</p>
                 </div>
-                <Download className="h-4 w-4 text-gray-300" />
+                <a
+                  href={attachment}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-full p-2 text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
+                  aria-label="Open or download PDF"
+                  title="Open or download PDF"
+                >
+                  <Download className="h-4 w-4" />
+                </a>
               </div>
-            </a>
+            </div>
           )}
 
           {/* 🎥 Video */}
           {hasAttachment && isVideo && (
-            <div className="mb-2 space-y-2">
+            <div className="relative mb-2">
               <video
                 src={attachment}
                 controls
@@ -591,12 +613,15 @@ export default function ChatMessageBubble({
                 preload="metadata"
                 className="max-h-72 w-full rounded-lg bg-black"
               />
+              {/* Video download uses a compact icon action to reduce visual clutter in bubbles. */}
               <button
                 type="button"
-                className="rounded bg-black/30 px-3 py-1.5 text-xs text-white hover:bg-black/40"
+                className="absolute right-2 top-2 rounded-full bg-black/55 p-2 text-white transition-colors hover:bg-black/75"
                 onClick={() => onDownloadMedia?.(attachment)}
+                aria-label="Download video"
+                title="Download video"
               >
-                Download video
+                <Download className="h-4 w-4" />
               </button>
             </div>
           )}
