@@ -293,7 +293,14 @@
 // }
 
 import { useEffect, useState } from "react";
-import { Check, CheckCheck, Copy } from "lucide-react";
+import { Check, CheckCheck, Copy, Download, FileText } from "lucide-react";
+import {
+  extractAttachmentDisplayName,
+  isGenericFileAttachment,
+  isImageAttachment,
+  isPdfAttachment,
+  isVideoAttachment,
+} from "../utils/chatAttachments";
 
 export default function ChatMessageBubble({
   msg,
@@ -359,16 +366,27 @@ export default function ChatMessageBubble({
   const statusColor = "text-white/70";
 
   /* ================= ATTACHMENT TYPE ================= */
-  const lowerUrl = hasAttachment ? attachment.toLowerCase() : "";
+  const attachmentMimeType = typeof msg?.content?.attachmentMimeType === "string"
+    ? msg.content.attachmentMimeType
+    : typeof rawAttachment?.mimeType === "string"
+      ? rawAttachment.mimeType
+      : typeof rawAttachment?.type === "string"
+        ? rawAttachment.type
+        : "";
 
-  // Match extension at end or before query string (?token=...), e.g. Firebase Storage URLs
-  const isImage = /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(lowerUrl);
-  const isVideo = /\.(mp4|mov|m4v|webm|ogv|ogg)(\?|$)/i.test(lowerUrl);
-  const isPDF = /\.pdf(\?|$)/i.test(lowerUrl);
+  // MIME type is primary and extension is fallback for robust attachment detection.
+  const isImage = hasAttachment && isImageAttachment({ mimeType: attachmentMimeType, url: attachment });
+  const isVideo = hasAttachment && isVideoAttachment({ mimeType: attachmentMimeType, url: attachment });
+  const isPDF = hasAttachment && isPdfAttachment({ mimeType: attachmentMimeType, url: attachment });
+  const isGenericFile = hasAttachment && isGenericFileAttachment({ mimeType: attachmentMimeType, url: attachment });
   const isHttpUrl = /^https?:\/\//i.test(attachment);
   const isKnownMediaAttachment = hasAttachment && (isImage || isVideo || isPDF);
-  const showFileAttachmentLink =
-    hasAttachment && !isKnownMediaAttachment && isHttpUrl;
+  const showFileAttachmentLink = hasAttachment && isGenericFile && isHttpUrl;
+  const attachmentDisplayName = extractAttachmentDisplayName({
+    explicitName: msg?.content?.attachmentName ?? msg?.attachmentName,
+    url: attachment,
+    fallback: isPDF ? "Document.pdf" : "Attachment",
+  });
 
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
@@ -527,21 +545,25 @@ export default function ChatMessageBubble({
 
           {/* 📄 PDF */}
           {hasAttachment && isPDF && (
-            <div className="mb-2">
-              <div className="w-[280px] max-w-full rounded-lg border border-white/10 bg-black/30 p-3">
-                <p className="text-xs text-white/80">PDF attachment</p>
-                <button
-                  type="button"
-                  className="mt-2 rounded bg-white/10 px-3 py-1.5 text-xs text-white hover:bg-white/20"
-                  aria-label="Open PDF"
-                  onClick={() =>
-                    window.open(attachment, "_blank", "noopener,noreferrer")
-                  }
-                >
-                  Open PDF
-                </button>
+            <a
+              href={attachment}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mb-2 block w-[280px] max-w-full rounded-lg border border-red-400/30 bg-[#101828] p-3 transition-colors hover:bg-[#172036]"
+              aria-label={`Open ${attachmentDisplayName}`}
+              title={attachmentDisplayName}
+            >
+              <div className="flex items-center gap-3">
+                <span className="rounded-md bg-red-500/20 p-2 text-red-300">
+                  <FileText className="h-5 w-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-gray-100">{attachmentDisplayName}</p>
+                  <p className="text-xs text-gray-400">PDF document</p>
+                </div>
+                <Download className="h-4 w-4 text-gray-300" />
               </div>
-            </div>
+            </a>
           )}
 
           {/* 🎥 Video */}
@@ -571,8 +593,9 @@ export default function ChatMessageBubble({
               target="_blank"
               rel="noopener noreferrer"
               className="mb-2 block text-blue-300 underline"
+              title={attachmentDisplayName}
             >
-              📎 Open Attachment
+              📎 Open {attachmentDisplayName}
             </a>
           )}
 
