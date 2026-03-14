@@ -31,6 +31,16 @@ function matchesExtension(value, allowedExtensions) {
   return Boolean(ext) && allowedExtensions.includes(ext);
 }
 
+function normalizeDerivedName(value) {
+  if (typeof value !== "string") return "";
+
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  const withoutDirectories = trimmed.split("/").filter(Boolean).pop() || "";
+  return withoutDirectories.trim();
+}
+
 // MIME type is primary for detection; extension checks are an intentional fallback.
 export function isImageAttachment({ mimeType, name, url } = {}) {
   const normalizedMimeType = normalizeMimeType(mimeType);
@@ -51,13 +61,16 @@ export function isPdfAttachment({ mimeType, name, url } = {}) {
   return matchesExtension(name || url, ["pdf"]);
 }
 
-export function isGenericFileAttachment({ mimeType, name, url } = {}) {
-  const hasSource = Boolean(mimeType || name || url);
-  if (!hasSource) return false;
+export function getAttachmentKind({ mimeType, name, url } = {}) {
+  if (isImageAttachment({ mimeType, name, url })) return "image";
+  if (isVideoAttachment({ mimeType, name, url })) return "video";
+  if (isPdfAttachment({ mimeType, name, url })) return "pdf";
+  if (mimeType || name || url) return "file";
+  return null;
+}
 
-  return !isImageAttachment({ mimeType, name, url }) &&
-    !isVideoAttachment({ mimeType, name, url }) &&
-    !isPdfAttachment({ mimeType, name, url });
+export function isGenericFileAttachment({ mimeType, name, url } = {}) {
+  return getAttachmentKind({ mimeType, name, url }) === "file";
 }
 
 export function formatFileSize(sizeInBytes) {
@@ -70,27 +83,32 @@ export function formatFileSize(sizeInBytes) {
 }
 
 export function extractAttachmentDisplayName({ explicitName, file, url, fallback = "Document.pdf" } = {}) {
-  const candidateFromMetadata = typeof explicitName === "string" ? explicitName.trim() : "";
+  const candidateFromMetadata = normalizeDerivedName(
+    typeof explicitName === "string" ? explicitName : ""
+  );
   if (candidateFromMetadata) return candidateFromMetadata;
 
-  const candidateFromFile = typeof file?.name === "string" ? file.name.trim() : "";
+  const candidateFromFile = normalizeDerivedName(
+    typeof file?.name === "string" ? file.name : ""
+  );
   if (candidateFromFile) return candidateFromFile;
 
   if (typeof url === "string" && url.trim()) {
     try {
       const pathname = new URL(url, window.location.origin).pathname;
       const pathChunk = pathname.split("/").filter(Boolean).pop() || "";
-      const decoded = decodeURIComponent(pathChunk).trim();
+      const decoded = normalizeDerivedName(decodeURIComponent(pathChunk));
       if (decoded) return decoded;
     } catch {
       const cleaned = url.split("?")[0].split("#")[0].trim();
       const pathChunk = cleaned.split("/").filter(Boolean).pop() || "";
       if (pathChunk) {
         try {
-          const decoded = decodeURIComponent(pathChunk).trim();
+          const decoded = normalizeDerivedName(decodeURIComponent(pathChunk));
           if (decoded) return decoded;
         } catch {
-          return pathChunk;
+          const normalized = normalizeDerivedName(pathChunk);
+          if (normalized) return normalized;
         }
       }
     }

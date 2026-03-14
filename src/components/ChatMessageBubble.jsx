@@ -296,10 +296,8 @@ import { useEffect, useState } from "react";
 import { Check, CheckCheck, Copy, Download, FileText } from "lucide-react";
 import {
   extractAttachmentDisplayName,
+  getAttachmentKind,
   isGenericFileAttachment,
-  isImageAttachment,
-  isPdfAttachment,
-  isVideoAttachment,
 } from "../utils/chatAttachments";
 
 export default function ChatMessageBubble({
@@ -375,18 +373,35 @@ export default function ChatMessageBubble({
         : "";
 
   // MIME type is primary and extension is fallback for robust attachment detection.
-  const isImage = hasAttachment && isImageAttachment({ mimeType: attachmentMimeType, url: attachment });
-  const isVideo = hasAttachment && isVideoAttachment({ mimeType: attachmentMimeType, url: attachment });
-  const isPDF = hasAttachment && isPdfAttachment({ mimeType: attachmentMimeType, url: attachment });
+  const attachmentKind = hasAttachment
+    ? getAttachmentKind({ mimeType: attachmentMimeType, url: attachment })
+    : null;
+  const isImage = attachmentKind === "image";
+  const isVideo = attachmentKind === "video";
+  const isPDF = attachmentKind === "pdf";
   const isGenericFile = hasAttachment && isGenericFileAttachment({ mimeType: attachmentMimeType, url: attachment });
   const isHttpUrl = /^https?:\/\//i.test(attachment);
   const isKnownMediaAttachment = hasAttachment && (isImage || isVideo || isPDF);
   const showFileAttachmentLink = hasAttachment && isGenericFile && isHttpUrl;
+  // Display filename should be derived safely from metadata/url for readable cards.
   const attachmentDisplayName = extractAttachmentDisplayName({
     explicitName: msg?.content?.attachmentName ?? msg?.attachmentName,
     url: attachment,
     fallback: isPDF ? "Document.pdf" : "Attachment",
   });
+  const normalizedText = text.toLowerCase();
+  const normalizedAttachment = attachment.toLowerCase();
+  const textLooksLikeStoragePath =
+    normalizedText.includes("chat/uploads/") ||
+    normalizedText.includes("firebase") ||
+    /\.(pdf|jpg|jpeg|png|gif|webp|mp4|mov|webm)(\?|$)/i.test(text);
+  // PDF chat bubbles should show a clean card, not raw storage paths leaked as message text.
+  const shouldRenderText =
+    Boolean(text) &&
+    !(hasAttachment && (
+      normalizedText === normalizedAttachment ||
+      textLooksLikeStoragePath
+    ));
 
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
@@ -420,7 +435,7 @@ export default function ChatMessageBubble({
 
   const showReplyTo = msg?.replyTo || replyToMessage;
   const showCopyButton =
-    Boolean(text) && !isKnownMediaAttachment && !showFileAttachmentLink;
+    shouldRenderText && !isKnownMediaAttachment && !showFileAttachmentLink;
   const [copied, setCopied] = useState(false);
 
   const handleCopyMessage = async () => {
@@ -600,7 +615,7 @@ export default function ChatMessageBubble({
           )}
 
           {/* Text */}
-          {text && <p className="whitespace-pre-wrap break-words">{text}</p>}
+          {shouldRenderText && <p className="whitespace-pre-wrap break-words">{text}</p>}
 
           {/* Meta */}
           <div className="mt-1 flex items-center justify-end gap-1">

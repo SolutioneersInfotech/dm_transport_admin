@@ -5,9 +5,7 @@ import { Button } from "./ui/button";
 import {
   extractAttachmentDisplayName,
   formatFileSize,
-  isImageAttachment,
-  isPdfAttachment,
-  isVideoAttachment,
+  getAttachmentKind,
 } from "../utils/chatAttachments";
 
 /**
@@ -20,10 +18,11 @@ export default function FilePreviewModal({ file, adminId, driverId, onClose, onS
   const [previewUrl, setPreviewUrl] = useState(null);
   const [error, setError] = useState(null);
 
-  const isImage = isImageAttachment({ mimeType: file?.type, name: file?.name });
-  const isVideo = isVideoAttachment({ mimeType: file?.type, name: file?.name });
+  const attachmentKind = getAttachmentKind({ mimeType: file?.type, name: file?.name });
+  const isImage = attachmentKind === "image";
+  const isVideo = attachmentKind === "video";
   // PDF attachments use a dedicated preview card because generic file rendering is not enough UX.
-  const isPDF = isPdfAttachment({ mimeType: file?.type, name: file?.name });
+  const isPDF = attachmentKind === "pdf";
   const fileName = extractAttachmentDisplayName({ file, fallback: "Attachment" });
   const fileSize = formatFileSize(file?.size);
 
@@ -110,27 +109,31 @@ export default function FilePreviewModal({ file, adminId, driverId, onClose, onS
           )}
           {isPDF && (
             <div className="w-full space-y-3">
+              {/* Send dialog keeps PDF preview first, then metadata below for clearer scan flow. */}
+              <div className="overflow-hidden rounded-lg border border-gray-700 bg-[#0f172a]">
+                {previewUrl ? (
+                  <iframe
+                    src={`${previewUrl}#toolbar=0&navpanes=0`}
+                    title="PDF preview"
+                    className="h-56 w-full"
+                  />
+                ) : (
+                  <div className="flex h-56 items-center justify-center text-red-300">
+                    <FileText className="h-10 w-10" />
+                  </div>
+                )}
+              </div>
               <div className="rounded-lg border border-red-400/30 bg-[#1b2431] px-4 py-3">
                 <div className="flex items-center gap-3">
                   <span className="rounded-md bg-red-500/20 p-2 text-red-300">
                     <FileText className="h-5 w-5" />
                   </span>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-gray-100">{fileName}</p>
-                    <p className="text-xs text-gray-400">{fileSize}</p>
+                    <p className="text-xs text-gray-400">{fileSize} • PDF</p>
                   </div>
-                  <span className="rounded-md border border-red-400/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-200">
-                    PDF
-                  </span>
                 </div>
               </div>
-              {previewUrl && (
-                <iframe
-                  src={`${previewUrl}#toolbar=0&navpanes=0`}
-                  title="PDF preview"
-                  className="h-56 w-full rounded-lg border border-gray-700 bg-[#0f172a]"
-                />
-              )}
             </div>
           )}
           {!isImage && !isVideo && !isPDF && (
