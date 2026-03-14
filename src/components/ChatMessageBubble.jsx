@@ -440,6 +440,15 @@ export default function ChatMessageBubble({
     shouldRenderText && !isKnownMediaAttachment && !showFileAttachmentLink;
   const [copied, setCopied] = useState(false);
 
+  const handlePdfDownload = () => {
+    if (!attachment) return;
+    if (onDownloadMedia) {
+      onDownloadMedia(attachment);
+      return;
+    }
+    window.open(attachment, "_blank", "noopener,noreferrer");
+  };
+
   const handleCopyMessage = async () => {
     if (!showCopyButton) return;
     try {
@@ -563,25 +572,16 @@ export default function ChatMessageBubble({
           {/* 📄 PDF */}
           {hasAttachment && isPDF && (
             <div className="mb-2 w-[280px] max-w-full overflow-hidden rounded-lg border border-red-400/30 bg-[#101828]">
-              {/* PDFs should render in a dedicated preview/card instead of generic file fallback. */}
-              <a
-                href={attachment}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="relative block h-44 w-full bg-[#0b1220]"
-                aria-label={`Open ${attachmentDisplayName}`}
-                title={attachmentDisplayName}
-              >
-                <iframe
-                  src={`${attachment}#toolbar=0&navpanes=0&scrollbar=0`}
-                  title={`${attachmentDisplayName} preview`}
-                  className="h-full w-full"
-                />
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/35" />
+              {/* PDF bubbles must never auto-open or auto-download on mount; actions stay click-only. */}
+              <div className="relative h-44 w-full bg-gradient-to-b from-[#0b1220] to-[#151f33]">
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <FileText className="h-14 w-14 text-red-300/80" />
+                </div>
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(248,113,113,0.2),transparent_50%)]" />
                 <span className="absolute left-2 top-2 rounded bg-red-500/85 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-white">
                   PDF
                 </span>
-              </a>
+              </div>
 
               <div className="flex items-center gap-3 px-3 py-2.5">
                 <span className="rounded-md bg-red-500/20 p-2 text-red-300">
@@ -591,22 +591,39 @@ export default function ChatMessageBubble({
                   <p className="truncate text-sm font-medium text-gray-100">{attachmentDisplayName}</p>
                   <p className="text-xs text-gray-400">PDF document</p>
                 </div>
-                <TooltipProvider delayDuration={150}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <a
-                        href={attachment}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="rounded-full p-2 text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
-                        aria-label="Open PDF"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">Open PDF</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <div className="flex items-center gap-1">
+                  <TooltipProvider delayDuration={150}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={handlePdfDownload}
+                          className="rounded-full p-2 text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
+                          aria-label="Download PDF"
+                        >
+                          <Download className="h-4 w-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">Download PDF</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider delayDuration={150}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <a
+                          href={attachment}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-full p-2 text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
+                          aria-label="Open PDF"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">Open PDF</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
               </div>
             </div>
           )}
