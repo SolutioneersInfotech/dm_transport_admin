@@ -188,7 +188,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
-import { ChevronDown, Copy, Download, Mail, Paperclip, Phone, Trash2, X } from "lucide-react";
+import { ChevronDown, Copy, Download, FileText, Image, Mail, Paperclip, Phone, Trash2, Video, X } from "lucide-react";
 import {
   fetchMessages as defaultFetchMessages,
   subscribeMessages as defaultSubscribeMessages,
@@ -1105,11 +1105,20 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
                 <button
                   type="button"
                   className="flex w-full items-center gap-3 px-4 py-3 text-left text-[#e9edef] hover:bg-[#2c3e52]"
-                  onClick={() => openFilePicker("image/*,video/*")}
+                  onClick={() => openFilePicker("image/*")}
                   role="menuitem"
                 >
-                  <span className="text-2xl">📷</span>
-                  <span className="text-sm">Photo / Video</span>
+                  <Image className="h-5 w-5 text-[#8ab4f8]" aria-hidden="true" />
+                  <span className="text-sm">Photo</span>
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-[#e9edef] hover:bg-[#2c3e52]"
+                  onClick={() => openFilePicker("video/*")}
+                  role="menuitem"
+                >
+                  <Video className="h-5 w-5 text-[#b5a3ff]" aria-hidden="true" />
+                  <span className="text-sm">Video</span>
                 </button>
                 <button
                   type="button"
@@ -1117,7 +1126,7 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
                   onClick={() => openFilePicker("application/pdf")}
                   role="menuitem"
                 >
-                  <span className="text-2xl">📄</span>
+                  <FileText className="h-5 w-5 text-[#fca5a5]" aria-hidden="true" />
                   <span className="text-sm">PDF</span>
                 </button>
               </div>

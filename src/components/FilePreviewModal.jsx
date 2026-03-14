@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
+import { FileText } from "lucide-react";
 import { uploadChatFile } from "../services/chatFileUpload";
 import { Button } from "./ui/button";
+import {
+  extractAttachmentDisplayName,
+  formatFileSize,
+  getAttachmentKind,
+} from "../utils/chatAttachments";
 
 /**
  * Modal to preview image/video before uploading and sending in chat.
@@ -12,8 +18,13 @@ export default function FilePreviewModal({ file, adminId, driverId, onClose, onS
   const [previewUrl, setPreviewUrl] = useState(null);
   const [error, setError] = useState(null);
 
-  const isImage = file?.type?.startsWith("image/");
-  const isVideo = file?.type?.startsWith("video/");
+  const attachmentKind = getAttachmentKind({ mimeType: file?.type, name: file?.name });
+  const isImage = attachmentKind === "image";
+  const isVideo = attachmentKind === "video";
+  // PDF attachments use a dedicated preview card because generic file rendering is not enough UX.
+  const isPDF = attachmentKind === "pdf";
+  const fileName = extractAttachmentDisplayName({ file, fallback: "Attachment" });
+  const fileSize = formatFileSize(file?.size);
 
   useEffect(() => {
     if (!file) return;
@@ -23,13 +34,13 @@ export default function FilePreviewModal({ file, adminId, driverId, onClose, onS
       reader.readAsDataURL(file);
       return () => {};
     }
-    if (isVideo) {
+    if (isVideo || isPDF) {
       const url = URL.createObjectURL(file);
       setPreviewUrl(url);
       return () => URL.revokeObjectURL(url);
     }
     setPreviewUrl(null);
-  }, [file, isImage, isVideo]);
+  }, [file, isImage, isVideo, isPDF]);
 
   const handleSend = () => {
     if (!file || !adminId || !driverId) return;
@@ -96,10 +107,39 @@ export default function FilePreviewModal({ file, adminId, driverId, onClose, onS
               className="max-h-[50vh] max-w-full rounded-lg"
             />
           )}
-          {!isImage && !isVideo && (
+          {isPDF && (
+            <div className="w-full space-y-3">
+              {/* Send dialog keeps PDF preview first, then metadata below for clearer scan flow. */}
+              <div className="overflow-hidden rounded-lg border border-gray-700 bg-[#0f172a]">
+                {previewUrl ? (
+                  <iframe
+                    src={`${previewUrl}#toolbar=0&navpanes=0`}
+                    title="PDF preview"
+                    className="h-56 w-full"
+                  />
+                ) : (
+                  <div className="flex h-56 items-center justify-center text-red-300">
+                    <FileText className="h-10 w-10" />
+                  </div>
+                )}
+              </div>
+              <div className="rounded-lg border border-red-400/30 bg-[#1b2431] px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <span className="rounded-md bg-red-500/20 p-2 text-red-300">
+                    <FileText className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-gray-100">{fileName}</p>
+                    <p className="text-xs text-gray-400">{fileSize} • PDF</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          {!isImage && !isVideo && !isPDF && (
             <div className="rounded-lg border border-gray-600 bg-[#1f2937] px-4 py-6 text-gray-400">
-              <p className="truncate text-sm">{file.name}</p>
-              <p className="mt-1 text-xs">{(file.size / 1024).toFixed(1)} KB</p>
+              <p className="truncate text-sm">{fileName}</p>
+              <p className="mt-1 text-xs">{fileSize}</p>
             </div>
           )}
         </div>

@@ -293,7 +293,13 @@
 // }
 
 import { useEffect, useState } from "react";
-import { Check, CheckCheck, Copy } from "lucide-react";
+import { Check, CheckCheck, Download, ExternalLink, FileText, Copy } from "lucide-react";
+import {
+  extractAttachmentDisplayName,
+  getAttachmentKind,
+  isGenericFileAttachment,
+} from "../utils/chatAttachments";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
 export default function ChatMessageBubble({
   msg,
@@ -359,16 +365,45 @@ export default function ChatMessageBubble({
   const statusColor = "text-white/70";
 
   /* ================= ATTACHMENT TYPE ================= */
-  const lowerUrl = hasAttachment ? attachment.toLowerCase() : "";
+  const attachmentMimeType = typeof msg?.content?.attachmentMimeType === "string"
+    ? msg.content.attachmentMimeType
+    : typeof rawAttachment?.mimeType === "string"
+      ? rawAttachment.mimeType
+      : typeof rawAttachment?.type === "string"
+        ? rawAttachment.type
+        : "";
 
-  // Match extension at end or before query string (?token=...), e.g. Firebase Storage URLs
-  const isImage = /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(lowerUrl);
-  const isVideo = /\.(mp4|mov|m4v|webm|ogv|ogg)(\?|$)/i.test(lowerUrl);
-  const isPDF = /\.pdf(\?|$)/i.test(lowerUrl);
+  // MIME type is primary and extension is fallback for robust attachment detection.
+  const attachmentKind = hasAttachment
+    ? getAttachmentKind({ mimeType: attachmentMimeType, url: attachment })
+    : null;
+  const isImage = attachmentKind === "image";
+  const isVideo = attachmentKind === "video";
+  const isPDF = attachmentKind === "pdf";
+  const isGenericFile = hasAttachment && isGenericFileAttachment({ mimeType: attachmentMimeType, url: attachment });
   const isHttpUrl = /^https?:\/\//i.test(attachment);
   const isKnownMediaAttachment = hasAttachment && (isImage || isVideo || isPDF);
-  const showFileAttachmentLink =
-    hasAttachment && !isKnownMediaAttachment && isHttpUrl;
+  // PDF attachments must be handled before generic file fallback so they get dedicated preview UI.
+  const showFileAttachmentLink = hasAttachment && isGenericFile && isHttpUrl;
+  // Display filename should be derived safely from metadata/url for readable cards.
+  const attachmentDisplayName = extractAttachmentDisplayName({
+    explicitName: msg?.content?.attachmentName ?? msg?.attachmentName,
+    url: attachment,
+    fallback: isPDF ? "Document.pdf" : "Attachment",
+  });
+  const normalizedText = text.toLowerCase();
+  const normalizedAttachment = attachment.toLowerCase();
+  const textLooksLikeStoragePath =
+    normalizedText.includes("chat/uploads/") ||
+    normalizedText.includes("firebase") ||
+    /\.(pdf|jpg|jpeg|png|gif|webp|mp4|mov|webm)(\?|$)/i.test(text);
+  // PDF chat bubbles should show a clean card, not raw storage paths leaked as message text.
+  const shouldRenderText =
+    Boolean(text) &&
+    !(hasAttachment && (
+      normalizedText === normalizedAttachment ||
+      textLooksLikeStoragePath
+    ));
 
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
@@ -402,8 +437,17 @@ export default function ChatMessageBubble({
 
   const showReplyTo = msg?.replyTo || replyToMessage;
   const showCopyButton =
-    Boolean(text) && !isKnownMediaAttachment && !showFileAttachmentLink;
+    shouldRenderText && !isKnownMediaAttachment && !showFileAttachmentLink;
   const [copied, setCopied] = useState(false);
+
+  const handlePdfDownload = () => {
+    if (!attachment) return;
+    if (onDownloadMedia) {
+      onDownloadMedia(attachment);
+      return;
+    }
+    window.open(attachment, "_blank", "noopener,noreferrer");
+  };
 
   const handleCopyMessage = async () => {
     if (!showCopyButton) return;
@@ -527,26 +571,66 @@ export default function ChatMessageBubble({
 
           {/* 📄 PDF */}
           {hasAttachment && isPDF && (
-            <div className="mb-2">
-              <div className="w-[280px] max-w-full rounded-lg border border-white/10 bg-black/30 p-3">
-                <p className="text-xs text-white/80">PDF attachment</p>
-                <button
-                  type="button"
-                  className="mt-2 rounded bg-white/10 px-3 py-1.5 text-xs text-white hover:bg-white/20"
-                  aria-label="Open PDF"
-                  onClick={() =>
-                    window.open(attachment, "_blank", "noopener,noreferrer")
-                  }
-                >
-                  Open PDF
-                </button>
+            <div className="mb-2 w-[280px] max-w-full overflow-hidden rounded-lg border border-red-400/30 bg-[#101828]">
+              {/* PDF bubbles must never auto-open or auto-download on mount; actions stay click-only. */}
+              <div className="relative h-44 w-full bg-gradient-to-b from-[#0b1220] to-[#151f33]">
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <FileText className="h-14 w-14 text-red-300/80" />
+                </div>
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(248,113,113,0.2),transparent_50%)]" />
+                <span className="absolute left-2 top-2 rounded bg-red-500/85 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-white">
+                  PDF
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3 px-3 py-2.5">
+                <span className="rounded-md bg-red-500/20 p-2 text-red-300">
+                  <FileText className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-gray-100">{attachmentDisplayName}</p>
+                  <p className="text-xs text-gray-400">PDF document</p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <TooltipProvider delayDuration={150}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={handlePdfDownload}
+                          className="rounded-full p-2 text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
+                          aria-label="Download PDF"
+                        >
+                          <Download className="h-4 w-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">Download PDF</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider delayDuration={150}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <a
+                          href={attachment}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-full p-2 text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
+                          aria-label="Open PDF"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">Open PDF</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
               </div>
             </div>
           )}
 
           {/* 🎥 Video */}
           {hasAttachment && isVideo && (
-            <div className="mb-2 space-y-2">
+            <div className="relative mb-2">
               <video
                 src={attachment}
                 controls
@@ -554,13 +638,22 @@ export default function ChatMessageBubble({
                 preload="metadata"
                 className="max-h-72 w-full rounded-lg bg-black"
               />
-              <button
-                type="button"
-                className="rounded bg-black/30 px-3 py-1.5 text-xs text-white hover:bg-black/40"
-                onClick={() => onDownloadMedia?.(attachment)}
-              >
-                Download video
-              </button>
+              {/* Video download uses a compact icon action to reduce visual clutter in bubbles. */}
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="absolute right-2 top-2 rounded-full bg-black/55 p-2 text-white transition-colors hover:bg-black/75"
+                      onClick={() => onDownloadMedia?.(attachment)}
+                      aria-label="Download video"
+                    >
+                      <Download className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left">Download video</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           )}
 
@@ -571,13 +664,14 @@ export default function ChatMessageBubble({
               target="_blank"
               rel="noopener noreferrer"
               className="mb-2 block text-blue-300 underline"
+              title={attachmentDisplayName}
             >
-              📎 Open Attachment
+              📎 Open {attachmentDisplayName}
             </a>
           )}
 
           {/* Text */}
-          {text && <p className="whitespace-pre-wrap break-words">{text}</p>}
+          {shouldRenderText && <p className="whitespace-pre-wrap break-words">{text}</p>}
 
           {/* Meta */}
           <div className="mt-1 flex items-center justify-end gap-1">
