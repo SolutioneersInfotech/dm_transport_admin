@@ -306,7 +306,8 @@ let isPdfWorkerConfigured = false;
 
 function ensurePdfWorkerConfigured() {
   if (isPdfWorkerConfigured) return;
-  // Worker must come from the installed pdfjs-dist version to avoid API/worker mismatch errors.
+  // Avoid adding a second top-level pdfjs-dist version unless it's intentionally aligned with react-pdf.
+  // Worker must come from the same pdfjs-dist build react-pdf resolves, or API/worker mismatch breaks previews.
   pdfjs.GlobalWorkerOptions.workerSrc = new URL(
     "pdfjs-dist/build/pdf.worker.min.mjs",
     import.meta.url,
