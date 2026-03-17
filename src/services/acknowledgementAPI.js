@@ -150,7 +150,9 @@ export async function sendPushNotification(userId, message) {
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        userId,
+        // Backend expects `userid` (lowercase d), not `userId`.
+        userid: userId,
+        title: "Acknowledgement from admin",
         message,
       }),
     });
