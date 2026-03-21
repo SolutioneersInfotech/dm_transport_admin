@@ -39,7 +39,6 @@ import {
   updateAcknowledgement,
   deleteAcknowledgement,
   sendAcknowledgement,
-  sendPushNotification,
 } from "../services/acknowledgementAPI";
 import {
   buildDocumentDownloadName,
@@ -592,45 +591,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
           onDocUpdate(updatedDoc);
         }
 
-        // Frontend resend push is intentional to match legacy admin behavior that was known to notify reliably.
-        if (newState === "markedForResend") {
-          const userId =
-            doc.userid ||
-            doc.userId ||
-            doc.driver_id ||
-            doc.driverId ||
-            doc.driver_userid ||
-            doc.driver_userId ||
-            null;
-
-          if (userId) {
-            const typeLabel = getDocumentTypeLabel(doc.type, FILTER_MAP);
-            const sentOnRaw =
-              doc.dateTime ??
-              doc.sent_on ??
-              doc.sentOn ??
-              doc.uploaded_at ??
-              doc.uploadedAt ??
-              doc.created_at ??
-              doc.createdAt ??
-              null;
-            const sentOn = formatDateTime(sentOnRaw);
-            const resendMessage = `Document has been marked for resend. Document Type: ${typeLabel} Sent On: ${sentOn}`;
-
-            try {
-              // Resend notification must be sent only on transition into markedForResend.
-              await sendPushNotification({
-                userid: userId,
-                title: "Document Update",
-                message: resendMessage,
-                chatType: "general",
-              });
-            } catch (pushError) {
-              // Notification failure must not fail the already-successful state update.
-              console.warn("Failed to send resend push notification:", pushError);
-            }
-          }
-        }
+        // Notifications for resend transitions are backend-owned; frontend only updates document state.
 
         toast.success(
           newState === "markedForResend"

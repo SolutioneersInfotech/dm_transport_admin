@@ -3,7 +3,6 @@ import {
   createAcknowledgementRoute,
   updateAcknowledgementRoute,
   deleteAcknowledgementRoute,
-  sendPushNotificationRoute,
   updateDocumentRoute,
 } from "../utils/apiRoutes";
 
@@ -135,43 +134,7 @@ export async function deleteAcknowledgement(id) {
 }
 
 /**
- * Send push notification to driver
- * @param {{userid: string, title: string, message: string, chatType?: string}} payload
- * @returns {Promise<{success: boolean}>}
- */
-export async function sendPushNotification(payload) {
-  try {
-    const token = localStorage.getItem("adminToken");
-    const res = await fetch(sendPushNotificationRoute, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        // Backend expects `userid` (lowercase d), not `userId`.
-        userid: payload?.userid,
-        title: payload?.title,
-        message: payload?.message,
-        chatType: payload?.chatType,
-      }),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.message || "Failed to send push notification");
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error("Failed to send push notification:", error);
-    throw error;
-  }
-}
-
-/**
- * Send acknowledgement to driver (updates document and sends notification)
+ * Send acknowledgement to driver (updates document only; backend sends notifications)
  * @param {object} document - Document object
  * @param {string} acknowledgement - Acknowledgement text
  * @returns {Promise<{success: boolean}>}
@@ -199,31 +162,6 @@ export async function sendAcknowledgement(document, acknowledgement) {
       throw new Error(updateData.message || "Failed to update document");
     }
 
-    // Send push notification to driver
-    // Try to get userId from various possible fields
-    const userId = 
-      document.userid || 
-      document.userId || 
-      document.driver_id || 
-      document.driverId ||
-      document.driver_userid ||
-      document.driver_userId ||
-      null;
-      
-    if (userId) {
-      const notificationMessage = `Acknowledgement: ${acknowledgement.substring(0, 50)}${acknowledgement.length > 50 ? "..." : ""}`;
-      try {
-        await sendPushNotification({
-          userid: userId,
-          title: "Acknowledgement from admin",
-          message: notificationMessage,
-          chatType: "general",
-        });
-      } catch (notifError) {
-        // Log but don't fail if notification fails
-        console.warn("Failed to send push notification:", notifError);
-      }
-    }
 
     return { success: true, document: updateData.document || { ...document, acknowledgement } };
   } catch (error) {
