@@ -524,7 +524,7 @@ export default function ChatMessageBubble({
             <button
               type="button"
               onClick={() => onReplyClick?.(replyTargetId)}
-              className={`mb-2 w-full text-left rounded border-l-2 pl-2 py-1 text-xs ${
+              className={`mb-2 w-full text-left rounded border-l-2 pl-2 py-1 pr-2 text-xs ${
                 isAdmin
                   ? "border-[#1f6feb] bg-white/10 text-white"
                   : "border-gray-500 bg-black/20 text-gray-300"
