@@ -22,6 +22,7 @@ const Chat = () => {
   const [isResizing, setIsResizing] = useState(false);
   const dragStartXRef = useRef(0);
   const dragStartWidthRef = useRef(CHAT_LIST_DEFAULT_WIDTH);
+  const currentWidthRef = useRef(CHAT_LIST_DEFAULT_WIDTH);
   const { users } = useAppSelector((state) => state.users);
   const activeChatId = selectedDriver ? getUserId(selectedDriver) : null;
 
@@ -133,9 +134,8 @@ const Chat = () => {
   }, [clampChatListWidth]);
 
   useEffect(() => {
-    if (!isDesktopLayout) return;
-    window.localStorage.setItem(CHAT_LIST_STORAGE_KEY, String(chatListWidth));
-  }, [chatListWidth, isDesktopLayout]);
+    currentWidthRef.current = chatListWidth;
+  }, [chatListWidth]);
 
   useEffect(() => {
     if (!isDesktopLayout) return;
@@ -146,6 +146,15 @@ const Chat = () => {
     return () => window.removeEventListener("resize", handleWindowResize);
   }, [clampChatListWidth, isDesktopLayout]);
 
+  const stopResizing = useCallback(() => {
+    setIsResizing(false);
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    if (!isDesktopLayout) return;
+    // Persist width only when resize ends to avoid blocking localStorage writes during drag.
+    window.localStorage.setItem(CHAT_LIST_STORAGE_KEY, String(currentWidthRef.current));
+  }, [isDesktopLayout]);
+
   useEffect(() => {
     if (!isDesktopLayout || !isResizing) return;
 
@@ -155,23 +164,24 @@ const Chat = () => {
       setChatListWidth(clampChatListWidth(nextWidth));
     };
 
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
-
     // Use window listeners so dragging remains smooth even if cursor leaves the divider.
+    // Resize must end even if pointer release happens outside the browser window.
     window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("mouseup", stopResizing);
+    window.addEventListener("blur", stopResizing);
+    document.addEventListener("mouseleave", stopResizing);
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("mouseup", stopResizing);
+      window.removeEventListener("blur", stopResizing);
+      document.removeEventListener("mouseleave", stopResizing);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
-  }, [clampChatListWidth, isDesktopLayout, isResizing]);
+  }, [clampChatListWidth, isDesktopLayout, isResizing, stopResizing]);
 
   const handleResizeMouseDown = (event) => {
     if (!isDesktopLayout) return;
