@@ -1368,14 +1368,22 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                     <Button
                       size="icon"
                       variant="outline"
-                      className="h-10 w-10 cursor-pointer flex-1 border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500 hover:text-white"
+                      className={`h-10 w-10 cursor-pointer flex-1 ${
+                        doc.acknowledgement
+                          ? "border-blue-500/70 text-blue-300 bg-blue-500/15 hover:bg-blue-500/25 hover:border-blue-400 hover:text-blue-200"
+                          : "border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500 hover:text-white"
+                      }`}
                     >
                       <Send className="h-4 w-4" />
                     </Button>
                   </PopoverTrigger>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Send Acknowledgement</p>
+                  <p>
+                    {doc.acknowledgement
+                      ? "Acknowledgement Already Sent"
+                      : "Send Acknowledgement"}
+                  </p>
                 </TooltipContent>
               </Tooltip>
               <PopoverContent className="w-80 p-0" align="end">
