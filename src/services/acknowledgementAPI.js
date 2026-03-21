@@ -158,7 +158,7 @@ export async function sendAcknowledgement(document, acknowledgement) {
       return acc;
     }, {});
 
-    // Send only base identifiers + acknowledgement to avoid stale mutable fields piggybacking this action.
+    // Send only base identifiers + acknowledgement. Avoid full-document spreads so stale mutable fields do not trigger unintended backend side effects.
     const updateRes = await fetch(updateDocumentRoute, {
       method: "POST",
       headers: {

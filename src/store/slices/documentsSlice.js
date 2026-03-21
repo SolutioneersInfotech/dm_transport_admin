@@ -285,35 +285,41 @@ export const fetchDocumentCount = createAsyncThunk("documents/fetchDocumentCount
   }
 });
 
+const DOCUMENT_UPDATE_BASE_FIELD_KEYS = [
+  "id",
+  "driver_name",
+  "driver_image",
+  "type",
+  "path",
+  "document_url",
+  "note",
+  "allowed_to_view",
+  "category",
+];
+
+const buildDocumentUpdateBasePayload = (document = {}) =>
+  DOCUMENT_UPDATE_BASE_FIELD_KEYS.reduce((acc, key) => {
+    if (document?.[key] !== undefined) acc[key] = document[key];
+    return acc;
+  }, {});
+
 export const updateDocument = createAsyncThunk("documents/updateDocument", async ({ document, seen, flag, state, completed, acknowledgement }, { rejectWithValue }) => {
   try {
     const token = localStorage.getItem("adminToken");
-    const baseFieldKeys = [
-      "id",
-      "driver_name",
-      "driver_image",
-      "type",
-      "path",
-      "document_url",
-      "note",
-      "allowed_to_view",
-      "category",
-    ];
-    // Never spread the full document into update payloads: stale mutable fields can trigger backend side effects (e.g. incorrect notifications).
-    const requestBody = baseFieldKeys.reduce((acc, key) => {
-      if (document?.[key] !== undefined) acc[key] = document[key];
-      return acc;
-    }, {});
 
-    // Keep legacy/raw flag fields out of base payload; add normalized flag fields only when this action explicitly updates flag.
+    // Do not spread the full document into updates; stale mutable fields can be misread by backend as real changes.
+    const requestBody = buildDocumentUpdateBasePayload(document);
+
+    // Keep flag updates explicit so only intentional flag actions send flagged/flagged_reason.
     delete requestBody.flag;
     delete requestBody.flagged;
     delete requestBody.flagged_reason;
-    // Only include mutable action fields when intentionally updated by the caller.
+
+    // Only include mutable action fields the caller explicitly updates.
     if (seen !== undefined) requestBody.seen = seen;
     if (flag !== undefined) {
-      requestBody.flagged = flag.flagged;
-      requestBody.flagged_reason = flag.reason ?? "";
+      requestBody.flagged = flag?.flagged;
+      requestBody.flagged_reason = flag?.reason ?? "";
     }
     if (state !== undefined) requestBody.state = state;
     if (completed !== undefined) requestBody.completed = completed;
