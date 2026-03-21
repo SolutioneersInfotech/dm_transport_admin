@@ -292,70 +292,15 @@
 //   );
 // }
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, CheckCheck, Download, ExternalLink, FileText, Copy } from "lucide-react";
-import { Document, Page, pdfjs } from "react-pdf";
 import {
   extractAttachmentDisplayName,
   getAttachmentKind,
   isGenericFileAttachment,
 } from "../utils/chatAttachments";
+import PdfThumbnail from "./PdfThumbnail";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
-
-let isPdfWorkerConfigured = false;
-
-function ensurePdfWorkerConfigured() {
-  if (isPdfWorkerConfigured) return;
-  // Avoid adding a second top-level pdfjs-dist version unless it's intentionally aligned with react-pdf.
-  // Worker must come from the same pdfjs-dist build react-pdf resolves, or API/worker mismatch breaks previews.
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-    "pdfjs-dist/build/pdf.worker.min.mjs",
-    import.meta.url,
-  ).toString();
-  isPdfWorkerConfigured = true;
-}
-
-ensurePdfWorkerConfigured();
-
-const PdfFirstPagePreview = memo(function PdfFirstPagePreview({ pdfData, onPreviewError }) {
-  const [loaded, setLoaded] = useState(false);
-  // Memoize the file object so react-pdf does not treat each render as a new document input.
-  const pdfDocumentFile = useMemo(() => (pdfData ? { data: pdfData } : null), [pdfData]);
-
-  useEffect(() => {
-    setLoaded(false);
-  }, [pdfDocumentFile]);
-
-  if (!pdfDocumentFile) return null;
-
-  return (
-    <div className="relative h-44 w-full overflow-hidden rounded-t-lg bg-[#0b1220]">
-      {!loaded && (
-        <div className="absolute inset-0 animate-pulse bg-gradient-to-b from-[#0b1220] to-[#151f33]" />
-      )}
-      <Document
-        file={pdfDocumentFile}
-        loading={null}
-        error={null}
-        onLoadSuccess={() => setLoaded(true)}
-        onLoadError={onPreviewError}
-        onSourceError={onPreviewError}
-      >
-        <Page
-          pageNumber={1}
-          width={278}
-          renderTextLayer={false}
-          renderAnnotationLayer={false}
-          loading={null}
-          onRenderError={onPreviewError}
-        />
-      </Document>
-      <span className="absolute left-2 top-2 rounded bg-red-500/85 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-white">
-        PDF
-      </span>
-    </div>
-  );
-});
 
 export default function ChatMessageBubble({
   msg,
@@ -463,62 +408,11 @@ export default function ChatMessageBubble({
 
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
-  const [pdfPreviewFailed, setPdfPreviewFailed] = useState(false);
-  const [pdfPreviewData, setPdfPreviewData] = useState(null);
-  const previewErrorLoggedRef = useRef("");
-
-  const logPdfPreviewFailure = useCallback((error) => {
-    if (previewErrorLoggedRef.current === attachment) return;
-    previewErrorLoggedRef.current = attachment;
-    console.error(`PDF preview failed for ${attachment}`, error);
-  }, [attachment]);
 
   useEffect(() => {
     setImageLoaded(false);
     setImageLoadFailed(false);
   }, [attachment]);
-
-  useEffect(() => {
-    setPdfPreviewFailed(false);
-    setPdfPreviewData(null);
-    previewErrorLoggedRef.current = "";
-
-    if (!hasAttachment || !isPDF) {
-      return undefined;
-    }
-
-    // Loading a Uint8Array for react-pdf is more reliable than handing signed URLs directly.
-    // Preview loading stays passive (fetch-only), so chat open never auto-downloads PDFs.
-    const controller = new AbortController();
-    let isActive = true;
-
-    fetch(attachment, {
-      method: "GET",
-      signal: controller.signal,
-      credentials: "omit",
-    })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        return response.arrayBuffer();
-      })
-      .then((buffer) => {
-        if (!isActive) return;
-        setPdfPreviewData(new Uint8Array(buffer));
-      })
-      .catch((error) => {
-        if (!isActive || error?.name === "AbortError") return;
-        // Fallback card is intentional when PDF preview fetch/render fails.
-        logPdfPreviewFailure(error);
-        setPdfPreviewFailed(true);
-      });
-
-    return () => {
-      isActive = false;
-      controller.abort();
-    };
-  }, [attachment, hasAttachment, isPDF, logPdfPreviewFailure]);
 
   /* ================= STYLES (WhatsApp-like) ================= */
   const containerAlign = isAdmin ? "justify-end" : "justify-start";
@@ -548,6 +442,14 @@ export default function ChatMessageBubble({
   const [copied, setCopied] = useState(false);
 
   const handlePdfDownload = () => {
+    if (!attachment) return;
+    if (onDownloadMedia) {
+      onDownloadMedia(attachment);
+      return;
+    }
+    window.open(attachment, "_blank", "noopener,noreferrer");
+  };
+  const handleVideoDownload = () => {
     if (!attachment) return;
     if (onDownloadMedia) {
       onDownloadMedia(attachment);
@@ -679,36 +581,7 @@ export default function ChatMessageBubble({
           {/* 📄 PDF */}
           {hasAttachment && isPDF && (
             <div className="mb-2 w-[280px] max-w-full overflow-hidden rounded-lg border border-red-400/30 bg-[#101828]">
-              {/* PDF preview must be passive; open/download actions are user-triggered only to avoid auto-download regressions. */}
-              {pdfPreviewFailed ? (
-                <div className="relative h-44 w-full bg-gradient-to-b from-[#0b1220] to-[#151f33]">
-                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                    <FileText className="h-14 w-14 text-red-300/80" />
-                  </div>
-                  <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(248,113,113,0.2),transparent_50%)]" />
-                  <span className="absolute left-2 top-2 rounded bg-red-500/85 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-white">
-                    PDF
-                  </span>
-                </div>
-              ) : pdfPreviewData ? (
-                <PdfFirstPagePreview
-                  pdfData={pdfPreviewData}
-                  onPreviewError={(error) => {
-                    logPdfPreviewFailure(error);
-                    setPdfPreviewFailed(true);
-                  }}
-                />
-              ) : (
-                <div className="relative h-44 w-full bg-gradient-to-b from-[#0b1220] to-[#151f33]">
-                  <div className="absolute inset-0 animate-pulse bg-gradient-to-b from-[#0b1220] to-[#151f33]" />
-                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                    <FileText className="h-12 w-12 text-red-300/70" />
-                  </div>
-                  <span className="absolute left-2 top-2 rounded bg-red-500/85 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-white">
-                    PDF
-                  </span>
-                </div>
-              )}
+              <PdfThumbnail attachmentUrl={attachment} displayName={attachmentDisplayName} />
 
               <div className="flex items-center gap-3 px-3 py-2.5">
                 <span className="rounded-md bg-red-500/20 p-2 text-red-300">
@@ -772,7 +645,7 @@ export default function ChatMessageBubble({
                     <button
                       type="button"
                       className="absolute right-2 top-2 rounded-full bg-black/55 p-2 text-white transition-colors hover:bg-black/75"
-                      onClick={() => onDownloadMedia?.(attachment)}
+                      onClick={handleVideoDownload}
                       aria-label="Download video"
                     >
                       <Download className="h-4 w-4" />

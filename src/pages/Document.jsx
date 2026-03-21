@@ -73,6 +73,13 @@ const FLAG_FILTER_LOADING_MESSAGES = [
 ];
 
 const isValidDateValue = (value) => value instanceof Date && isValid(value);
+const formatLocalDateKey = (value) => {
+  if (!isValidDateValue(value)) return null;
+  return formatDate(value, "yyyy-MM-dd");
+};
+const areDateRangesEquivalent = (a, b) =>
+  formatLocalDateKey(a?.from) === formatLocalDateKey(b?.from) &&
+  formatLocalDateKey(a?.to) === formatLocalDateKey(b?.to);
 
 const buildLocalDayUtcBoundaries = (from, to) => {
   // Calendar dates picked by users are local-day concepts; convert local day boundaries to UTC instants for API filters.
@@ -501,14 +508,6 @@ export default function Documents() {
     () => isValidDateValue(dateRange?.from) && isValidDateValue(dateRange?.to),
     [dateRange]
   );
-
-  const startDate = useMemo(() => {
-    if (hasCustomDateRange) {
-      return formatLocalDate(dateRange.from);
-    }
-
-    return ALL_DOCUMENTS_START_DATE;
-  }, [dateRange, hasCustomDateRange]);
 
   const endDate = useMemo(() => {
     if (hasCustomDateRange) {
@@ -975,8 +974,17 @@ export default function Documents() {
 
     const startParam = parseDateParam(searchParams.get("start"));
     const endParam = parseDateParam(searchParams.get("end"));
-    if (startParam && endParam) {
-      setDateRange({ from: startParam, to: endParam });
+    const parsedUrlDateRange =
+      startParam && endParam
+        ? { from: startParam, to: endParam }
+        : null;
+
+    // URL hydration must compare logical local calendar days, not Date object identity.
+    if (
+      parsedUrlDateRange &&
+      !areDateRangesEquivalent(parsedUrlDateRange, dateRange)
+    ) {
+      setDateRange(parsedUrlDateRange);
     }
 
     const queryParam = searchParams.get("q");
@@ -1017,7 +1025,7 @@ export default function Documents() {
     }
 
     hasHydratedFiltersFromParamsRef.current = true;
-  }, [availableFilterValues, searchParams]);
+  }, [availableFilterValues, dateRange, searchParams]);
 
   useEffect(() => {
     if (!hasHydratedFiltersFromParamsRef.current) return;
@@ -1032,8 +1040,17 @@ export default function Documents() {
       }
     };
 
-    syncParam("start", hasCustomDateRange ? startDate : null);
-    syncParam("end", hasCustomDateRange ? endDate : null);
+    const desiredStart = hasCustomDateRange ? formatLocalDateKey(dateRange?.from) : null;
+    const desiredEnd = hasCustomDateRange ? formatLocalDateKey(dateRange?.to) : null;
+    const currentStart = searchParams.get("start");
+    const currentEnd = searchParams.get("end");
+    // Equivalent URL/dateRange values must not trigger another write to avoid timezone-sensitive loops.
+    const shouldSyncDates = currentStart !== desiredStart || currentEnd !== desiredEnd;
+
+    if (shouldSyncDates) {
+      syncParam("start", desiredStart);
+      syncParam("end", desiredEnd);
+    }
     syncParam("q", searchDebounced?.trim() ? searchDebounced.trim() : null);
     syncParam("status", statusFilter !== "all" ? statusFilter : null);
     syncParam("category", categoryFilter.length ? categoryFilter.join(",") : null);
@@ -1046,14 +1063,13 @@ export default function Documents() {
     }
   }, [
     categoryFilter,
-    endDate,
     flagFilter,
     hasCustomDateRange,
+    dateRange,
     searchDebounced,
     searchParams,
     selectedFilters,
     setSearchParams,
-    startDate,
     statusFilter,
   ]);
 

@@ -136,11 +136,10 @@ export async function deleteAcknowledgement(id) {
 
 /**
  * Send push notification to driver
- * @param {string} userId - Driver user ID
- * @param {string} message - Notification message
+ * @param {{userid: string, title: string, message: string, chatType?: string}} payload
  * @returns {Promise<{success: boolean}>}
  */
-export async function sendPushNotification(userId, message) {
+export async function sendPushNotification(payload) {
   try {
     const token = localStorage.getItem("adminToken");
     const res = await fetch(sendPushNotificationRoute, {
@@ -150,8 +149,11 @@ export async function sendPushNotification(userId, message) {
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        userId,
-        message,
+        // Backend expects `userid` (lowercase d), not `userId`.
+        userid: payload?.userid,
+        title: payload?.title,
+        message: payload?.message,
+        chatType: payload?.chatType,
       }),
     });
 
@@ -211,7 +213,12 @@ export async function sendAcknowledgement(document, acknowledgement) {
     if (userId) {
       const notificationMessage = `Acknowledgement: ${acknowledgement.substring(0, 50)}${acknowledgement.length > 50 ? "..." : ""}`;
       try {
-        await sendPushNotification(userId, notificationMessage);
+        await sendPushNotification({
+          userid: userId,
+          title: "Acknowledgement from admin",
+          message: notificationMessage,
+          chatType: "general",
+        });
       } catch (notifError) {
         // Log but don't fail if notification fails
         console.warn("Failed to send push notification:", notifError);
