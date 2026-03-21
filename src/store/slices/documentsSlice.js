@@ -288,10 +288,28 @@ export const fetchDocumentCount = createAsyncThunk("documents/fetchDocumentCount
 export const updateDocument = createAsyncThunk("documents/updateDocument", async ({ document, seen, flag, state, completed, acknowledgement }, { rejectWithValue }) => {
   try {
     const token = localStorage.getItem("adminToken");
-    const requestBody = { ...document };
+    const baseFieldKeys = [
+      "id",
+      "driver_name",
+      "driver_image",
+      "type",
+      "path",
+      "document_url",
+      "note",
+      "allowed_to_view",
+      "category",
+    ];
+    // Never spread the full document into update payloads: stale mutable fields can trigger backend side effects (e.g. incorrect notifications).
+    const requestBody = baseFieldKeys.reduce((acc, key) => {
+      if (document?.[key] !== undefined) acc[key] = document[key];
+      return acc;
+    }, {});
+
+    // Keep legacy/raw flag fields out of base payload; add normalized flag fields only when this action explicitly updates flag.
     delete requestBody.flag;
     delete requestBody.flagged;
     delete requestBody.flagged_reason;
+    // Only include mutable action fields when intentionally updated by the caller.
     if (seen !== undefined) requestBody.seen = seen;
     if (flag !== undefined) {
       requestBody.flagged = flag.flagged;

@@ -142,8 +142,23 @@ export async function deleteAcknowledgement(id) {
 export async function sendAcknowledgement(document, acknowledgement) {
   try {
     const token = localStorage.getItem("adminToken");
+    const baseFieldKeys = [
+      "id",
+      "driver_name",
+      "driver_image",
+      "type",
+      "path",
+      "document_url",
+      "note",
+      "allowed_to_view",
+      "category",
+    ];
+    const requestBody = baseFieldKeys.reduce((acc, key) => {
+      if (document?.[key] !== undefined) acc[key] = document[key];
+      return acc;
+    }, {});
 
-    // Update document with acknowledgement
+    // Send only base identifiers + acknowledgement to avoid stale mutable fields piggybacking this action.
     const updateRes = await fetch(updateDocumentRoute, {
       method: "POST",
       headers: {
@@ -151,7 +166,7 @@ export async function sendAcknowledgement(document, acknowledgement) {
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        ...document,
+        ...requestBody,
         acknowledgement,
       }),
     });
