@@ -50,6 +50,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../components/ui/tooltip";
 import { toast } from "sonner";
 import { buildDocumentDownloadName, getDocumentTypeLabel } from "../utils/documentDownloadName";
 import { getAvailableDocumentFilterOptions } from "../utils/documentPermissions";
@@ -2263,6 +2268,13 @@ export default function Documents() {
                     {groupedDocuments[group].map((doc) => {
                       const isActive = selectedDoc?.id === doc.id;
                       const isSelected = selectedDocIds.has(doc.id);
+                      const isDocFlagged =
+                        doc.flag?.flagged || doc.flagged || doc.isFlagged;
+                      const flagReason = (
+                        doc.flag?.reason ||
+                        doc.flagged_reason ||
+                        ""
+                      ).trim();
 
                       return (
                       <TableRow
@@ -2311,23 +2323,42 @@ export default function Documents() {
                           </div>
                         </TableCell>
                         <TableCell className="px-1 sm:px-2 py-1.5">
-                          <button
-                            type="button"
-                            className="group inline-flex items-center justify-center rounded-full transition-transform duration-200 ease-out hover:-translate-y-0.5 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:opacity-60 disabled:pointer-events-none"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleToggleFlag(doc);
-                            }}
-                            aria-label={doc.flag?.flagged || doc.flagged || doc.isFlagged ? "Unflag document" : "Flag document"}
-                            title={doc.flag?.flagged || doc.flagged || doc.isFlagged ? "Unflag document" : "Flag document"}
-                            disabled={isDocActionPending(doc.id, "flag") || isFlagUpdating}
-                          >
-                            {doc.flag?.flagged || doc.flagged || doc.isFlagged ? (
-                              <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-red-500 transition-colors duration-200 group-hover:animate-pulse" fill="#ef4444" />
-                            ) : (
-                              <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-gray-600 transition-colors duration-200 group-hover:text-red-400 group-hover:animate-pulse" />
-                            )}
-                          </button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                className="group inline-flex items-center justify-center rounded-full transition-transform duration-200 ease-out hover:-translate-y-0.5 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:opacity-60 disabled:pointer-events-none"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleToggleFlag(doc);
+                                }}
+                                aria-label={isDocFlagged ? "Unflag document" : "Flag document"}
+                                disabled={isDocActionPending(doc.id, "flag") || isFlagUpdating}
+                              >
+                                {isDocFlagged ? (
+                                  <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-red-500 transition-colors duration-200 group-hover:animate-pulse" fill="#ef4444" />
+                                ) : (
+                                  <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-gray-600 transition-colors duration-200 group-hover:text-red-400 group-hover:animate-pulse" />
+                                )}
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {isDocFlagged ? (
+                                flagReason ? (
+                                  <div className="max-w-xs">
+                                    <p className="font-medium">Unflag Document</p>
+                                    <p className="mt-2 text-xs text-gray-300 break-words whitespace-pre-wrap">
+                                      {flagReason}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <p>Unflag Document</p>
+                                )
+                              ) : (
+                                <p>Flag Document</p>
+                              )}
+                            </TooltipContent>
+                          </Tooltip>
                         </TableCell>
                         <TableCell className="px-1 sm:px-2 py-1.5">
                           {(() => {
