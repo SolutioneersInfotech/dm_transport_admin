@@ -275,6 +275,8 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     doc.flagReason ??
     doc.note ??
     "";
+  const trimmedFlagReason =
+    typeof resolvedFlagReason === "string" ? resolvedFlagReason.trim() : "";
   const inVal = doc.in_date_time ?? doc.inTime ?? doc.in_time ?? doc.inDateTime;
   const outVal =
     doc.out_date_time ?? doc.outTime ?? doc.out_time ?? doc.outDateTime;
@@ -1336,7 +1338,21 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>{doc.flag?.flagged ? "Unflag Document" : "Flag Document"}</p>
+                {doc.flag?.flagged ? (
+                  trimmedFlagReason ? (
+                    // Show the existing unflag action plus reason context for flagged docs.
+                    <div className="max-w-xs">
+                      <p className="font-medium">Unflag Document</p>
+                      <p className="mt-2 text-xs text-gray-300 break-words whitespace-pre-wrap">
+                        {trimmedFlagReason}
+                      </p>
+                    </div>
+                  ) : (
+                    <p>Unflag Document</p>
+                  )
+                ) : (
+                  <p>Flag Document</p>
+                )}
               </TooltipContent>
             </Tooltip>
 
