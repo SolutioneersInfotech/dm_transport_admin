@@ -2,7 +2,6 @@ import {
   get,
   limitToLast,
   onValue,
-  orderByChild,
   push,
   query,
   ref,
@@ -402,23 +401,24 @@ export function subscribeLastMessage(userid, onChange) {
  */
 export function subscribeLatestMessageSummary(chatTarget, onChange) {
   const resolvedUserId = resolveUserId(chatTarget);
+  const contactId = resolveContactId(chatTarget);
 
-  if (!resolvedUserId) {
+  if (!resolvedUserId || !contactId) {
     onChange({ lastMessage: null, lastMessageText: "", lastChatTime: null, source: null });
     return () => {};
   }
 
-  // Chat-list rows need realtime freshness, but we only watch the latest entry.
-  // Full-thread subscriptions stay limited to the active ChatWindow.
+  // Mixed raw timestamp keys (`dateTime` and `datetime`) make direct orderByChild
+  // unreliable, so we keep a small realtime trailing window per path and pick latest
+  // after normalization. This stays lightweight versus full-thread row subscriptions.
+  const WINDOW_SIZE = 12;
   const primaryRef = query(
-    ref(database, `${ADMIN_GENERAL_PATH}/${resolvedUserId}`),
-    orderByChild("dateTime"),
-    limitToLast(1)
+    ref(database, `${ADMIN_GENERAL_PATH}/${contactId}`),
+    limitToLast(WINDOW_SIZE)
   );
   const fallbackRef = query(
     ref(database, `${USER_MIRROR_BASE}/${resolvedUserId}/admin`),
-    orderByChild("dateTime"),
-    limitToLast(1)
+    limitToLast(WINDOW_SIZE)
   );
 
   let latestPrimary = null;

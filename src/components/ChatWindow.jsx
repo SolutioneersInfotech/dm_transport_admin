@@ -238,6 +238,22 @@ function parseTimestampMs(value) {
   return Number.isNaN(direct) ? null : direct;
 }
 
+function getLatestMessagePreview(message) {
+  if (!message) return "No messages yet";
+
+  const text = message?.content?.message ?? message?.message ?? "";
+  if (typeof text === "string" && text.trim() !== "") {
+    return text.trim();
+  }
+
+  const attachmentUrl = message?.content?.attachmentUrl ?? message?.attachmentUrl ?? "";
+  if (typeof attachmentUrl === "string" && attachmentUrl.trim() !== "") {
+    return "Attachment";
+  }
+
+  return "No messages yet";
+}
+
 
 function resolveReplyTargetId(message) {
   if (!message) return null;
@@ -462,8 +478,28 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
         return;
       }
       // Always hand React a fresh array reference so incoming updates rerender immediately.
-      setMessages(Array.isArray(nextMessages) ? [...nextMessages] : []);
+      const normalizedMessages = Array.isArray(nextMessages) ? [...nextMessages] : [];
+      setMessages(normalizedMessages);
       setLoading(false);
+
+      // Active thread is authoritative: immediately patch the selected row summary
+      // so left-list preview/time/order stay fresh even if row listener timing varies.
+      const latestMessage = normalizedMessages.length
+        ? normalizedMessages.reduce((latest, msg) => {
+            if (!latest) return msg;
+            const latestTs = parseTimestampMs(latest?.dateTime) ?? 0;
+            const candidateTs = parseTimestampMs(msg?.dateTime) ?? 0;
+            return candidateTs >= latestTs ? msg : latest;
+          }, null)
+        : null;
+
+      dispatch(
+        updateLastMessageAction({
+          userid: driverId,
+          lastMessage: getLatestMessagePreview(latestMessage),
+          lastChatTime: latestMessage?.dateTime || null,
+        })
+      );
       
       // Mark messages as seen after loading
       if (markMessagesAsSeen) {
@@ -481,7 +517,14 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
         unsubscribe();
       }
     };
-  }, [driverId, messageSubscriptionTarget, subscribeMessages, markMessagesAsSeen]);
+  }, [
+    driverId,
+    messageSubscriptionTarget,
+    subscribeMessages,
+    markMessagesAsSeen,
+    dispatch,
+    updateLastMessageAction,
+  ]);
 
   useEffect(() => {
     if (!driverId || !messageSubscriptionTarget || !refreshSignal) return;
