@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import { Fragment, useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { format as formatDate, isValid } from "date-fns";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
@@ -53,6 +53,7 @@ import {
 import {
   Tooltip,
   TooltipContent,
+  TooltipProvider,
   TooltipTrigger,
 } from "../components/ui/tooltip";
 import { toast } from "sonner";
@@ -2150,6 +2151,7 @@ export default function Documents() {
                     </div>
                   </div>
                 )}
+                <TooltipProvider>
                 <Table containerClassName="h-full overflow-visible">
             <TableHeader className="sticky top-0 z-30 border-b border-gray-700 [&_th]:sticky [&_th]:top-0 [&_th]:z-30 [&_th]:bg-[#161b22]">
               <TableRow className="hover:bg-transparent border-gray-700">
@@ -2250,9 +2252,9 @@ export default function Documents() {
                 </TableRow>
               ) : (
                 Object.keys(groupedDocuments).map((group) => (
-                  <>
+                  <Fragment key={`group-${group}`}>
                     {/* Group Header */}
-                    <TableRow key={`group-${group}`} className="bg-[#0d1117] border-gray-800 hover:bg-[#0d1117]">
+                    <TableRow className="bg-[#0d1117] border-gray-800 hover:bg-[#0d1117]">
                       <TableCell colSpan={8} className="px-2 py-1">
                         <div className="flex items-center gap-2">
                           <div className="h-px flex-1 bg-gradient-to-r from-transparent via-blue-500/30 to-transparent" />
@@ -2476,7 +2478,7 @@ export default function Documents() {
                       </TableRow>
                       );
                     })}
-                  </>
+                  </Fragment>
                 ))
               )}
 
@@ -2504,6 +2506,7 @@ export default function Documents() {
               )}
             </TableBody>
                 </Table>
+                </TooltipProvider>
               </div>
 
               <div className="mt-2 sticky bottom-0 items-center justify-between text-[10px] sm:text-xs text-gray-400 w-full bg-gray-900 p-1 sm:p-1.5 rounded-b-lg">
