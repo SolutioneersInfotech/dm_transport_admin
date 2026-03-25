@@ -585,7 +585,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
 
         {/* Show list immediately after users are loaded; message preview hydration runs in background */}
         {!showInitialLoader && filtered.length > 0 && (
-          <motion.div layout className="flex flex-col">
+          <div className="flex flex-col">
             {filtered.map((driver) => (
               <ChatListItem
                 key={driver.userid}
@@ -594,7 +594,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
                 onClick={() => onSelectDriver(driver)}
               />
             ))}
-          </motion.div>
+          </div>
         )}
 
         {/* Infinite scroll trigger - only show when hasMore (disabled since we fetch all) */}
