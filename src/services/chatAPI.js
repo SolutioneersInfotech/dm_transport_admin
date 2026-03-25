@@ -1,7 +1,9 @@
 import {
   get,
+  limitToLast,
   onValue,
   push,
+  query,
   ref,
   remove,
   set,
@@ -242,6 +244,67 @@ export async function fetchMessages(chatTarget, messageLimit = 10) {
 
   // Return the last N messages (most recent)
   return { messages: messages.slice(-messageLimit) };
+}
+
+/**
+ * Lightweight one-shot latest-message fetch for chat-list fallback hydration.
+ * Reads a small bounded window from primary + fallback paths (no live listeners).
+ * @param {string|object} chatTarget
+ * @returns {Promise<{lastMessage: object|null, lastMessageText: string, lastChatTime: string|null}>}
+ */
+export async function fetchLatestMessage(chatTarget) {
+  const userid = resolveUserId(chatTarget);
+  const contactId = resolveContactId(chatTarget);
+  if (!userid || !contactId) {
+    return { lastMessage: null, lastMessageText: "", lastChatTime: null };
+  }
+
+  const primaryPath = `${ADMIN_GENERAL_PATH}/${contactId}`;
+  const fallbackPath = `${USER_MIRROR_BASE}/${userid}/admin`;
+  const WINDOW_SIZE = 12;
+
+  const [primarySnapshot, fallbackSnapshot] = await Promise.all([
+    get(query(ref(database, primaryPath), limitToLast(WINDOW_SIZE))),
+    get(query(ref(database, fallbackPath), limitToLast(WINDOW_SIZE))),
+  ]);
+
+  const candidates = [];
+  Object.entries(primarySnapshot.exists() ? primarySnapshot.val() : {}).forEach(([id, raw]) => {
+    candidates.push(normalizeMessage(id, raw));
+  });
+  Object.entries(fallbackSnapshot.exists() ? fallbackSnapshot.val() : {}).forEach(([id, raw]) => {
+    candidates.push(normalizeMessage(id, raw));
+  });
+
+  if (!candidates.length) {
+    return { lastMessage: null, lastMessageText: "", lastChatTime: null };
+  }
+
+  const latest = candidates.reduce((acc, msg) => {
+    if (!acc) return msg;
+    return parseDateTimeMs(msg?.dateTime) >= parseDateTimeMs(acc?.dateTime) ? msg : acc;
+  }, null);
+
+  let lastMessageText =
+    latest?.content?.message ||
+    latest?.message ||
+    (latest?.content ? "" : "");
+
+  if (!lastMessageText || lastMessageText.trim() === "") {
+    const attachmentUrl =
+      latest?.content?.attachmentUrl ||
+      latest?.attachmentUrl ||
+      "";
+    if (attachmentUrl && attachmentUrl.trim() !== "") {
+      lastMessageText = "Attachment";
+    }
+  }
+
+  return {
+    lastMessage: latest,
+    lastMessageText: lastMessageText || "",
+    lastChatTime: latest?.dateTime || null,
+  };
 }
 
 /**

@@ -8,6 +8,7 @@ import SkeletonLoader from "./skeletons/Skeleton";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import {
+  fetchLatestMessage as defaultFetchLatestMessage,
   subscribeLastMessage as defaultSubscribeLastMessage,
 } from "../services/chatAPI";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -58,11 +59,15 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const unsubscribeUnreadRefs = useRef({});
   const unsubscribeLastMessageRefs = useRef({});
   const unsubscribeSummaryRefs = useRef({});
+  const hydratedLatestMessageRefs = useRef({});
+  const latestMessageFetchInFlightRefs = useRef({});
 
   const subscribeUnreadCount = chatApi?.subscribeUnreadCount;
   const subscribeLastMessage =
     chatApi?.subscribeLastMessage || defaultSubscribeLastMessage;
   const subscribeChatSummary = chatApi?.subscribeChatSummary;
+  const fetchLatestMessage =
+    chatApi?.fetchLatestMessage || defaultFetchLatestMessage;
 
   function getDriverId(driver) {
     const candidate =
@@ -81,6 +86,35 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     const normalizedId = String(candidate).trim();
     return normalizedId || null;
   }
+
+  const hydrateLatestMessageOnce = useCallback(async (driver, userId) => {
+    if (!fetchLatestMessage || !userId) return;
+    if (latestMessageFetchInFlightRefs.current[userId]) return;
+    if (hydratedLatestMessageRefs.current[userId]) return;
+
+    latestMessageFetchInFlightRefs.current[userId] = true;
+
+    try {
+      // One-shot fallback only when summary is incomplete/stale for list hydration.
+      const latest = await fetchLatestMessage(driver);
+      if (!latest?.lastChatTime && !latest?.lastMessageText) {
+        return;
+      }
+
+      dispatch(
+        updateLastMessageAction({
+          userid: userId,
+          lastMessage: latest?.lastMessageText || "",
+          lastChatTime: latest?.lastChatTime || null,
+        })
+      );
+      hydratedLatestMessageRefs.current[userId] = true;
+    } catch (error) {
+      console.error("Failed to hydrate latest chat-list message:", error);
+    } finally {
+      latestMessageFetchInFlightRefs.current[userId] = false;
+    }
+  }, [dispatch, fetchLatestMessage, updateLastMessageAction]);
 
   // Initial fetch: maintenance chat uses fetchMaintenanceUsers (GET /admin/fetchmaintenanceusers), regular chat uses fetchUsers.
   useEffect(() => {
@@ -206,6 +240,9 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         }
 
         const lastChatTime = lastMessage?.dateTime || null;
+        const hasUsableSummary =
+          Boolean(lastChatTime) ||
+          (typeof lastMessageText === "string" && lastMessageText.trim() !== "");
 
         dispatch(
           updateLastMessageAction({
@@ -219,6 +256,13 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
           ...prev,
           [userId]: unreadCount,
         }));
+
+        if (hasUsableSummary) {
+          hydratedLatestMessageRefs.current[userId] = true;
+        } else {
+          // Summary-first for performance; only do one-shot fetch when summary is incomplete.
+          hydrateLatestMessageOnce(u, userId);
+        }
       });
 
       unsubscribeSummaryRefs.current[userId] = unsubscribe;
@@ -236,6 +280,8 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
             unsubscribe();
           }
           delete unsubscribeSummaryRefs.current[userId];
+          delete hydratedLatestMessageRefs.current[userId];
+          delete latestMessageFetchInFlightRefs.current[userId];
 
           setUnreadCounts((prev) => {
             const next = { ...prev };
@@ -245,7 +291,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         }
       });
     };
-  }, [users, subscribeChatSummary, dispatch, updateLastMessageAction]);
+  }, [users, subscribeChatSummary, dispatch, updateLastMessageAction, hydrateLatestMessageOnce]);
 
   // Lightweight list mode: use chat summary snapshots only.
   // Full-thread listeners are reserved for the active ChatWindow.
@@ -268,6 +314,8 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       Object.values(unsubscribeUnreadRefs.current).forEach((unsubscribe) => {
         if (typeof unsubscribe === "function") unsubscribe();
       });
+      hydratedLatestMessageRefs.current = {};
+      latestMessageFetchInFlightRefs.current = {};
     };
   }, []);
 
