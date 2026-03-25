@@ -2,7 +2,6 @@ import {
   get,
   limitToLast,
   onValue,
-  orderByChild,
   push,
   query,
   ref,
@@ -409,15 +408,16 @@ export function subscribeLatestMessageSummary(chatTarget, onChange) {
     return () => {};
   }
 
+  // Keep this bounded and lightweight for list rows, but read a small window so
+  // we still catch payloads that use `datetime` (legacy) instead of `dateTime`.
+  const WINDOW_SIZE = 25;
   const primaryRef = query(
     ref(database, `${ADMIN_GENERAL_PATH}/${contactId}`),
-    orderByChild("dateTime"),
-    limitToLast(1)
+    limitToLast(WINDOW_SIZE)
   );
   const fallbackRef = query(
     ref(database, `${USER_MIRROR_BASE}/${resolvedUserId}/admin`),
-    orderByChild("dateTime"),
-    limitToLast(1)
+    limitToLast(WINDOW_SIZE)
   );
 
   let latestPrimary = null;

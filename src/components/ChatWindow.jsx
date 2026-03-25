@@ -347,7 +347,7 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
       lightboxMedia.dateTime
     );
   }, [downloadChatMedia, lightboxMedia]);
-  const driverId = (() => {
+  const driverId = useMemo(() => {
     const candidate =
       driver?.userid ??
       driver?.userId ??
@@ -361,9 +361,9 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
       return null;
     }
 
-    const numericOnly = String(candidate).replace(/\D/g, "");
-    return numericOnly || null;
-  })();
+    const normalized = String(candidate).trim().replace(/[+\s-]/g, "");
+    return normalized || null;
+  }, [driver?.userid, driver?.userId, driver?.contactId, driver?.contactid, driver?.uid, driver?.id]);
 
   const messageSubscriptionTarget = useMemo(() => {
     if (!driverId) return null;
@@ -390,6 +390,25 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
   const shouldScrollToBottomRef = useRef(true);
   const activeThreadTokenRef = useRef(0);
 
+  const resolvedChatApi = useMemo(
+    () => ({
+      fetchMessages: chatApi?.fetchMessages || defaultFetchMessages,
+      subscribeMessages: chatApi?.subscribeMessages || defaultSubscribeMessages,
+      sendMessage: chatApi?.sendMessage || defaultSendMessage,
+      deleteChatHistory: chatApi?.deleteChatHistory || defaultDeleteChatHistory,
+      deleteSpecificMessage: chatApi?.deleteSpecificMessage || defaultDeleteSpecificMessage,
+      markMessagesAsSeen: chatApi?.markMessagesAsSeen || (async () => ({ success: true })),
+    }),
+    [
+      chatApi?.fetchMessages,
+      chatApi?.subscribeMessages,
+      chatApi?.sendMessage,
+      chatApi?.deleteChatHistory,
+      chatApi?.deleteSpecificMessage,
+      chatApi?.markMessagesAsSeen,
+    ]
+  );
+
   const {
     fetchMessages,
     subscribeMessages,
@@ -397,14 +416,7 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     deleteChatHistory,
     deleteSpecificMessage,
     markMessagesAsSeen,
-  } = chatApi || {
-    fetchMessages: defaultFetchMessages,
-    subscribeMessages: defaultSubscribeMessages,
-    sendMessage: defaultSendMessage,
-    deleteChatHistory: defaultDeleteChatHistory,
-    deleteSpecificMessage: defaultDeleteSpecificMessage,
-    markMessagesAsSeen: async () => ({ success: true }),
-  };
+  } = resolvedChatApi;
 
   /* ================= LOAD MESSAGES ================= */
   useEffect(() => {
@@ -439,8 +451,18 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
 
     const unsubscribe = subscribeMessages(messageSubscriptionTarget, (nextMessages) => {
       // Ignore stale callbacks from previously selected drivers.
-      if (requestToken !== activeThreadTokenRef.current) return;
-      setMessages(nextMessages || []);
+      if (requestToken !== activeThreadTokenRef.current) {
+        if (import.meta.env.DEV) {
+          console.warn("[ChatWindow] Dropped stale message callback.", {
+            driverId,
+            requestToken,
+            activeToken: activeThreadTokenRef.current,
+          });
+        }
+        return;
+      }
+      // Always hand React a fresh array reference so incoming updates rerender immediately.
+      setMessages(Array.isArray(nextMessages) ? [...nextMessages] : []);
       setLoading(false);
       
       // Mark messages as seen after loading

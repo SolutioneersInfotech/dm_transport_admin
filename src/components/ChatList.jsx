@@ -455,24 +455,39 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
    
 
     const withLastChat = users
-      .map((u) => {
+      .map((u, index) => {
         const userId = getDriverId(u);
-        if (!userId) {
-          return null;
+        const stableId =
+          userId ||
+          String(u?.phone || u?.email || u?.driver_name || u?.name || `row-${index}`);
+
+        const rawDriverName = u?.name ?? u?.driver_name ?? "";
+        const driverName =
+          typeof rawDriverName === "string" && rawDriverName.trim() !== ""
+            ? rawDriverName.trim()
+            : "Unknown driver";
+
+        const previewText =
+          typeof u?.last_message === "string" && u.last_message.trim() !== ""
+            ? u.last_message
+            : "No messages yet";
+
+        if (!u?.name && !u?.driver_name && import.meta.env.DEV) {
+          console.warn("[ChatList] Missing driver name, using fallback label.", {
+            userid: stableId,
+          });
         }
         
-        // console.log(u.last_chat_time);
-
         return {
-          userid: userId,
-          driver_name: u.name || u.driver_name,
+          userid: stableId,
+          driver_name: driverName,
           email: u.email || null,
           phone: u.phone || null,
           driver_image: u.profilePic || u.image || null,
           lastSeen: u.lastSeen || null,
-          last_message: u.last_message || "",
+          last_message: previewText,
           last_chat_time: u.last_chat_time || null,
-          unreadCount: unreadCounts[userId] || 0,
+          unreadCount: unreadCounts[stableId] || 0,
           category: u.category || null, // Include category field
         };
       })
@@ -481,8 +496,10 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     // SORT by last MESSAGE time only (last_chat_time). Do NOT use lastSeen.
     const driversWithIds = withLastChat.filter(Boolean);
     driversWithIds.sort((a, b) => {
-      const timeA = a.last_chat_time ? new Date(a.last_chat_time).getTime() : 0;
-      const timeB = b.last_chat_time ? new Date(b.last_chat_time).getTime() : 0;
+      const rawA = a.last_chat_time ? new Date(a.last_chat_time).getTime() : 0;
+      const rawB = b.last_chat_time ? new Date(b.last_chat_time).getTime() : 0;
+      const timeA = Number.isFinite(rawA) ? rawA : 0;
+      const timeB = Number.isFinite(rawB) ? rawB : 0;
       if (timeB !== timeA) return timeB - timeA; // newest message first
       return (a.userid || "").localeCompare(b.userid || ""); // stable order when same time
     });
