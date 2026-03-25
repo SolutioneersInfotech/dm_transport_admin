@@ -2,6 +2,7 @@ import {
   get,
   limitToLast,
   onValue,
+  orderByChild,
   push,
   query,
   ref,
@@ -401,23 +402,23 @@ export function subscribeLastMessage(userid, onChange) {
  */
 export function subscribeLatestMessageSummary(chatTarget, onChange) {
   const resolvedUserId = resolveUserId(chatTarget);
-  const contactId = resolveContactId(chatTarget);
 
-  if (!resolvedUserId || !contactId) {
+  if (!resolvedUserId) {
     onChange({ lastMessage: null, lastMessageText: "", lastChatTime: null, source: null });
     return () => {};
   }
 
-  // Keep this bounded and lightweight for list rows, but read a small window so
-  // we still catch payloads that use `datetime` (legacy) instead of `dateTime`.
-  const WINDOW_SIZE = 25;
+  // Chat-list rows need realtime freshness, but we only watch the latest entry.
+  // Full-thread subscriptions stay limited to the active ChatWindow.
   const primaryRef = query(
-    ref(database, `${ADMIN_GENERAL_PATH}/${contactId}`),
-    limitToLast(WINDOW_SIZE)
+    ref(database, `${ADMIN_GENERAL_PATH}/${resolvedUserId}`),
+    orderByChild("dateTime"),
+    limitToLast(1)
   );
   const fallbackRef = query(
     ref(database, `${USER_MIRROR_BASE}/${resolvedUserId}/admin`),
-    limitToLast(WINDOW_SIZE)
+    orderByChild("dateTime"),
+    limitToLast(1)
   );
 
   let latestPrimary = null;

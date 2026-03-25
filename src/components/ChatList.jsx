@@ -217,7 +217,8 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   useEffect(() => {
     if (!subscribeLatestMessageSummary || !users?.length) return;
 
-    // Chat-list rows need realtime latest-message freshness, but with lightweight listeners.
+    // Chat-list rows need realtime latest-message freshness from both admin/general + mirror paths,
+    // but only via lightweight "latest message" listeners (no full-thread row subscriptions).
     users.forEach((u) => {
       const userId = getDriverId(u);
       if (!userId) return;
