@@ -86,6 +86,26 @@ const formatLocalDateKey = (value) => {
 const areDateRangesEquivalent = (a, b) =>
   formatLocalDateKey(a?.from) === formatLocalDateKey(b?.from) &&
   formatLocalDateKey(a?.to) === formatLocalDateKey(b?.to);
+const areStringArraysEqual = (a = [], b = []) =>
+  a.length === b.length && a.every((value, index) => value === b[index]);
+const parseLocalDateParam = (value) => {
+  if (!value) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+
+  // URL date-only params represent local calendar days; avoid new Date("YYYY-MM-DD") UTC parsing.
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(year, month - 1, day, 0, 0, 0, 0);
+
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return parsed;
+};
 
 const buildLocalDayUtcBoundaries = (from, to) => {
   // Calendar dates picked by users are local-day concepts; convert local day boundaries to UTC instants for API filters.
@@ -959,119 +979,111 @@ export default function Documents() {
   }, [dispatch, currentFetchArgs, isManualRefreshing, availableFilterValues.length, hasDocumentPermissionRestrictions, page, limit, startDateTimeUtc, endDateTimeUtc, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters, buildFilterSignature]);
 
   useEffect(() => {
-    const parseDateParam = (value) => {
-      if (!value) return null;
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+    const startParam = parseLocalDateParam(searchParams.get("start"));
+    const endParam = parseLocalDateParam(searchParams.get("end"));
+    const parsedUrlDateRange = startParam && endParam ? { from: startParam, to: endParam } : null;
 
-      // URL date-only params represent local calendar days; new Date("YYYY-MM-DD") is interpreted as UTC.
-      const [year, month, day] = value.split("-").map(Number);
-      const parsed = new Date(year, month - 1, day, 0, 0, 0, 0);
-
-      if (
-        parsed.getFullYear() !== year ||
-        parsed.getMonth() !== month - 1 ||
-        parsed.getDate() !== day
-      ) {
-        return null;
-      }
-
-      return parsed;
-    };
-
-    const startParam = parseDateParam(searchParams.get("start"));
-    const endParam = parseDateParam(searchParams.get("end"));
-    const parsedUrlDateRange =
-      startParam && endParam
-        ? { from: startParam, to: endParam }
-        : null;
-
-    // URL hydration must compare logical local calendar days, not Date object identity.
-    if (
-      parsedUrlDateRange &&
-      !areDateRangesEquivalent(parsedUrlDateRange, dateRange)
-    ) {
-      setDateRange(parsedUrlDateRange);
+    // Date hydration is isolated so date changes don't retrigger non-date filter hydration loops.
+    // Equivalent URL/state local-day values must not trigger another setState.
+    if (parsedUrlDateRange) {
+      setDateRange((previousRange) =>
+        areDateRangesEquivalent(parsedUrlDateRange, previousRange) ? previousRange : parsedUrlDateRange
+      );
     }
+  }, [searchParams]);
 
+  useEffect(() => {
+    // Non-date filters hydrate independently and only update when their URL-backed value actually changes.
     const queryParam = searchParams.get("q");
-    setSearch(queryParam ?? "");
+    const nextSearch = queryParam ?? "";
+    setSearch((previousSearch) => (previousSearch === nextSearch ? previousSearch : nextSearch));
 
     const statusParam = searchParams.get("status");
-    setStatusFilter(["all", "seen", "unseen"].includes(statusParam) ? statusParam : "all");
+    const nextStatus = ["all", "seen", "unseen"].includes(statusParam) ? statusParam : "all";
+    setStatusFilter((previousStatus) => (previousStatus === nextStatus ? previousStatus : nextStatus));
 
     const categoryParam = searchParams.get("category");
+    let nextCategories = [];
     if (categoryParam) {
-      const categories = categoryParam
+      nextCategories = categoryParam
         .split(",")
         .map((item) => item.trim())
         .filter(Boolean);
-      setCategoryFilter(categories);
-    } else {
-      setCategoryFilter([]);
     }
+    setCategoryFilter((previousCategories) =>
+      areStringArraysEqual(previousCategories, nextCategories) ? previousCategories : nextCategories
+    );
 
     const flagParam = searchParams.get("flag");
+    let nextFlagValue = null;
     if (flagParam === "true") {
-      setFlagFilter(true);
+      nextFlagValue = true;
     } else if (flagParam === "false") {
-      setFlagFilter(false);
-    } else {
-      setFlagFilter(null);
+      nextFlagValue = false;
     }
+    setFlagFilter((previousFlagValue) =>
+      previousFlagValue === nextFlagValue ? previousFlagValue : nextFlagValue
+    );
 
     const typesParam = searchParams.get("types") || searchParams.get("type");
+    let nextTypes = [];
     if (typesParam) {
-      const types = typesParam
+      nextTypes = typesParam
         .split(",")
         .map((item) => item.trim())
         .filter((item) => availableFilterValues.includes(item));
-      setSelectedFilters(types);
-    } else {
-      setSelectedFilters([]);
     }
+    setSelectedFilters((previousTypes) =>
+      areStringArraysEqual(previousTypes, nextTypes) ? previousTypes : nextTypes
+    );
 
     hasHydratedFiltersFromParamsRef.current = true;
-  }, [availableFilterValues, dateRange, searchParams]);
+  }, [availableFilterValues, searchParams]);
 
   useEffect(() => {
     if (!hasHydratedFiltersFromParamsRef.current) return;
 
     const nextParams = new URLSearchParams(searchParams);
-
     const syncParam = (key, value) => {
-      if (value === null || value === undefined || value === "") {
+      const normalizedValue =
+        value === null || value === undefined || value === "" ? null : String(value);
+      const currentValue = searchParams.get(key);
+      if (normalizedValue === currentValue) return false;
+
+      if (normalizedValue === null) {
         nextParams.delete(key);
       } else {
-        nextParams.set(key, String(value));
+        nextParams.set(key, normalizedValue);
       }
+      return true;
     };
 
     const desiredStart = hasCustomDateRange ? formatLocalDateKey(dateRange?.from) : null;
     const desiredEnd = hasCustomDateRange ? formatLocalDateKey(dateRange?.to) : null;
-    const currentStart = searchParams.get("start");
-    const currentEnd = searchParams.get("end");
+    // Keep URL writes atomic so date/non-date updates cannot race on stale searchParams snapshots.
+    let hasChanges = false;
     // Equivalent URL/dateRange values must not trigger another write to avoid timezone-sensitive loops.
-    const shouldSyncDates = currentStart !== desiredStart || currentEnd !== desiredEnd;
+    hasChanges = syncParam("start", desiredStart) || hasChanges;
+    hasChanges = syncParam("end", desiredEnd) || hasChanges;
+    hasChanges = syncParam("q", searchDebounced?.trim() ? searchDebounced.trim() : null) || hasChanges;
+    hasChanges = syncParam("status", statusFilter !== "all" ? statusFilter : null) || hasChanges;
+    hasChanges = syncParam("category", categoryFilter.length ? categoryFilter.join(",") : null) || hasChanges;
+    hasChanges = syncParam("flag", flagFilter === null ? null : String(flagFilter)) || hasChanges;
+    hasChanges = syncParam("types", selectedFilters.length ? selectedFilters.join(",") : null) || hasChanges;
 
-    if (shouldSyncDates) {
-      syncParam("start", desiredStart);
-      syncParam("end", desiredEnd);
+    if (searchParams.has("type")) {
+      nextParams.delete("type");
+      hasChanges = true;
     }
-    syncParam("q", searchDebounced?.trim() ? searchDebounced.trim() : null);
-    syncParam("status", statusFilter !== "all" ? statusFilter : null);
-    syncParam("category", categoryFilter.length ? categoryFilter.join(",") : null);
-    syncParam("flag", flagFilter === null ? null : String(flagFilter));
-    syncParam("types", selectedFilters.length ? selectedFilters.join(",") : null);
-    nextParams.delete("type");
 
-    if (nextParams.toString() !== searchParams.toString()) {
+    if (hasChanges) {
       setSearchParams(nextParams, { replace: true });
     }
   }, [
-    categoryFilter,
-    flagFilter,
     hasCustomDateRange,
     dateRange,
+    categoryFilter,
+    flagFilter,
     searchDebounced,
     searchParams,
     selectedFilters,
