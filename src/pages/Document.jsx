@@ -86,6 +86,8 @@ const formatLocalDateKey = (value) => {
 const areDateRangesEquivalent = (a, b) =>
   formatLocalDateKey(a?.from) === formatLocalDateKey(b?.from) &&
   formatLocalDateKey(a?.to) === formatLocalDateKey(b?.to);
+const areStringArraysEqual = (a = [], b = []) =>
+  a.length === b.length && a.every((value, index) => value === b[index]);
 const parseLocalDateParam = (value) => {
   if (!value) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
@@ -981,50 +983,59 @@ export default function Documents() {
     const endParam = parseLocalDateParam(searchParams.get("end"));
     const parsedUrlDateRange = startParam && endParam ? { from: startParam, to: endParam } : null;
 
+    // Date hydration is isolated so date changes don't retrigger non-date filter hydration loops.
     // Equivalent URL/state local-day values must not trigger another setState.
-    if (parsedUrlDateRange && !areDateRangesEquivalent(parsedUrlDateRange, dateRange)) {
-      setDateRange(parsedUrlDateRange);
+    if (parsedUrlDateRange) {
+      setDateRange((previousRange) =>
+        areDateRangesEquivalent(parsedUrlDateRange, previousRange) ? previousRange : parsedUrlDateRange
+      );
     }
-  }, [dateRange, searchParams]);
+  }, [searchParams]);
 
   useEffect(() => {
-    // Keep non-date query hydration separate from date hydration to avoid cross-filter churn loops.
+    // Non-date filters hydrate independently and only update when their URL-backed value actually changes.
     const queryParam = searchParams.get("q");
-    setSearch(queryParam ?? "");
+    const nextSearch = queryParam ?? "";
+    setSearch((previousSearch) => (previousSearch === nextSearch ? previousSearch : nextSearch));
 
     const statusParam = searchParams.get("status");
-    setStatusFilter(["all", "seen", "unseen"].includes(statusParam) ? statusParam : "all");
+    const nextStatus = ["all", "seen", "unseen"].includes(statusParam) ? statusParam : "all";
+    setStatusFilter((previousStatus) => (previousStatus === nextStatus ? previousStatus : nextStatus));
 
     const categoryParam = searchParams.get("category");
+    let nextCategories = [];
     if (categoryParam) {
-      const categories = categoryParam
+      nextCategories = categoryParam
         .split(",")
         .map((item) => item.trim())
         .filter(Boolean);
-      setCategoryFilter(categories);
-    } else {
-      setCategoryFilter([]);
     }
+    setCategoryFilter((previousCategories) =>
+      areStringArraysEqual(previousCategories, nextCategories) ? previousCategories : nextCategories
+    );
 
     const flagParam = searchParams.get("flag");
+    let nextFlagValue = null;
     if (flagParam === "true") {
-      setFlagFilter(true);
+      nextFlagValue = true;
     } else if (flagParam === "false") {
-      setFlagFilter(false);
-    } else {
-      setFlagFilter(null);
+      nextFlagValue = false;
     }
+    setFlagFilter((previousFlagValue) =>
+      previousFlagValue === nextFlagValue ? previousFlagValue : nextFlagValue
+    );
 
     const typesParam = searchParams.get("types") || searchParams.get("type");
+    let nextTypes = [];
     if (typesParam) {
-      const types = typesParam
+      nextTypes = typesParam
         .split(",")
         .map((item) => item.trim())
         .filter((item) => availableFilterValues.includes(item));
-      setSelectedFilters(types);
-    } else {
-      setSelectedFilters([]);
     }
+    setSelectedFilters((previousTypes) =>
+      areStringArraysEqual(previousTypes, nextTypes) ? previousTypes : nextTypes
+    );
 
     hasHydratedFiltersFromParamsRef.current = true;
   }, [availableFilterValues, searchParams]);
