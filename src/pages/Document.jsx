@@ -1033,62 +1033,44 @@ export default function Documents() {
     if (!hasHydratedFiltersFromParamsRef.current) return;
 
     const nextParams = new URLSearchParams(searchParams);
+    const syncParam = (key, value) => {
+      const normalizedValue =
+        value === null || value === undefined || value === "" ? null : String(value);
+      const currentValue = searchParams.get(key);
+      if (normalizedValue === currentValue) return false;
+
+      if (normalizedValue === null) {
+        nextParams.delete(key);
+      } else {
+        nextParams.set(key, normalizedValue);
+      }
+      return true;
+    };
+
     const desiredStart = hasCustomDateRange ? formatLocalDateKey(dateRange?.from) : null;
     const desiredEnd = hasCustomDateRange ? formatLocalDateKey(dateRange?.to) : null;
-    const currentStart = searchParams.get("start");
-    const currentEnd = searchParams.get("end");
-
+    // Keep URL writes atomic so date/non-date updates cannot race on stale searchParams snapshots.
+    let hasChanges = false;
     // Equivalent URL/dateRange values must not trigger another write to avoid timezone-sensitive loops.
-    const shouldSyncDates = currentStart !== desiredStart || currentEnd !== desiredEnd;
+    hasChanges = syncParam("start", desiredStart) || hasChanges;
+    hasChanges = syncParam("end", desiredEnd) || hasChanges;
+    hasChanges = syncParam("q", searchDebounced?.trim() ? searchDebounced.trim() : null) || hasChanges;
+    hasChanges = syncParam("status", statusFilter !== "all" ? statusFilter : null) || hasChanges;
+    hasChanges = syncParam("category", categoryFilter.length ? categoryFilter.join(",") : null) || hasChanges;
+    hasChanges = syncParam("flag", flagFilter === null ? null : String(flagFilter)) || hasChanges;
+    hasChanges = syncParam("types", selectedFilters.length ? selectedFilters.join(",") : null) || hasChanges;
 
-    if (!shouldSyncDates) return;
-
-    if (desiredStart) {
-      nextParams.set("start", desiredStart);
-    } else {
-      nextParams.delete("start");
+    if (searchParams.has("type")) {
+      nextParams.delete("type");
+      hasChanges = true;
     }
 
-    if (desiredEnd) {
-      nextParams.set("end", desiredEnd);
-    } else {
-      nextParams.delete("end");
-    }
-
-    if (nextParams.toString() !== searchParams.toString()) {
+    if (hasChanges) {
       setSearchParams(nextParams, { replace: true });
     }
   }, [
     hasCustomDateRange,
     dateRange,
-    searchParams,
-    setSearchParams,
-  ]);
-
-  useEffect(() => {
-    if (!hasHydratedFiltersFromParamsRef.current) return;
-
-    const nextParams = new URLSearchParams(searchParams);
-    const syncParam = (key, value) => {
-      if (value === null || value === undefined || value === "") {
-        nextParams.delete(key);
-      } else {
-        nextParams.set(key, String(value));
-      }
-    };
-
-    // Keep non-date URL sync isolated so date hydration cannot reset unrelated filters.
-    syncParam("q", searchDebounced?.trim() ? searchDebounced.trim() : null);
-    syncParam("status", statusFilter !== "all" ? statusFilter : null);
-    syncParam("category", categoryFilter.length ? categoryFilter.join(",") : null);
-    syncParam("flag", flagFilter === null ? null : String(flagFilter));
-    syncParam("types", selectedFilters.length ? selectedFilters.join(",") : null);
-    nextParams.delete("type");
-
-    if (nextParams.toString() !== searchParams.toString()) {
-      setSearchParams(nextParams, { replace: true });
-    }
-  }, [
     categoryFilter,
     flagFilter,
     searchDebounced,
