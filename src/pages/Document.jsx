@@ -86,6 +86,24 @@ const formatLocalDateKey = (value) => {
 const areDateRangesEquivalent = (a, b) =>
   formatLocalDateKey(a?.from) === formatLocalDateKey(b?.from) &&
   formatLocalDateKey(a?.to) === formatLocalDateKey(b?.to);
+const parseLocalDateParam = (value) => {
+  if (!value) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+
+  // URL date-only params represent local calendar days; avoid new Date("YYYY-MM-DD") UTC parsing.
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(year, month - 1, day, 0, 0, 0, 0);
+
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return parsed;
+};
 
 const buildLocalDayUtcBoundaries = (from, to) => {
   // Calendar dates picked by users are local-day concepts; convert local day boundaries to UTC instants for API filters.
@@ -959,40 +977,18 @@ export default function Documents() {
   }, [dispatch, currentFetchArgs, isManualRefreshing, availableFilterValues.length, hasDocumentPermissionRestrictions, page, limit, startDateTimeUtc, endDateTimeUtc, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters, buildFilterSignature]);
 
   useEffect(() => {
-    const parseDateParam = (value) => {
-      if (!value) return null;
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+    const startParam = parseLocalDateParam(searchParams.get("start"));
+    const endParam = parseLocalDateParam(searchParams.get("end"));
+    const parsedUrlDateRange = startParam && endParam ? { from: startParam, to: endParam } : null;
 
-      // URL date-only params represent local calendar days; new Date("YYYY-MM-DD") is interpreted as UTC.
-      const [year, month, day] = value.split("-").map(Number);
-      const parsed = new Date(year, month - 1, day, 0, 0, 0, 0);
-
-      if (
-        parsed.getFullYear() !== year ||
-        parsed.getMonth() !== month - 1 ||
-        parsed.getDate() !== day
-      ) {
-        return null;
-      }
-
-      return parsed;
-    };
-
-    const startParam = parseDateParam(searchParams.get("start"));
-    const endParam = parseDateParam(searchParams.get("end"));
-    const parsedUrlDateRange =
-      startParam && endParam
-        ? { from: startParam, to: endParam }
-        : null;
-
-    // URL hydration must compare logical local calendar days, not Date object identity.
-    if (
-      parsedUrlDateRange &&
-      !areDateRangesEquivalent(parsedUrlDateRange, dateRange)
-    ) {
+    // Equivalent URL/state local-day values must not trigger another setState.
+    if (parsedUrlDateRange && !areDateRangesEquivalent(parsedUrlDateRange, dateRange)) {
       setDateRange(parsedUrlDateRange);
     }
+  }, [dateRange, searchParams]);
 
+  useEffect(() => {
+    // Keep non-date query hydration separate from date hydration to avoid cross-filter churn loops.
     const queryParam = searchParams.get("q");
     setSearch(queryParam ?? "");
 
@@ -1031,13 +1027,48 @@ export default function Documents() {
     }
 
     hasHydratedFiltersFromParamsRef.current = true;
-  }, [availableFilterValues, dateRange, searchParams]);
+  }, [availableFilterValues, searchParams]);
 
   useEffect(() => {
     if (!hasHydratedFiltersFromParamsRef.current) return;
 
     const nextParams = new URLSearchParams(searchParams);
+    const desiredStart = hasCustomDateRange ? formatLocalDateKey(dateRange?.from) : null;
+    const desiredEnd = hasCustomDateRange ? formatLocalDateKey(dateRange?.to) : null;
+    const currentStart = searchParams.get("start");
+    const currentEnd = searchParams.get("end");
 
+    // Equivalent URL/dateRange values must not trigger another write to avoid timezone-sensitive loops.
+    const shouldSyncDates = currentStart !== desiredStart || currentEnd !== desiredEnd;
+
+    if (!shouldSyncDates) return;
+
+    if (desiredStart) {
+      nextParams.set("start", desiredStart);
+    } else {
+      nextParams.delete("start");
+    }
+
+    if (desiredEnd) {
+      nextParams.set("end", desiredEnd);
+    } else {
+      nextParams.delete("end");
+    }
+
+    if (nextParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [
+    hasCustomDateRange,
+    dateRange,
+    searchParams,
+    setSearchParams,
+  ]);
+
+  useEffect(() => {
+    if (!hasHydratedFiltersFromParamsRef.current) return;
+
+    const nextParams = new URLSearchParams(searchParams);
     const syncParam = (key, value) => {
       if (value === null || value === undefined || value === "") {
         nextParams.delete(key);
@@ -1046,17 +1077,7 @@ export default function Documents() {
       }
     };
 
-    const desiredStart = hasCustomDateRange ? formatLocalDateKey(dateRange?.from) : null;
-    const desiredEnd = hasCustomDateRange ? formatLocalDateKey(dateRange?.to) : null;
-    const currentStart = searchParams.get("start");
-    const currentEnd = searchParams.get("end");
-    // Equivalent URL/dateRange values must not trigger another write to avoid timezone-sensitive loops.
-    const shouldSyncDates = currentStart !== desiredStart || currentEnd !== desiredEnd;
-
-    if (shouldSyncDates) {
-      syncParam("start", desiredStart);
-      syncParam("end", desiredEnd);
-    }
+    // Keep non-date URL sync isolated so date hydration cannot reset unrelated filters.
     syncParam("q", searchDebounced?.trim() ? searchDebounced.trim() : null);
     syncParam("status", statusFilter !== "all" ? statusFilter : null);
     syncParam("category", categoryFilter.length ? categoryFilter.join(",") : null);
@@ -1070,8 +1091,6 @@ export default function Documents() {
   }, [
     categoryFilter,
     flagFilter,
-    hasCustomDateRange,
-    dateRange,
     searchDebounced,
     searchParams,
     selectedFilters,
