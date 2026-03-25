@@ -1,6 +1,5 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useLocation } from "react-router-dom";
-import { motion } from "framer-motion";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { fetchUsers, fetchMoreUsers, updateUserLastMessage } from "../store/slices/usersSlice";
 import { fetchMaintenanceUsers, updateMaintenanceUserLastMessage } from "../store/slices/maintenanceUsersSlice";
@@ -248,9 +247,32 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     };
   }, [users, subscribeChatSummary, dispatch, updateLastMessageAction]);
 
-  // Subscribe to latest-message updates so ordering refreshes for both driver and admin sends
+  // Lightweight list mode: use chat summary snapshots only.
+  // Full-thread listeners are reserved for the active ChatWindow.
   useEffect(() => {
-    // If we have subscribeChatSummary, we skip this path.
+    if (!subscribeChatSummary) return;
+    Object.values(unsubscribeUnreadRefs.current).forEach((unsubscribe) => {
+      if (typeof unsubscribe === "function") unsubscribe();
+    });
+    unsubscribeUnreadRefs.current = {};
+  }, [subscribeChatSummary]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(unsubscribeSummaryRefs.current).forEach((unsubscribe) => {
+        if (typeof unsubscribe === "function") unsubscribe();
+      });
+      Object.values(unsubscribeLastMessageRefs.current).forEach((unsubscribe) => {
+        if (typeof unsubscribe === "function") unsubscribe();
+      });
+      Object.values(unsubscribeUnreadRefs.current).forEach((unsubscribe) => {
+        if (typeof unsubscribe === "function") unsubscribe();
+      });
+    };
+  }, []);
+
+  // Special fallback only when summary subscription is unavailable (e.g. injected custom chatApi).
+  useEffect(() => {
     if (subscribeChatSummary) return;
     if (!subscribeLastMessage || !users?.length) return;
 

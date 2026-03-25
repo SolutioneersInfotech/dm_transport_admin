@@ -388,6 +388,7 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
   const bottomRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const shouldScrollToBottomRef = useRef(true);
+  const activeThreadTokenRef = useRef(0);
 
   const {
     fetchMessages,
@@ -408,14 +409,18 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
   /* ================= LOAD MESSAGES ================= */
   useEffect(() => {
     if (!driverId || !messageSubscriptionTarget) {
+      activeThreadTokenRef.current += 1;
       setMessages([]);
       setSelected([]);
       setLoading(false);
       return;
     }
 
+    activeThreadTokenRef.current += 1;
+    const requestToken = activeThreadTokenRef.current;
+
+    // Keep previous thread content visible while switching to reduce "stuck" flash.
     setLoading(true);
-    setMessages([]);
     setSelected([]);
     setSelectionMode(false);
     setContextMenu(null);
@@ -433,6 +438,8 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     shouldScrollToBottomRef.current = true;
 
     const unsubscribe = subscribeMessages(messageSubscriptionTarget, (nextMessages) => {
+      // Ignore stale callbacks from previously selected drivers.
+      if (requestToken !== activeThreadTokenRef.current) return;
       setMessages(nextMessages || []);
       setLoading(false);
       
@@ -445,6 +452,9 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     });
 
     return () => {
+      if (requestToken === activeThreadTokenRef.current) {
+        activeThreadTokenRef.current += 1;
+      }
       if (unsubscribe) {
         unsubscribe();
       }
@@ -455,10 +465,12 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     if (!driverId || !messageSubscriptionTarget || !refreshSignal) return;
 
     let isCancelled = false;
+    const requestToken = activeThreadTokenRef.current;
 
     fetchMessages(messageSubscriptionTarget, 200)
       .then((response) => {
         if (isCancelled) return;
+        if (requestToken !== activeThreadTokenRef.current) return;
         setMessages(response?.messages || []);
       })
       .catch((error) => {

@@ -246,6 +246,7 @@ export async function fetchMessages(chatTarget, messageLimit = 10) {
 
 /**
  * Subscribe to messages for a specific user - fetches all messages
+ * NOTE: this is intentionally heavy and should be used by the active ChatWindow only.
  * @param {string} userid - User ID
  * @param {function} onChange - Callback function called when messages change
  * @returns {function} Unsubscribe function
@@ -296,8 +297,35 @@ export function subscribeMessages(userid, onChange) {
  * @returns {function} Unsubscribe function
  */
 export function subscribeLastMessage(userid, onChange) {
-  return subscribeMessages(userid, (messages) => {
-    onChange(messages.length ? messages[messages.length - 1] : null);
+  const contactId = resolveContactId(userid);
+  if (!contactId) {
+    onChange(null);
+    return () => {};
+  }
+
+  // Lightweight summary listener for list rows:
+  // observe only the primary admin thread path and compute the latest message.
+  const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${contactId}`);
+  return onValue(messagesRef, (snapshot) => {
+    if (!snapshot.exists()) {
+      onChange(null);
+      return;
+    }
+
+    const messagesObject = snapshot.val() || {};
+    let lastMessage = null;
+    let lastTimestamp = -Infinity;
+
+    Object.entries(messagesObject).forEach(([id, raw]) => {
+      const normalized = normalizeMessage(id, raw);
+      const ts = parseDateTimeMs(normalized?.dateTime);
+      if (ts >= lastTimestamp) {
+        lastTimestamp = ts;
+        lastMessage = normalized;
+      }
+    });
+
+    onChange(lastMessage);
   });
 }
 
