@@ -1,6 +1,5 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useLocation } from "react-router-dom";
-import { motion } from "framer-motion";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { fetchUsers, fetchMoreUsers, updateUserLastMessage } from "../store/slices/usersSlice";
 import { fetchMaintenanceUsers, updateMaintenanceUserLastMessage } from "../store/slices/maintenanceUsersSlice";
@@ -9,6 +8,8 @@ import SkeletonLoader from "./skeletons/Skeleton";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import {
+  fetchLatestMessage as defaultFetchLatestMessage,
+  subscribeLatestMessageSummary as defaultSubscribeLatestMessageSummary,
   subscribeLastMessage as defaultSubscribeLastMessage,
 } from "../services/chatAPI";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -57,13 +58,20 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const observerTarget = useRef(null);
   const [unreadCounts, setUnreadCounts] = useState({});
   const unsubscribeUnreadRefs = useRef({});
+  const unsubscribeLatestSummaryRefs = useRef({});
   const unsubscribeLastMessageRefs = useRef({});
   const unsubscribeSummaryRefs = useRef({});
+  const hydratedLatestMessageRefs = useRef({});
+  const latestMessageFetchInFlightRefs = useRef({});
 
   const subscribeUnreadCount = chatApi?.subscribeUnreadCount;
   const subscribeLastMessage =
     chatApi?.subscribeLastMessage || defaultSubscribeLastMessage;
   const subscribeChatSummary = chatApi?.subscribeChatSummary;
+  const subscribeLatestMessageSummary =
+    chatApi?.subscribeLatestMessageSummary || defaultSubscribeLatestMessageSummary;
+  const fetchLatestMessage =
+    chatApi?.fetchLatestMessage || defaultFetchLatestMessage;
 
   function getDriverId(driver) {
     const candidate =
@@ -82,6 +90,35 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     const normalizedId = String(candidate).trim();
     return normalizedId || null;
   }
+
+  const hydrateLatestMessageOnce = useCallback(async (driver, userId) => {
+    if (!fetchLatestMessage || !userId) return;
+    if (latestMessageFetchInFlightRefs.current[userId]) return;
+    if (hydratedLatestMessageRefs.current[userId]) return;
+
+    latestMessageFetchInFlightRefs.current[userId] = true;
+
+    try {
+      // One-shot fallback only when summary is incomplete/stale for list hydration.
+      const latest = await fetchLatestMessage(driver);
+      if (!latest?.lastChatTime && !latest?.lastMessageText) {
+        return;
+      }
+
+      dispatch(
+        updateLastMessageAction({
+          userid: userId,
+          lastMessage: latest?.lastMessageText || "",
+          lastChatTime: latest?.lastChatTime || null,
+        })
+      );
+      hydratedLatestMessageRefs.current[userId] = true;
+    } catch (error) {
+      console.error("Failed to hydrate latest chat-list message:", error);
+    } finally {
+      latestMessageFetchInFlightRefs.current[userId] = false;
+    }
+  }, [dispatch, fetchLatestMessage, updateLastMessageAction]);
 
   // Initial fetch: maintenance chat uses fetchMaintenanceUsers (GET /admin/fetchmaintenanceusers), regular chat uses fetchUsers.
   useEffect(() => {
@@ -178,7 +215,59 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
 
 
   useEffect(() => {
-    // If chatApi doesn't provide subscribeChatSummary, skip this effect.
+    if (!subscribeLatestMessageSummary || !users?.length) return;
+
+    // Chat-list rows need realtime latest-message freshness from both admin/general + mirror paths,
+    // but only via lightweight "latest message" listeners (no full-thread row subscriptions).
+    users.forEach((u) => {
+      const userId = getDriverId(u);
+      if (!userId) return;
+      if (unsubscribeLatestSummaryRefs.current[userId]) return;
+
+      const unsubscribe = subscribeLatestMessageSummary(u, (latestSummary) => {
+        const hasRealtimeLatest =
+          Boolean(latestSummary?.lastChatTime) ||
+          (typeof latestSummary?.lastMessageText === "string" &&
+            latestSummary.lastMessageText.trim() !== "");
+
+        if (hasRealtimeLatest) {
+          dispatch(
+            updateLastMessageAction({
+              userid: userId,
+              lastMessage: latestSummary?.lastMessageText || "",
+              lastChatTime: latestSummary?.lastChatTime || null,
+            })
+          );
+          hydratedLatestMessageRefs.current[userId] = true;
+        } else {
+          hydrateLatestMessageOnce(u, userId);
+        }
+      });
+
+      unsubscribeLatestSummaryRefs.current[userId] = unsubscribe;
+    });
+
+    return () => {
+      const currentUserIds = new Set(
+        users.map((u) => getDriverId(u)).filter(Boolean)
+      );
+
+      Object.keys(unsubscribeLatestSummaryRefs.current).forEach((userId) => {
+        if (!currentUserIds.has(userId)) {
+          const unsubscribe = unsubscribeLatestSummaryRefs.current[userId];
+          if (typeof unsubscribe === "function") {
+            unsubscribe();
+          }
+          delete unsubscribeLatestSummaryRefs.current[userId];
+          delete hydratedLatestMessageRefs.current[userId];
+          delete latestMessageFetchInFlightRefs.current[userId];
+        }
+      });
+    };
+  }, [users, subscribeLatestMessageSummary, dispatch, updateLastMessageAction, hydrateLatestMessageOnce]);
+
+  useEffect(() => {
+    // Keep summary subscription for unread metadata; latest message freshness comes from lightweight latest listener.
     if (!subscribeChatSummary || !users?.length) return;
 
     users.forEach((u) => {
@@ -188,33 +277,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       if (unsubscribeSummaryRefs.current[userId]) return;
 
       const unsubscribe = subscribeChatSummary(u, (summary) => {
-        const lastMessage = summary?.lastMessage || null;
         const unreadCount = summary?.unreadCount ?? 0;
-
-        let lastMessageText =
-          lastMessage?.content?.message ||
-          lastMessage?.message ||
-          (lastMessage?.content ? "" : "");
-
-        if (!lastMessageText || lastMessageText.trim() === "") {
-          const attachmentUrl =
-            lastMessage?.content?.attachmentUrl ||
-            lastMessage?.attachmentUrl ||
-            "";
-          if (attachmentUrl && attachmentUrl.trim() !== "") {
-            lastMessageText = "Attachment";
-          }
-        }
-
-        const lastChatTime = lastMessage?.dateTime || null;
-
-        dispatch(
-          updateLastMessageAction({
-            userid: userId,
-            lastMessage: lastMessageText || "",
-            lastChatTime,
-          })
-        );
 
         setUnreadCounts((prev) => ({
           ...prev,
@@ -237,7 +300,6 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
             unsubscribe();
           }
           delete unsubscribeSummaryRefs.current[userId];
-
           setUnreadCounts((prev) => {
             const next = { ...prev };
             delete next[userId];
@@ -246,12 +308,40 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         }
       });
     };
-  }, [users, subscribeChatSummary, dispatch, updateLastMessageAction]);
+  }, [users, subscribeChatSummary]);
 
-  // Subscribe to latest-message updates so ordering refreshes for both driver and admin sends
+  // Lightweight list mode: use chat summary snapshots only.
+  // Full-thread listeners are reserved for the active ChatWindow.
   useEffect(() => {
-    // If we have subscribeChatSummary, we skip this path.
-    if (subscribeChatSummary) return;
+    if (!subscribeChatSummary) return;
+    Object.values(unsubscribeUnreadRefs.current).forEach((unsubscribe) => {
+      if (typeof unsubscribe === "function") unsubscribe();
+    });
+    unsubscribeUnreadRefs.current = {};
+  }, [subscribeChatSummary]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(unsubscribeSummaryRefs.current).forEach((unsubscribe) => {
+        if (typeof unsubscribe === "function") unsubscribe();
+      });
+      Object.values(unsubscribeLatestSummaryRefs.current).forEach((unsubscribe) => {
+        if (typeof unsubscribe === "function") unsubscribe();
+      });
+      Object.values(unsubscribeLastMessageRefs.current).forEach((unsubscribe) => {
+        if (typeof unsubscribe === "function") unsubscribe();
+      });
+      Object.values(unsubscribeUnreadRefs.current).forEach((unsubscribe) => {
+        if (typeof unsubscribe === "function") unsubscribe();
+      });
+      hydratedLatestMessageRefs.current = {};
+      latestMessageFetchInFlightRefs.current = {};
+    };
+  }, []);
+
+  // Special fallback only when summary subscription is unavailable (e.g. injected custom chatApi).
+  useEffect(() => {
+    if (subscribeLatestMessageSummary || subscribeChatSummary) return;
     if (!subscribeLastMessage || !users?.length) return;
 
     users.forEach((u) => {
@@ -305,7 +395,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         }
       });
     };
-  }, [users, subscribeLastMessage, dispatch, updateLastMessageAction, subscribeChatSummary]);
+  }, [users, subscribeLastMessage, dispatch, updateLastMessageAction, subscribeChatSummary, subscribeLatestMessageSummary]);
 
   const showInitialLoader = loading && !hasLoaded && users.length === 0;
 
@@ -366,24 +456,39 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
    
 
     const withLastChat = users
-      .map((u) => {
+      .map((u, index) => {
         const userId = getDriverId(u);
-        if (!userId) {
-          return null;
+        const stableId =
+          userId ||
+          String(u?.phone || u?.email || u?.driver_name || u?.name || `row-${index}`);
+
+        const rawDriverName = u?.name ?? u?.driver_name ?? "";
+        const driverName =
+          typeof rawDriverName === "string" && rawDriverName.trim() !== ""
+            ? rawDriverName.trim()
+            : "Unknown driver";
+
+        const previewText =
+          typeof u?.last_message === "string" && u.last_message.trim() !== ""
+            ? u.last_message
+            : "No messages yet";
+
+        if (!u?.name && !u?.driver_name && import.meta.env.DEV) {
+          console.warn("[ChatList] Missing driver name, using fallback label.", {
+            userid: stableId,
+          });
         }
         
-        // console.log(u.last_chat_time);
-
         return {
-          userid: userId,
-          driver_name: u.name || u.driver_name,
+          userid: stableId,
+          driver_name: driverName,
           email: u.email || null,
           phone: u.phone || null,
           driver_image: u.profilePic || u.image || null,
           lastSeen: u.lastSeen || null,
-          last_message: u.last_message || "",
+          last_message: previewText,
           last_chat_time: u.last_chat_time || null,
-          unreadCount: unreadCounts[userId] || 0,
+          unreadCount: unreadCounts[stableId] || 0,
           category: u.category || null, // Include category field
         };
       })
@@ -392,8 +497,10 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     // SORT by last MESSAGE time only (last_chat_time). Do NOT use lastSeen.
     const driversWithIds = withLastChat.filter(Boolean);
     driversWithIds.sort((a, b) => {
-      const timeA = a.last_chat_time ? new Date(a.last_chat_time).getTime() : 0;
-      const timeB = b.last_chat_time ? new Date(b.last_chat_time).getTime() : 0;
+      const rawA = a.last_chat_time ? new Date(a.last_chat_time).getTime() : 0;
+      const rawB = b.last_chat_time ? new Date(b.last_chat_time).getTime() : 0;
+      const timeA = Number.isFinite(rawA) ? rawA : 0;
+      const timeB = Number.isFinite(rawB) ? rawB : 0;
       if (timeB !== timeA) return timeB - timeA; // newest message first
       return (a.userid || "").localeCompare(b.userid || ""); // stable order when same time
     });
@@ -563,7 +670,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
 
         {/* Show list immediately after users are loaded; message preview hydration runs in background */}
         {!showInitialLoader && filtered.length > 0 && (
-          <motion.div layout className="flex flex-col">
+          <div className="flex flex-col">
             {filtered.map((driver) => (
               <ChatListItem
                 key={driver.userid}
@@ -572,7 +679,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
                 onClick={() => onSelectDriver(driver)}
               />
             ))}
-          </motion.div>
+          </div>
         )}
 
         {/* Infinite scroll trigger - only show when hasMore (disabled since we fetch all) */}

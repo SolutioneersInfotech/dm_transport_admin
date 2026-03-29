@@ -238,6 +238,22 @@ function parseTimestampMs(value) {
   return Number.isNaN(direct) ? null : direct;
 }
 
+function getLatestMessagePreview(message) {
+  if (!message) return "No messages yet";
+
+  const text = message?.content?.message ?? message?.message ?? "";
+  if (typeof text === "string" && text.trim() !== "") {
+    return text.trim();
+  }
+
+  const attachmentUrl = message?.content?.attachmentUrl ?? message?.attachmentUrl ?? "";
+  if (typeof attachmentUrl === "string" && attachmentUrl.trim() !== "") {
+    return "Attachment";
+  }
+
+  return "No messages yet";
+}
+
 
 function resolveReplyTargetId(message) {
   if (!message) return null;
@@ -347,7 +363,7 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
       lightboxMedia.dateTime
     );
   }, [downloadChatMedia, lightboxMedia]);
-  const driverId = (() => {
+  const driverId = useMemo(() => {
     const candidate =
       driver?.userid ??
       driver?.userId ??
@@ -361,9 +377,9 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
       return null;
     }
 
-    const numericOnly = String(candidate).replace(/\D/g, "");
-    return numericOnly || null;
-  })();
+    const normalized = String(candidate).trim().replace(/[+\s-]/g, "");
+    return normalized || null;
+  }, [driver?.userid, driver?.userId, driver?.contactId, driver?.contactid, driver?.uid, driver?.id]);
 
   const messageSubscriptionTarget = useMemo(() => {
     if (!driverId) return null;
@@ -388,6 +404,26 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
   const bottomRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const shouldScrollToBottomRef = useRef(true);
+  const activeThreadTokenRef = useRef(0);
+
+  const resolvedChatApi = useMemo(
+    () => ({
+      fetchMessages: chatApi?.fetchMessages || defaultFetchMessages,
+      subscribeMessages: chatApi?.subscribeMessages || defaultSubscribeMessages,
+      sendMessage: chatApi?.sendMessage || defaultSendMessage,
+      deleteChatHistory: chatApi?.deleteChatHistory || defaultDeleteChatHistory,
+      deleteSpecificMessage: chatApi?.deleteSpecificMessage || defaultDeleteSpecificMessage,
+      markMessagesAsSeen: chatApi?.markMessagesAsSeen || (async () => ({ success: true })),
+    }),
+    [
+      chatApi?.fetchMessages,
+      chatApi?.subscribeMessages,
+      chatApi?.sendMessage,
+      chatApi?.deleteChatHistory,
+      chatApi?.deleteSpecificMessage,
+      chatApi?.markMessagesAsSeen,
+    ]
+  );
 
   const {
     fetchMessages,
@@ -396,26 +432,23 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     deleteChatHistory,
     deleteSpecificMessage,
     markMessagesAsSeen,
-  } = chatApi || {
-    fetchMessages: defaultFetchMessages,
-    subscribeMessages: defaultSubscribeMessages,
-    sendMessage: defaultSendMessage,
-    deleteChatHistory: defaultDeleteChatHistory,
-    deleteSpecificMessage: defaultDeleteSpecificMessage,
-    markMessagesAsSeen: async () => ({ success: true }),
-  };
+  } = resolvedChatApi;
 
   /* ================= LOAD MESSAGES ================= */
   useEffect(() => {
     if (!driverId || !messageSubscriptionTarget) {
+      activeThreadTokenRef.current += 1;
       setMessages([]);
       setSelected([]);
       setLoading(false);
       return;
     }
 
+    activeThreadTokenRef.current += 1;
+    const requestToken = activeThreadTokenRef.current;
+
+    // Keep previous thread content visible while switching to reduce "stuck" flash.
     setLoading(true);
-    setMessages([]);
     setSelected([]);
     setSelectionMode(false);
     setContextMenu(null);
@@ -433,8 +466,40 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     shouldScrollToBottomRef.current = true;
 
     const unsubscribe = subscribeMessages(messageSubscriptionTarget, (nextMessages) => {
-      setMessages(nextMessages || []);
+      // Ignore stale callbacks from previously selected drivers.
+      if (requestToken !== activeThreadTokenRef.current) {
+        if (import.meta.env.DEV) {
+          console.warn("[ChatWindow] Dropped stale message callback.", {
+            driverId,
+            requestToken,
+            activeToken: activeThreadTokenRef.current,
+          });
+        }
+        return;
+      }
+      // Always hand React a fresh array reference so incoming updates rerender immediately.
+      const normalizedMessages = Array.isArray(nextMessages) ? [...nextMessages] : [];
+      setMessages(normalizedMessages);
       setLoading(false);
+
+      // Active thread is authoritative: immediately patch the selected row summary
+      // so left-list preview/time/order stay fresh even if row listener timing varies.
+      const latestMessage = normalizedMessages.length
+        ? normalizedMessages.reduce((latest, msg) => {
+            if (!latest) return msg;
+            const latestTs = parseTimestampMs(latest?.dateTime) ?? 0;
+            const candidateTs = parseTimestampMs(msg?.dateTime) ?? 0;
+            return candidateTs >= latestTs ? msg : latest;
+          }, null)
+        : null;
+
+      dispatch(
+        updateLastMessageAction({
+          userid: driverId,
+          lastMessage: getLatestMessagePreview(latestMessage),
+          lastChatTime: latestMessage?.dateTime || null,
+        })
+      );
       
       // Mark messages as seen after loading
       if (markMessagesAsSeen) {
@@ -445,20 +510,32 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     });
 
     return () => {
+      if (requestToken === activeThreadTokenRef.current) {
+        activeThreadTokenRef.current += 1;
+      }
       if (unsubscribe) {
         unsubscribe();
       }
     };
-  }, [driverId, messageSubscriptionTarget, subscribeMessages, markMessagesAsSeen]);
+  }, [
+    driverId,
+    messageSubscriptionTarget,
+    subscribeMessages,
+    markMessagesAsSeen,
+    dispatch,
+    updateLastMessageAction,
+  ]);
 
   useEffect(() => {
     if (!driverId || !messageSubscriptionTarget || !refreshSignal) return;
 
     let isCancelled = false;
+    const requestToken = activeThreadTokenRef.current;
 
     fetchMessages(messageSubscriptionTarget, 200)
       .then((response) => {
         if (isCancelled) return;
+        if (requestToken !== activeThreadTokenRef.current) return;
         setMessages(response?.messages || []);
       })
       .catch((error) => {

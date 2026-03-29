@@ -1,7 +1,9 @@
 import {
   get,
+  limitToLast,
   onValue,
   push,
+  query,
   ref,
   remove,
   set,
@@ -245,7 +247,69 @@ export async function fetchMessages(chatTarget, messageLimit = 10) {
 }
 
 /**
+ * Lightweight one-shot latest-message fetch for chat-list fallback hydration.
+ * Reads a small bounded window from primary + fallback paths (no live listeners).
+ * @param {string|object} chatTarget
+ * @returns {Promise<{lastMessage: object|null, lastMessageText: string, lastChatTime: string|null}>}
+ */
+export async function fetchLatestMessage(chatTarget) {
+  const userid = resolveUserId(chatTarget);
+  const contactId = resolveContactId(chatTarget);
+  if (!userid || !contactId) {
+    return { lastMessage: null, lastMessageText: "", lastChatTime: null };
+  }
+
+  const primaryPath = `${ADMIN_GENERAL_PATH}/${contactId}`;
+  const fallbackPath = `${USER_MIRROR_BASE}/${userid}/admin`;
+  const WINDOW_SIZE = 12;
+
+  const [primarySnapshot, fallbackSnapshot] = await Promise.all([
+    get(query(ref(database, primaryPath), limitToLast(WINDOW_SIZE))),
+    get(query(ref(database, fallbackPath), limitToLast(WINDOW_SIZE))),
+  ]);
+
+  const candidates = [];
+  Object.entries(primarySnapshot.exists() ? primarySnapshot.val() : {}).forEach(([id, raw]) => {
+    candidates.push(normalizeMessage(id, raw));
+  });
+  Object.entries(fallbackSnapshot.exists() ? fallbackSnapshot.val() : {}).forEach(([id, raw]) => {
+    candidates.push(normalizeMessage(id, raw));
+  });
+
+  if (!candidates.length) {
+    return { lastMessage: null, lastMessageText: "", lastChatTime: null };
+  }
+
+  const latest = candidates.reduce((acc, msg) => {
+    if (!acc) return msg;
+    return parseDateTimeMs(msg?.dateTime) >= parseDateTimeMs(acc?.dateTime) ? msg : acc;
+  }, null);
+
+  let lastMessageText =
+    latest?.content?.message ||
+    latest?.message ||
+    (latest?.content ? "" : "");
+
+  if (!lastMessageText || lastMessageText.trim() === "") {
+    const attachmentUrl =
+      latest?.content?.attachmentUrl ||
+      latest?.attachmentUrl ||
+      "";
+    if (attachmentUrl && attachmentUrl.trim() !== "") {
+      lastMessageText = "Attachment";
+    }
+  }
+
+  return {
+    lastMessage: latest,
+    lastMessageText: lastMessageText || "",
+    lastChatTime: latest?.dateTime || null,
+  };
+}
+
+/**
  * Subscribe to messages for a specific user - fetches all messages
+ * NOTE: this is intentionally heavy and should be used by the active ChatWindow only.
  * @param {string} userid - User ID
  * @param {function} onChange - Callback function called when messages change
  * @returns {function} Unsubscribe function
@@ -296,9 +360,128 @@ export function subscribeMessages(userid, onChange) {
  * @returns {function} Unsubscribe function
  */
 export function subscribeLastMessage(userid, onChange) {
-  return subscribeMessages(userid, (messages) => {
-    onChange(messages.length ? messages[messages.length - 1] : null);
+  const contactId = resolveContactId(userid);
+  if (!contactId) {
+    onChange(null);
+    return () => {};
+  }
+
+  // Lightweight summary listener for list rows:
+  // observe only the primary admin thread path and compute the latest message.
+  const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${contactId}`);
+  return onValue(messagesRef, (snapshot) => {
+    if (!snapshot.exists()) {
+      onChange(null);
+      return;
+    }
+
+    const messagesObject = snapshot.val() || {};
+    let lastMessage = null;
+    let lastTimestamp = -Infinity;
+
+    Object.entries(messagesObject).forEach(([id, raw]) => {
+      const normalized = normalizeMessage(id, raw);
+      const ts = parseDateTimeMs(normalized?.dateTime);
+      if (ts >= lastTimestamp) {
+        lastTimestamp = ts;
+        lastMessage = normalized;
+      }
+    });
+
+    onChange(lastMessage);
   });
+}
+
+/**
+ * Lightweight realtime latest-message subscription for chat-list rows.
+ * Listens to only the most recent message candidate from primary + fallback paths.
+ * @param {string|object} chatTarget
+ * @param {(summary: {lastMessage: object|null, lastMessageText: string, lastChatTime: string|null, source: string|null}) => void} onChange
+ * @returns {function} Unsubscribe function
+ */
+export function subscribeLatestMessageSummary(chatTarget, onChange) {
+  const resolvedUserId = resolveUserId(chatTarget);
+  const contactId = resolveContactId(chatTarget);
+
+  if (!resolvedUserId || !contactId) {
+    onChange({ lastMessage: null, lastMessageText: "", lastChatTime: null, source: null });
+    return () => {};
+  }
+
+  // Mixed raw timestamp keys (`dateTime` and `datetime`) make direct orderByChild
+  // unreliable, so we keep a small realtime trailing window per path and pick latest
+  // after normalization. This stays lightweight versus full-thread row subscriptions.
+  const WINDOW_SIZE = 12;
+  const primaryRef = query(
+    ref(database, `${ADMIN_GENERAL_PATH}/${contactId}`),
+    limitToLast(WINDOW_SIZE)
+  );
+  const fallbackRef = query(
+    ref(database, `${USER_MIRROR_BASE}/${resolvedUserId}/admin`),
+    limitToLast(WINDOW_SIZE)
+  );
+
+  let latestPrimary = null;
+  let latestFallback = null;
+
+  const pickLatestFromSnapshot = (snapshot) => {
+    if (!snapshot.exists()) return null;
+    const rows = Object.entries(snapshot.val() || {});
+    if (!rows.length) return null;
+    return rows.reduce((acc, [id, raw]) => {
+      const current = normalizeMessage(id, raw);
+      if (!acc) return current;
+      return parseDateTimeMs(current?.dateTime) >= parseDateTimeMs(acc?.dateTime) ? current : acc;
+    }, null);
+  };
+
+  const toText = (msg) => {
+    let text =
+      msg?.content?.message ||
+      msg?.message ||
+      (msg?.content ? "" : "");
+
+    if (!text || text.trim() === "") {
+      const attachmentUrl =
+        msg?.content?.attachmentUrl ||
+        msg?.attachmentUrl ||
+        "";
+      if (attachmentUrl && attachmentUrl.trim() !== "") {
+        text = "Attachment";
+      }
+    }
+    return text || "";
+  };
+
+  const emit = () => {
+    const primaryTs = parseDateTimeMs(latestPrimary?.dateTime);
+    const fallbackTs = parseDateTimeMs(latestFallback?.dateTime);
+
+    const latest =
+      fallbackTs > primaryTs ? latestFallback : latestPrimary;
+
+    onChange({
+      lastMessage: latest || null,
+      lastMessageText: toText(latest),
+      lastChatTime: latest?.dateTime || null,
+      source: !latest ? null : (latest === latestFallback ? "fallback" : "primary"),
+    });
+  };
+
+  const unsubscribePrimary = onValue(primaryRef, (snapshot) => {
+    latestPrimary = pickLatestFromSnapshot(snapshot);
+    emit();
+  });
+
+  const unsubscribeFallback = onValue(fallbackRef, (snapshot) => {
+    latestFallback = pickLatestFromSnapshot(snapshot);
+    emit();
+  });
+
+  return () => {
+    unsubscribePrimary();
+    unsubscribeFallback();
+  };
 }
 
 export function subscribeChatSummary(chatTarget, onChange) {
