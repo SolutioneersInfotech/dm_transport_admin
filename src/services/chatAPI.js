@@ -8,16 +8,25 @@ import {
   update,
 } from "firebase/database";
 import { database } from "../firebase/firebaseApp";
+<<<<<<< HEAD
 import { sendChatMessageRoute } from "../utils/apiRoutes";
+=======
+import { fetchChatThreadsRoute, markChatThreadReadRoute } from "../utils/apiRoutes";
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
 
 const ADMIN_GENERAL_PATH = "chat/users/admin/general";
 const USER_MIRROR_BASE = "chat/users";
 const FETCH_USERS_URL =
+<<<<<<< HEAD
   "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin/fetchusers";
 
 function isDevMode() {
   return typeof import.meta !== "undefined" && Boolean(import.meta?.env?.DEV);
 }
+=======
+  "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin/fetchUsers";
+export const chatType = "general";
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
 
 function getToken() {
   return localStorage.getItem("adminToken");
@@ -205,6 +214,7 @@ export async function fetchUsersForChat() {
   return { users };
 }
 
+<<<<<<< HEAD
 /**
  * Fetch messages for a specific user with pagination
  * @param {string} userid - User ID
@@ -217,6 +227,53 @@ export async function fetchMessages(chatTarget, messageLimit = 10) {
   if (!userid || !contactId) {
     return { messages: [] };
   }
+=======
+export async function fetchChatThreads({ page = 1, limit = 20, search = undefined, type = chatType } = {}) {
+  const token = getToken();
+  const url = fetchChatThreadsRoute({ page, limit, search, type });
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch chat threads.");
+  }
+
+  return response.json();
+}
+
+export async function markThreadRead(driverId, { lastReadAt = Date.now(), type = chatType } = {}) {
+  const token = getToken();
+  const response = await fetch(markChatThreadReadRoute(driverId), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      lastReadAt,
+      type,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to mark thread as read.");
+  }
+
+  return response.json();
+}
+
+export async function fetchMessages(userid) {
+  const messagesRef = query(
+    ref(database, `${ADMIN_GENERAL_PATH}/${userid}`),
+    limitToLast(100)
+  );
+  const snapshot = await get(messagesRef);
+  const messagesObject = snapshot.exists() ? snapshot.val() : {};
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
 
   const primaryPath = `${ADMIN_GENERAL_PATH}/${contactId}`;
   const fallbackPath = `${USER_MIRROR_BASE}/${userid}/admin`;

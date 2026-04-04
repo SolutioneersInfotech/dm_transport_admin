@@ -23,6 +23,30 @@ export const fetchUsersRoute = (page = 1, limit = 10, search = undefined) => {
   
   return `${baseUrl}?${params.toString()}`;
 };
+export const fetchChatThreadsRoute = ({
+  page = 1,
+  limit = 20,
+  search = undefined,
+  type = "general",
+} = {}) => {
+  const baseUrl = `${baseBackendUrl}/chat/threads`;
+  const params = new URLSearchParams();
+
+  params.append("page", page);
+  params.append("limit", limit);
+
+  if (search !== undefined) {
+    params.append("search", search);
+  }
+
+  if (type) {
+    params.append("type", type);
+  }
+
+  return `${baseUrl}?${params.toString()}`;
+};
+export const markChatThreadReadRoute = (driverId) =>
+  `${baseBackendUrl}/chat/threads/${driverId}/read`;
 export const fetchChatHistoryRoute = (userid) => `${baseBackendUrl}/fetchchathistory?userid=${userid}`;
 export const sendChatMessageRoute = `${baseBackendUrl}/sendchatmessage`;
 export const deleteChatHistoryRoute = `${baseBackendUrl}/deletechathistory`;
@@ -34,9 +58,16 @@ export const fetchDocumentsRoute = ({ startDateTimeUtc, endDateTimeUtc } = {}, o
   const params = new URLSearchParams();
 
   // Required parameters
+<<<<<<< HEAD
   if (startDateTimeUtc && endDateTimeUtc) {
     params.append("startDateTimeUtc", startDateTimeUtc);
     params.append("endDateTimeUtc", endDateTimeUtc);
+=======
+  if (startDate && endDate) {
+    params.append("start_date", startDate);
+    params.append("end_date", endDate);
+    params.append("tz_offset", String(new Date().getTimezoneOffset()));
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
   }
 
   // Pagination
@@ -130,9 +161,16 @@ export const fetchDocumentCountRoute = ({ startDateTimeUtc, endDateTimeUtc } = {
   const params = new URLSearchParams();
 
   // Required parameters
+<<<<<<< HEAD
   if (startDateTimeUtc && endDateTimeUtc) {
     params.append("startDateTimeUtc", startDateTimeUtc);
     params.append("endDateTimeUtc", endDateTimeUtc);
+=======
+  if (startDate && endDate) {
+    params.append("start_date", startDate);
+    params.append("end_date", endDate);
+    params.append("tz_offset", String(new Date().getTimezoneOffset()));
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
   }
 
   // Status filters

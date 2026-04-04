@@ -47,7 +47,25 @@ function formatLastChatTime(isoString) {
 }
 
 const ChatListItem = ({ driver, onClick, isSelected }) => {
+<<<<<<< HEAD
   const time = formatLastChatTime(driver.last_chat_time);
+=======
+  const time = (() => {
+    if (!driver.last_chat_time) {
+      return "";
+    }
+
+    const date = new Date(driver.last_chat_time);
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    return date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+    });
+  })();
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
 
   const unreadCount = driver.unreadCount || 0;
   const itemStateClass = isSelected
