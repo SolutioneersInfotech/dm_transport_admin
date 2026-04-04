@@ -1,10 +1,32 @@
-import { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import { Fragment, useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
+import { format as formatDate, isValid } from "date-fns";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
-import { fetchDocuments, fetchMoreDocuments, resetPagination } from "../store/slices/documentsSlice";
+import {
+  fetchDocumentCount,
+  fetchDocuments,
+  fetchDocumentsHead,
+  fetchMoreDocuments,
+  resetPagination,
+  preparePageOneFilterTransition,
+  preparePageOneTypeFilterTransition,
+  updateDocument,
+  deleteDocumentThunk,
+  deleteDocumentsThunk,
+  upsertLiveDocument,
+  removeLiveDocument,
+  clearLiveDocumentOverlay,
+  trimVisibleDocumentsToPageSize,
+  setHeadDocuments,
+  beginDocumentSync,
+  endDocumentSync,
+  optimisticUpdateDocumentRow,
+  selectIsDocumentSyncActive,
+} from "../store/slices/documentsSlice";
 import DocumentPreviewContent from "../components/DocumentPreviewContent";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import DateRangePicker from "../components/date-range-picker";
 import {
   Table,
   TableBody,
@@ -14,49 +36,114 @@ import {
   TableRow,
 } from "../components/ui/table";
 import { Checkbox } from "../components/ui/checkbox";
+import { X, Search, Flag, ChevronDown, Check, Copy, Download, Trash2, Redo2, RefreshCw, Loader2 } from "lucide-react";
+import DocumentTableSkeleton from "../components/skeletons/DocumentTableSkeleton";
 import {
   Drawer,
-  DrawerClose,
   DrawerContent,
-  DrawerDescription,
   DrawerHeader,
   DrawerTitle,
+  DrawerClose,
 } from "../components/ui/drawer";
-import { X, Search, Calendar, Flag, ChevronDown, Check } from "lucide-react";
-import DocumentTableSkeleton from "../components/skeletons/DocumentTableSkeleton";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "../components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../components/ui/tooltip";
+import { toast } from "sonner";
+import { buildDocumentDownloadName, getDocumentTypeLabel } from "../utils/documentDownloadName";
+import { getAvailableDocumentFilterOptions } from "../utils/documentPermissions";
+import { useAuth } from "../context/AuthContext";
+import useAppResumeSync from "../hooks/useAppResumeSync";
+import { subscribeToLiveDocuments } from "../services/documentRealtimeOverlay";
+import { invalidateDocumentRequestCache } from "../services/documentRequestCache";
+import { clearDocumentCountCache } from "../utils/documentCountCache";
+import { fetchDocumentDetailAPI } from "../services/documentDetailAPI";
+
+const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
+const ALL_DOCUMENTS_START_DATE = "1970-01-01";
+const FAST_HEAD_PAGE_LIMIT = 200;
+const FLAG_FILTER_LOADING_MESSAGES = [
+  "Loading flagged documents...",
+  "Scanning recent uploads...",
+  "Matching flagged entries...",
+  "Merging results...",
+  "Preparing document table...",
+  "Almost there...",
+];
+
+const isValidDateValue = (value) => value instanceof Date && isValid(value);
+const formatLocalDateKey = (value) => {
+  if (!isValidDateValue(value)) return null;
+  return formatDate(value, "yyyy-MM-dd");
+};
+const areDateRangesEquivalent = (a, b) =>
+  formatLocalDateKey(a?.from) === formatLocalDateKey(b?.from) &&
+  formatLocalDateKey(a?.to) === formatLocalDateKey(b?.to);
+const areStringArraysEqual = (a = [], b = []) =>
+  a.length === b.length && a.every((value, index) => value === b[index]);
+const parseLocalDateParam = (value) => {
+  if (!value) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+
+  // URL date-only params represent local calendar days; avoid new Date("YYYY-MM-DD") UTC parsing.
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(year, month - 1, day, 0, 0, 0, 0);
+
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return parsed;
+};
+
+const buildLocalDayUtcBoundaries = (from, to) => {
+  // Calendar dates picked by users are local-day concepts; convert local day boundaries to UTC instants for API filters.
+  const localStart = new Date(from.getFullYear(), from.getMonth(), from.getDate(), 0, 0, 0, 0);
+  const localEnd = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999);
+
+  return {
+    startDateTimeUtc: localStart.toISOString(),
+    endDateTimeUtc: localEnd.toISOString(),
+  };
+};
 
 // Last 60 Days
 function getDefaultDates() {
   const today = new Date();
-  const past = new Date();
-  past.setDate(today.getDate() - 60);
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const past = new Date(start);
+  past.setDate(past.getDate() - 60);
 
-  const format = (d) => d.toISOString().split("T")[0];
-
-  return { start: format(past), end: format(today) };
+  return { from: past, to: start };
 }
 
-const FILTER_MAP = {
-  "Pickup Doc": "pick_up",
-  "Delivery Proof": "delivery",
-  "Load Image": "load_image",
-  "Fuel Receipt": "fuel_recipt",
-  "Stamp Paper": "paper_logs",
-  "Driver Expense": "driver_expense_sheet",
-  "DM Transport Trip Envelope": "dm_transport_trip_envelope",
-  "DM Trans Inc Trip Envelope": "dm_trans_inc_trip_envelope",
-  "DM Transport City Worksheet": "dm_transport_city_worksheet_trip_envelope",
-  "Repair and Maintenance": "trip_envelope",
-  "CTPAT": "CTPAT",
-};
+const FILTER_OPTIONS = getAvailableDocumentFilterOptions(undefined);
+
+const FILTER_MAP = FILTER_OPTIONS.reduce((map, option) => {
+  map[option.label] = option.filterValue;
+  return map;
+}, {});
 
 export default function Documents() {
-  const { start, end } = getDefaultDates();
+  const defaultDates = useMemo(() => getDefaultDates(), []);
   const dispatch = useAppDispatch();
+  const { user } = useAuth();
   const {
     documents: allDocuments,
     loading,
     loadingMore,
+    error,
     hasMore,
     page,
     limit,
@@ -64,28 +151,254 @@ export default function Documents() {
     totalDocuments,
     lastFetchParams,
     lastFetched,
+    countsTotal,
+    countsLoading,
   } = useAppSelector((state) => state.documents);
+  const { users } = useAppSelector((state) => state.users);
+  const isDocumentSyncActive = useAppSelector(selectIsDocumentSyncActive);
   const documentDropDownRef = useRef(null);
 
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [selectedDocIds, setSelectedDocIds] = useState(new Set());
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewWidth, setPreviewWidth] = useState(620);
+  const [isMarkingAsSeen, setIsMarkingAsSeen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isBulkDownloading, setIsBulkDownloading] = useState(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [showFlagModal, setShowFlagModal] = useState(false);
+  const [flagReason, setFlagReason] = useState("");
   const observerTarget = useRef(null);
+  const isResizingRef = useRef(false);
+  const resizePointerOffsetRef = useRef(0);
+  const layoutRef = useRef(null);
+  const tableScrollRef = useRef(null);
+  const [skeletonRows, setSkeletonRows] = useState(12);
+  const skeletonRowHeight = 36;
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const [showSyncSpinner, setShowSyncSpinner] = useState(false);
+  const spinnerShownAtRef = useRef(0);
+  const spinnerShowTimerRef = useRef(null);
+  const spinnerHideTimerRef = useRef(null);
+  const lastHeadFetchAtRef = useRef(0);
+  const [rowActionInFlight, setRowActionInFlight] = useState({});
+  const [isFlagUpdating, setIsFlagUpdating] = useState(false);
+  const [isFlagFilterLoading, setIsFlagFilterLoading] = useState(false);
+  const [isTypeFilterLoading, setIsTypeFilterLoading] = useState(false);
+  const [activeTypeFilterValue, setActiveTypeFilterValue] = useState(null);
+  const isResumeFetchInFlightRef = useRef(false);
+  const lastReconcileAtRef = useRef(0);
+  const countPollIntervalRef = useRef(null);
+  const deferredCountKickoffRef = useRef(null);
+  const deferredCountTypeRef = useRef(null);
+  const deferredReconcileRef = useRef(null);
+  const deferredReconcileTypeRef = useRef(null);
+  const latestFilterSignatureRef = useRef("");
+  const lastPreparedTypeFilterSignatureRef = useRef(null);
+  const pendingTypeFilterSignatureRef = useRef(null);
+  const pendingFlagFilterSignatureRef = useRef(null);
+  const pendingFlagFilterSyncSignatureRef = useRef(null);
+  const flagFilterLoadingIntervalRef = useRef(null);
+  const activeFlagFilterLoadingSignatureRef = useRef(null);
+  const hasResolvedInitialDocumentsFetchRef = useRef(false);
+  const [hasResolvedInitialDocumentsFetch, setHasResolvedInitialDocumentsFetch] = useState(false);
+  const [activeFlagFilterLoadingSignature, setActiveFlagFilterLoadingSignature] = useState(null);
+  const [resolvedFlagFilterLoadingSignature, setResolvedFlagFilterLoadingSignature] = useState(null);
+  const [reconciledFlagFilterLoadingSignature, setReconciledFlagFilterLoadingSignature] = useState(null);
+  const [flagFilterLoadingMessage, setFlagFilterLoadingMessage] = useState("");
+  const [isTypeFilterTransitionActive, setIsTypeFilterTransitionActive] = useState(false);
+  const [resolvedTypeFilterTransitionSignature, setResolvedTypeFilterTransitionSignature] = useState(null);
 
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [startDate, setStartDate] = useState(start);
-  const [endDate, setEndDate] = useState(end);
+  const [dateRange, setDateRange] = useState(() => ({
+    from: defaultDates.from,
+    to: defaultDates.to,
+  }));
 
   const [selectedFilters, setSelectedFilters] = useState([]); // Array of filter values
+  const [isDocDetailLoading, setIsDocDetailLoading] = useState(false);
+  const docDetailRequestRef = useRef(0);
+  const hasHydratedFiltersFromParamsRef = useRef(false);
+  const availableFilterOptions = useMemo(() => {
+    return getAvailableDocumentFilterOptions(user?.permissions);
+  }, [user?.permissions]);
+
+  const hasDocumentPermissionRestrictions = Array.isArray(user?.permissions);
+
+
+  const isDocActionPending = useCallback((documentId, actionType) => {
+    if (!documentId) return false;
+    return rowActionInFlight[`${documentId}:${actionType}`] === true;
+  }, [rowActionInFlight]);
+
+  const setDocActionPending = useCallback((documentId, actionType, isPending) => {
+    if (!documentId) return;
+
+    setRowActionInFlight((prev) => {
+      const key = `${documentId}:${actionType}`;
+      if (isPending) {
+        return { ...prev, [key]: true };
+      }
+
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
+
+  const availableFilterValues = useMemo(
+    () => availableFilterOptions.map((option) => option.filterValue),
+    [availableFilterOptions]
+  );
+
+
+  const handleToggleFlag = useCallback(async (doc) => {
+    if (!doc) return;
+
+    const docActionKey = "flag";
+    if (isDocActionPending(doc.id, docActionKey)) return;
+
+    const isFlagged = doc.flag?.flagged || doc.flagged || doc.isFlagged;
+    const reason = doc.flag?.reason ?? doc.flagged_reason ?? "";
+    const previousFlag = doc.flag ?? { flagged: isFlagged, reason };
+    const nextFlag = {
+      flagged: !isFlagged,
+      reason: !isFlagged ? reason : "",
+    };
+
+    // Optimistic row updates keep page interactions instant while backend write is in flight.
+    dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { flag: nextFlag } }));
+
+    try {
+      setDocActionPending(doc.id, docActionKey, true);
+      setIsFlagUpdating(true);
+      const result = await dispatch(updateDocument({ document: doc, flag: nextFlag }));
+      if (!updateDocument.fulfilled.match(result)) {
+        dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { flag: previousFlag } }));
+        toast.error(result.payload || "Failed to update flag status");
+      } else {
+        invalidateDocumentRequestCache();
+      }
+    } catch (error) {
+      dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { flag: previousFlag } }));
+      console.error("Failed to update flag status:", error);
+      toast.error("Failed to update flag status");
+    } finally {
+      setDocActionPending(doc.id, docActionKey, false);
+      setIsFlagUpdating(false);
+    }
+  }, [dispatch, isDocActionPending, setDocActionPending]);
+
+  // Sync selectedDoc with Redux state when document is updated
+  useEffect(() => {
+    if (selectedDoc?.id) {
+      const updatedDoc = allDocuments.find((doc) => doc.id === selectedDoc.id);
+      if (updatedDoc && (
+        updatedDoc.seen !== selectedDoc.seen || 
+        JSON.stringify(updatedDoc.flag) !== JSON.stringify(selectedDoc.flag) ||
+        updatedDoc.state !== selectedDoc.state ||
+        updatedDoc.completed !== selectedDoc.completed ||
+        updatedDoc.type !== selectedDoc.type ||
+        updatedDoc.document_url !== selectedDoc.document_url ||
+        updatedDoc.acknowledgement !== selectedDoc.acknowledgement
+      )) {
+        setSelectedDoc(updatedDoc);
+      }
+    }
+  }, [allDocuments, selectedDoc]);
+
+  useEffect(() => {
+    if (!selectedDoc) {
+      setIsPreviewOpen(false);
+    }
+  }, [selectedDoc]);
+
+  useEffect(() => {
+    if (!tableScrollRef.current) return;
+
+    const container = tableScrollRef.current;
+    const updateRows = () => {
+      const header = container.querySelector("[data-slot='table-header']");
+      const headerHeight = header?.offsetHeight ?? 0;
+      const containerHeight = container.clientHeight ?? 0;
+      const availableHeight = Math.max(containerHeight - headerHeight, skeletonRowHeight);
+      const nextRows = Math.max(1, Math.ceil(availableHeight / skeletonRowHeight));
+      setSkeletonRows(nextRows);
+    };
+
+    updateRows();
+    const resizeObserver = new ResizeObserver(updateRows);
+    resizeObserver.observe(container);
+    const headerEl = container.querySelector("[data-slot='table-header']");
+    if (headerEl) {
+      resizeObserver.observe(headerEl);
+    }
+
+    return () => resizeObserver.disconnect();
+  }, [skeletonRowHeight]);
+
+  useEffect(() => {
+    const handleMouseMove = (event) => {
+      if (!isResizingRef.current || !layoutRef.current) return;
+      const rect = layoutRef.current.getBoundingClientRect();
+      const minWidth = 320;
+      const minTableWidth = 360;
+      const maxWidth = Math.max(minWidth, rect.width - minTableWidth);
+      const pointerAdjustedX = event.clientX - resizePointerOffsetRef.current;
+      const nextWidth = Math.min(
+        maxWidth,
+        Math.max(minWidth, rect.right - pointerAdjustedX)
+      );
+      setPreviewWidth(nextWidth);
+    };
+
+    const stopResize = () => {
+      if (!isResizingRef.current) return;
+      isResizingRef.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", stopResize);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", stopResize);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, []);
+
+  const handleResizeStart = useCallback((event) => {
+    if (event.button !== 0 || !layoutRef.current) return;
+    event.preventDefault();
+
+    const rect = layoutRef.current.getBoundingClientRect();
+    const dividerX = rect.right - previewWidth;
+    resizePointerOffsetRef.current = event.clientX - dividerX;
+
+    isResizingRef.current = true;
+    document.body.style.cursor = "ew-resize";
+    document.body.style.userSelect = "none";
+  }, [previewWidth]);
 
   const [search, setSearch] = useState("");
   const [searchDebounced, setSearchDebounced] = useState("");
+  const [pendingSearchTerm, setPendingSearchTerm] = useState(null);
+  const hasInitializedSearch = useRef(false);
 
   const [statusFilter, setStatusFilter] = useState("all"); // all | seen | unseen
-  const [categoryFilter, setCategoryFilter] = useState(null); // C D F
+  const [categoryFilter, setCategoryFilter] = useState([]); // C D F
   const [flagFilter, setFlagFilter] = useState(null); // null | true | false (null = all)
   const [showDocumentTypeDropdown, setShowDocumentTypeDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showFilterTypeDropdown, setShowFilterTypeDropdown] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+  const [driverPopupDoc, setDriverPopupDoc] = useState(null);
+  const filterTypeDropdownRef = useRef(null);
 
   // Debounce search input
   useEffect(() => {
@@ -96,6 +409,84 @@ export default function Documents() {
     return () => clearTimeout(timer);
   }, [search]);
 
+  useEffect(() => {
+    if (!hasInitializedSearch.current) {
+      hasInitializedSearch.current = true;
+      return;
+    }
+
+    setPendingSearchTerm(searchDebounced);
+  }, [searchDebounced]);
+
+  useEffect(() => {
+    if (
+      !loading &&
+      pendingSearchTerm !== null &&
+      lastFetchParams?.search === pendingSearchTerm
+    ) {
+      setPendingSearchTerm(null);
+    }
+  }, [loading, pendingSearchTerm, lastFetchParams]);
+
+  const isSearchLoading = search !== searchDebounced || pendingSearchTerm !== null;
+
+  const handleCopy = async (value, label) => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`Copied ${label}`);
+    } catch (copyError) {
+      console.error("Failed to copy value", copyError);
+      toast.error("Failed to copy to clipboard");
+    }
+  };
+
+  const renderCopyButton = (value, label) => (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        handleCopy(value, label);
+      }}
+      className="text-gray-500 hover:text-gray-200 transition-colors"
+      aria-label={`Copy ${label}`}
+      title={`Copy ${label}`}
+    >
+      <Copy className="h-3.5 w-3.5" />
+    </button>
+  );
+
+  const findDriverByEmailOrName = useCallback(
+    (email, name) => {
+      if (!users?.length) return null;
+
+      if (email) {
+        const userByEmail = users.find(
+          (u) =>
+            u.email?.toLowerCase() === email.toLowerCase() ||
+            u.driver_email?.toLowerCase() === email.toLowerCase()
+        );
+        if (userByEmail) {
+          return userByEmail;
+        }
+      }
+
+      if (name) {
+        const userByName = users.find(
+          (u) =>
+            u.name?.toLowerCase() === name.toLowerCase() ||
+            u.driver_name?.toLowerCase() === name.toLowerCase()
+        );
+        if (userByName) {
+          return userByName;
+        }
+      }
+
+      return null;
+    },
+    [users]
+  );
+
 
   // Convert status filter to isSeen parameter
   const isSeenParam = useMemo(() => {
@@ -104,10 +495,10 @@ export default function Documents() {
     return null;
   }, [statusFilter]);
 
-  // Convert category filter to API format (C, D, F)
-  // Note: The API expects category as a single value, not an array
+  // Category: pass array so API gets category=C&category=D (multiple params)
   const categoryParam = useMemo(() => {
-    return categoryFilter || null;
+    if (!Array.isArray(categoryFilter) || categoryFilter.length === 0) return null;
+    return categoryFilter;
   }, [categoryFilter]);
 
   // Convert flag filter to API format
@@ -118,43 +509,397 @@ export default function Documents() {
   // Convert document type filters to API format
   // These are sent as multiple "type" parameters
   const typeFilters = useMemo(() => {
-    return selectedFilters.length > 0 ? selectedFilters : [];
-  }, [selectedFilters]);
+    if (selectedFilters.length > 0) {
+      return selectedFilters;
+    }
+
+    if (hasDocumentPermissionRestrictions) {
+      return availableFilterValues;
+    }
+
+    return [];
+  }, [availableFilterValues, hasDocumentPermissionRestrictions, selectedFilters]);
+
+  // Signature tracks only user-selected document types; other filter changes should not trigger row preservation.
+  const typeFilterSignature = useMemo(
+    () => JSON.stringify([...selectedFilters].sort()),
+    [selectedFilters]
+  );
+
+  const shouldShowTypeFilterSpinner = useCallback((filterValue, isSelected) => {
+    return isTypeFilterLoading && isSelected && activeTypeFilterValue === filterValue;
+  }, [activeTypeFilterValue, isTypeFilterLoading]);
+
+  const hasCustomDateRange = useMemo(
+    () => isValidDateValue(dateRange?.from) && isValidDateValue(dateRange?.to),
+    [dateRange]
+  );
+
+  const endDate = useMemo(() => {
+    if (hasCustomDateRange) {
+      return formatLocalDate(dateRange.to);
+    }
+
+    return formatLocalDate(new Date());
+  }, [dateRange, hasCustomDateRange]);
+
+  const utcDateRange = useMemo(() => {
+    if (hasCustomDateRange) {
+      return buildLocalDayUtcBoundaries(dateRange.from, dateRange.to);
+    }
+
+    // Date-only strings are timezone-ambiguous; even default/all-documents boundaries must be explicit UTC instants.
+    const [startYear, startMonth, startDay] = ALL_DOCUMENTS_START_DATE.split("-").map(Number);
+    const [endYear, endMonth, endDay] = endDate.split("-").map(Number);
+
+    return buildLocalDayUtcBoundaries(
+      new Date(startYear, startMonth - 1, startDay),
+      new Date(endYear, endMonth - 1, endDay)
+    );
+  }, [hasCustomDateRange, dateRange?.from?.getTime(), dateRange?.to?.getTime(), endDate]);
+
+  const startDateTimeUtc = utcDateRange?.startDateTimeUtc ?? null;
+  const endDateTimeUtc = utcDateRange?.endDateTimeUtc ?? null;
+
+  const currentFetchArgs = useMemo(
+    () => ({
+      startDateTimeUtc,
+      endDateTimeUtc,
+      page: 1,
+      // Page-1 head fetch and backend reconciliation must share the same page size contract.
+      limit: FAST_HEAD_PAGE_LIMIT,
+      search: searchDebounced,
+      isSeen: isSeenParam,
+      isFlagged: isFlaggedParam,
+      category: categoryParam,
+      filters: typeFilters,
+    }),
+    [
+      startDateTimeUtc,
+      endDateTimeUtc,
+      searchDebounced,
+      isSeenParam,
+      isFlaggedParam,
+      categoryParam,
+      typeFilters,
+    ]
+  );
+
+  const buildFilterSignature = useCallback(
+    ({ filters = typeFilters, isFlagged = isFlaggedParam } = {}) =>
+      JSON.stringify({
+        startDateTimeUtc,
+        endDateTimeUtc,
+        search: searchDebounced,
+        isSeen: isSeenParam,
+        isFlagged,
+        category: categoryParam,
+        filters,
+      }),
+    [startDateTimeUtc, endDateTimeUtc, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters]
+  );
+
+  const endPendingFlagFilterSync = useCallback((signature = null) => {
+    if (!pendingFlagFilterSyncSignatureRef.current) return;
+    if (signature && pendingFlagFilterSyncSignatureRef.current !== signature) return;
+
+    const completedSignature = pendingFlagFilterSyncSignatureRef.current;
+    pendingFlagFilterSyncSignatureRef.current = null;
+    setReconciledFlagFilterLoadingSignature(completedSignature);
+    dispatch(endDocumentSync("flagFilter"));
+  }, [dispatch]);
+
+  const stopFlagFilterLoadingMessages = useCallback((signature = null) => {
+    // Ignore stale completions so an older response cannot stop the latest loading loop.
+    if (signature && signature !== activeFlagFilterLoadingSignatureRef.current) return;
+
+    if (flagFilterLoadingIntervalRef.current) {
+      clearInterval(flagFilterLoadingIntervalRef.current);
+      flagFilterLoadingIntervalRef.current = null;
+    }
+
+    setFlagFilterLoadingMessage("");
+    if (!signature || signature === activeFlagFilterLoadingSignatureRef.current) {
+      activeFlagFilterLoadingSignatureRef.current = null;
+      setActiveFlagFilterLoadingSignature(null);
+    }
+  }, []);
+
+  const startFlagFilterLoadingMessages = useCallback((signature) => {
+    if (flagFilterLoadingIntervalRef.current) {
+      clearInterval(flagFilterLoadingIntervalRef.current);
+      flagFilterLoadingIntervalRef.current = null;
+    }
+
+    activeFlagFilterLoadingSignatureRef.current = signature;
+    setActiveFlagFilterLoadingSignature(signature);
+    setResolvedFlagFilterLoadingSignature(null);
+    setReconciledFlagFilterLoadingSignature(null);
+    // Flag-filter requests can take longer to materialize rows, so explicit progress text avoids a "stuck" feeling.
+    // Loading phrase rotation is intentionally slower to avoid visual churn during longer backend work.
+    setFlagFilterLoadingMessage(FLAG_FILTER_LOADING_MESSAGES[0]);
+
+    let messageIndex = 0;
+    flagFilterLoadingIntervalRef.current = window.setInterval(() => {
+      messageIndex = (messageIndex + 1) % FLAG_FILTER_LOADING_MESSAGES.length;
+      setFlagFilterLoadingMessage(FLAG_FILTER_LOADING_MESSAGES[messageIndex]);
+    }, 3000);
+  }, []);
+
+  const beginFlagFilterSyncForSignature = useCallback((signature) => {
+    if (pendingFlagFilterSyncSignatureRef.current === signature) return;
+
+    if (pendingFlagFilterSyncSignatureRef.current) {
+      dispatch(endDocumentSync("flagFilter"));
+    }
+
+    pendingFlagFilterSyncSignatureRef.current = signature;
+    // Flag-filter toggles should surface refresh feedback immediately, before async head/deferred fetches settle.
+    dispatch(beginDocumentSync("flagFilter"));
+  }, [dispatch]);
+
+  const clearFastFilterLoadingForSignature = useCallback((signature) => {
+    if (pendingTypeFilterSignatureRef.current === signature) {
+      setIsTypeFilterLoading(false);
+      setActiveTypeFilterValue(null);
+      pendingTypeFilterSignatureRef.current = null;
+    }
+
+    if (pendingFlagFilterSignatureRef.current === signature) {
+      setIsFlagFilterLoading(false);
+      pendingFlagFilterSignatureRef.current = null;
+    }
+  }, []);
+
+  const currentFilterSignature = useMemo(() => buildFilterSignature(), [buildFilterSignature]);
+
+  useEffect(() => {
+    if (lastPreparedTypeFilterSignatureRef.current === null) {
+      lastPreparedTypeFilterSignatureRef.current = typeFilterSignature;
+    }
+  }, [typeFilterSignature]);
+
+  const clearDeferredReconciliation = useCallback(() => {
+    if (!deferredReconcileRef.current) return;
+
+    // Cancel stale deferred reconciliation so rapid filter changes only reconcile the newest signature.
+    if (deferredReconcileTypeRef.current === "idle") {
+      window.cancelIdleCallback?.(deferredReconcileRef.current);
+    } else {
+      clearTimeout(deferredReconcileRef.current);
+    }
+
+    deferredReconcileRef.current = null;
+    deferredReconcileTypeRef.current = null;
+  }, []);
+
+  const scheduleDeferredReconciliation = useCallback(
+    (signature, fetchArgs) => {
+      clearDeferredReconciliation();
+
+      const runReconciliation = () => {
+        deferredReconcileRef.current = null;
+        deferredReconcileTypeRef.current = null;
+
+        if (signature !== latestFilterSignatureRef.current) return;
+
+        // Backend pagination remains authoritative, but this reconciliation must not block page-1 filter UX.
+        const reconciliationPromise = dispatch(fetchDocuments({ ...fetchArgs, requestSignature: signature }));
+
+        reconciliationPromise.finally(() => {
+          // Keep refresh spinner active across fast head load + deferred reconciliation for the latest flag signature.
+          if (
+            signature === latestFilterSignatureRef.current &&
+            pendingFlagFilterSyncSignatureRef.current === signature
+          ) {
+            endPendingFlagFilterSync(signature);
+          }
+        });
+      };
+
+      if ("requestIdleCallback" in window) {
+        deferredReconcileRef.current = window.requestIdleCallback(runReconciliation, { timeout: 900 });
+        deferredReconcileTypeRef.current = "idle";
+      } else {
+        deferredReconcileRef.current = window.setTimeout(runReconciliation, 400);
+        deferredReconcileTypeRef.current = "timeout";
+      }
+    },
+    [clearDeferredReconciliation, dispatch, endPendingFlagFilterSync]
+  );
+
+  const realtimeFilters = useMemo(
+    () => ({
+      // Realtime overlay must share the same UTC boundary contract as list/head/count.
+      startDateTimeUtc,
+      endDateTimeUtc,
+      search: searchDebounced,
+      isSeen: isSeenParam,
+      isFlagged: isFlaggedParam,
+      category: categoryParam,
+      types: typeFilters,
+      // Permission-aware filtering is still enforced in the listener even if types is empty.
+      allowedTypes: hasDocumentPermissionRestrictions ? availableFilterValues : [],
+    }),
+    [
+      startDateTimeUtc,
+      endDateTimeUtc,
+      searchDebounced,
+      isSeenParam,
+      isFlaggedParam,
+      categoryParam,
+      typeFilters,
+      hasDocumentPermissionRestrictions,
+      availableFilterValues,
+    ]
+  );
+
+  const realtimeOverlayQuerySignature = useMemo(
+    () =>
+      JSON.stringify({
+        // Mixing date-only and UTC-boundary semantics causes timezone-specific realtime mismatches.
+        startDateTimeUtc,
+        endDateTimeUtc,
+        search: searchDebounced,
+        isSeen: isSeenParam,
+        isFlagged: isFlaggedParam,
+        category: categoryParam,
+        types: typeFilters,
+        allowedTypes: hasDocumentPermissionRestrictions ? availableFilterValues : [],
+      }),
+    [
+      startDateTimeUtc,
+      endDateTimeUtc,
+      searchDebounced,
+      isSeenParam,
+      isFlaggedParam,
+      categoryParam,
+      typeFilters,
+      hasDocumentPermissionRestrictions,
+      availableFilterValues,
+    ]
+  );
 
   // Fetch documents when params change (initial load)
   useEffect(() => {
+    if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
+      return;
+    }
+
     const paramsChanged =
       !lastFetchParams ||
-      lastFetchParams.startDate !== startDate ||
-      lastFetchParams.endDate !== endDate ||
+      lastFetchParams.startDateTimeUtc !== startDateTimeUtc ||
+      lastFetchParams.endDateTimeUtc !== endDateTimeUtc ||
       lastFetchParams.search !== searchDebounced ||
       lastFetchParams.isSeen !== isSeenParam ||
       lastFetchParams.isFlagged !== isFlaggedParam ||
-      lastFetchParams.category !== categoryParam ||
+      JSON.stringify(categoryParam ?? null) !== JSON.stringify(lastFetchParams.category ?? null) ||
       JSON.stringify(lastFetchParams.filters || []) !== JSON.stringify(typeFilters);
 
-    const isStale = lastFetched && Date.now() - lastFetched > 5 * 60 * 1000;
+    const isStale = lastFetched && Date.now() - lastFetched > 30 * 1000;
 
-    if ((paramsChanged || isStale) && !loading) {
-      dispatch(resetPagination());
-      dispatch(
-        fetchDocuments({
-          startDate,
-          endDate,
-          page: 1,
-          limit: 20,
+    if (!(paramsChanged || isStale) || loading) {
+      return;
+    }
+
+    const activeSignature = currentFilterSignature;
+    latestFilterSignatureRef.current = activeSignature;
+    clearDeferredReconciliation();
+
+    const typeFilterChanged =
+      lastPreparedTypeFilterSignatureRef.current !== typeFilterSignature;
+    const isTypeFilterTransition = typeFilterChanged;
+
+    if (typeFilterChanged) {
+      // Hard-clearing page-1 transition caused the empty-table regression for type filters.
+      setIsTypeFilterTransitionActive(true);
+      setResolvedTypeFilterTransitionSignature(null);
+      // Track one transition per signature and keep all existing non-type filter behavior unchanged.
+      lastPreparedTypeFilterSignatureRef.current = typeFilterSignature;
+    } else {
+      setIsTypeFilterTransitionActive(false);
+    }
+
+    // Cancel older flag-filter sync/loading loops when a newer signature starts so stale completions cannot stop latest spinner work.
+    if (pendingFlagFilterSignatureRef.current && pendingFlagFilterSignatureRef.current !== activeSignature) {
+      pendingFlagFilterSignatureRef.current = null;
+      setIsFlagFilterLoading(false);
+    }
+    if (pendingFlagFilterSyncSignatureRef.current && pendingFlagFilterSyncSignatureRef.current !== activeSignature) {
+      endPendingFlagFilterSync();
+    }
+
+    dispatch(resetPagination());
+    if (isTypeFilterTransition) {
+      // Type filters intentionally use a soft transition so current rows stay visible during loading.
+      dispatch(preparePageOneTypeFilterTransition());
+    } else {
+      // Other filters intentionally keep the existing hard-clearing behavior.
+      dispatch(preparePageOneFilterTransition());
+    }
+
+    const runHeadFirstFetch = async () => {
+      // Page-1 is head-first so fast head results paint first while backend reconciliation remains authoritative in the background.
+      const headResult = await dispatch(
+        fetchDocumentsHead({
+          startDateTimeUtc,
+          endDateTimeUtc,
           search: searchDebounced,
           isSeen: isSeenParam,
           isFlagged: isFlaggedParam,
           category: categoryParam,
           filters: typeFilters,
+          // Page-1 head fetch and backend reconciliation must share the same page size contract.
+          limit: FAST_HEAD_PAGE_LIMIT,
         })
       );
-    }
+
+      const isLatestSignature = activeSignature === latestFilterSignatureRef.current;
+
+      // Initial empty-state must wait for first request resolution so we never flash "No documents found" before data returns.
+      if (isLatestSignature && !hasResolvedInitialDocumentsFetchRef.current) {
+        hasResolvedInitialDocumentsFetchRef.current = true;
+        setHasResolvedInitialDocumentsFetch(true);
+      }
+
+      if (!fetchDocumentsHead.fulfilled.match(headResult)) {
+        // Latest-signature failures must close fast loading/sync loops; otherwise stale pending state can leave the UI spinning forever.
+        if (isLatestSignature) {
+          setResolvedFlagFilterLoadingSignature(activeSignature);
+          clearFastFilterLoadingForSignature(activeSignature);
+          if (pendingFlagFilterSyncSignatureRef.current === activeSignature) {
+            endPendingFlagFilterSync(activeSignature);
+          }
+          stopFlagFilterLoadingMessages(activeSignature);
+          toast.error("Failed to load documents. Please try again.");
+        }
+        return;
+      }
+
+      if (!isLatestSignature) {
+        return;
+      }
+
+      // Type/flag filter spinners track the fast head fetch completion, not the heavy backend reconciliation.
+      setResolvedFlagFilterLoadingSignature(activeSignature);
+      clearFastFilterLoadingForSignature(activeSignature);
+
+      if (isTypeFilterTransition) {
+        // !loading alone is too early; only mark resolved after the matching type-filter request succeeds.
+        setResolvedTypeFilterTransitionSignature(activeSignature);
+      }
+
+      lastHeadFetchAtRef.current = Date.now();
+
+      // Keep backend authority, but defer page-1 reconciliation so perceived filter transitions stay fast.
+      scheduleDeferredReconciliation(activeSignature, currentFetchArgs);
+    };
+
+    runHeadFirstFetch();
   }, [
     dispatch,
-    startDate,
-    endDate,
+    startDateTimeUtc,
+    endDateTimeUtc,
     searchDebounced,
     isSeenParam,
     isFlaggedParam,
@@ -163,74 +908,305 @@ export default function Documents() {
     lastFetchParams,
     lastFetched,
     loading,
+    currentFetchArgs,
+    currentFilterSignature,
+    typeFilterSignature,
+    clearDeferredReconciliation,
+    scheduleDeferredReconciliation,
+    clearFastFilterLoadingForSignature,
+    endPendingFlagFilterSync,
+    stopFlagFilterLoadingMessages,
+    availableFilterValues.length,
+    hasDocumentPermissionRestrictions,
+    limit,
   ]);
 
   useEffect(() => {
-    const typeParam = searchParams.get("type");
-    const statusParam = searchParams.get("status");
+    if (loading || error) return;
+    if (resolvedTypeFilterTransitionSignature !== latestFilterSignatureRef.current) return;
 
-    // Handle single type from URL params (for backward compatibility)
-    if (typeParam) {
-      setSelectedFilters([typeParam]);
+    setIsTypeFilterTransitionActive(false);
+    setResolvedTypeFilterTransitionSignature(null);
+  }, [loading, error, resolvedTypeFilterTransitionSignature]);
+
+  const handleManualRefresh = useCallback(async () => {
+    if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
+      return;
     }
 
-    if (["all", "seen", "unseen"].includes(statusParam)) {
-      setStatusFilter(statusParam);
-    } else {
-      setStatusFilter("all");
+    if (isManualRefreshing) return;
+    setIsManualRefreshing(true);
+    dispatch(beginDocumentSync("manualRefresh"));
+
+    try {
+      // Manual refresh intentionally bypasses the 6-minute count cache and list cache.
+      clearDocumentCountCache();
+      const forceRefresh = true;
+      if (page === 1) {
+        // Manual refresh stays head-first for immediate paint, but must still reconcile with backend authority.
+        await dispatch(
+          fetchDocumentsHead({
+            startDateTimeUtc,
+            endDateTimeUtc,
+            search: searchDebounced,
+            isSeen: isSeenParam,
+            isFlagged: isFlaggedParam,
+            category: categoryParam,
+            filters: typeFilters,
+            limit: FAST_HEAD_PAGE_LIMIT,
+            bypassCache: true,
+          })
+        ).unwrap();
+        lastHeadFetchAtRef.current = Date.now();
+      }
+
+      const shouldReconcileWithBackend = forceRefresh || page > 1 || Date.now() - lastHeadFetchAtRef.current > 1200;
+      if (shouldReconcileWithBackend) {
+        await dispatch(
+          fetchDocuments({
+            ...currentFetchArgs,
+            page,
+            limit,
+            bypassCache: true,
+            requestSignature: buildFilterSignature({}),
+          })
+        ).unwrap();
+      }
+    } finally {
+      dispatch(endDocumentSync("manualRefresh"));
+      setIsManualRefreshing(false);
+    }
+  }, [dispatch, currentFetchArgs, isManualRefreshing, availableFilterValues.length, hasDocumentPermissionRestrictions, page, limit, startDateTimeUtc, endDateTimeUtc, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters, buildFilterSignature]);
+
+  useEffect(() => {
+    const startParam = parseLocalDateParam(searchParams.get("start"));
+    const endParam = parseLocalDateParam(searchParams.get("end"));
+    const parsedUrlDateRange = startParam && endParam ? { from: startParam, to: endParam } : null;
+
+    // Date hydration is isolated so date changes don't retrigger non-date filter hydration loops.
+    // Equivalent URL/state local-day values must not trigger another setState.
+    if (parsedUrlDateRange) {
+      setDateRange((previousRange) =>
+        areDateRangesEquivalent(parsedUrlDateRange, previousRange) ? previousRange : parsedUrlDateRange
+      );
     }
   }, [searchParams]);
 
+  useEffect(() => {
+    // Non-date filters hydrate independently and only update when their URL-backed value actually changes.
+    const queryParam = searchParams.get("q");
+    const nextSearch = queryParam ?? "";
+    setSearch((previousSearch) => (previousSearch === nextSearch ? previousSearch : nextSearch));
+
+    const statusParam = searchParams.get("status");
+    const nextStatus = ["all", "seen", "unseen"].includes(statusParam) ? statusParam : "all";
+    setStatusFilter((previousStatus) => (previousStatus === nextStatus ? previousStatus : nextStatus));
+
+    const categoryParam = searchParams.get("category");
+    let nextCategories = [];
+    if (categoryParam) {
+      nextCategories = categoryParam
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+    setCategoryFilter((previousCategories) =>
+      areStringArraysEqual(previousCategories, nextCategories) ? previousCategories : nextCategories
+    );
+
+    const flagParam = searchParams.get("flag");
+    let nextFlagValue = null;
+    if (flagParam === "true") {
+      nextFlagValue = true;
+    } else if (flagParam === "false") {
+      nextFlagValue = false;
+    }
+    setFlagFilter((previousFlagValue) =>
+      previousFlagValue === nextFlagValue ? previousFlagValue : nextFlagValue
+    );
+
+    const typesParam = searchParams.get("types") || searchParams.get("type");
+    let nextTypes = [];
+    if (typesParam) {
+      nextTypes = typesParam
+        .split(",")
+        .map((item) => item.trim())
+        .filter((item) => availableFilterValues.includes(item));
+    }
+    setSelectedFilters((previousTypes) =>
+      areStringArraysEqual(previousTypes, nextTypes) ? previousTypes : nextTypes
+    );
+
+    hasHydratedFiltersFromParamsRef.current = true;
+  }, [availableFilterValues, searchParams]);
+
+  useEffect(() => {
+    if (!hasHydratedFiltersFromParamsRef.current) return;
+
+    const nextParams = new URLSearchParams(searchParams);
+    const syncParam = (key, value) => {
+      const normalizedValue =
+        value === null || value === undefined || value === "" ? null : String(value);
+      const currentValue = searchParams.get(key);
+      if (normalizedValue === currentValue) return false;
+
+      if (normalizedValue === null) {
+        nextParams.delete(key);
+      } else {
+        nextParams.set(key, normalizedValue);
+      }
+      return true;
+    };
+
+    const desiredStart = hasCustomDateRange ? formatLocalDateKey(dateRange?.from) : null;
+    const desiredEnd = hasCustomDateRange ? formatLocalDateKey(dateRange?.to) : null;
+    // Keep URL writes atomic so date/non-date updates cannot race on stale searchParams snapshots.
+    let hasChanges = false;
+    // Equivalent URL/dateRange values must not trigger another write to avoid timezone-sensitive loops.
+    hasChanges = syncParam("start", desiredStart) || hasChanges;
+    hasChanges = syncParam("end", desiredEnd) || hasChanges;
+    hasChanges = syncParam("q", searchDebounced?.trim() ? searchDebounced.trim() : null) || hasChanges;
+    hasChanges = syncParam("status", statusFilter !== "all" ? statusFilter : null) || hasChanges;
+    hasChanges = syncParam("category", categoryFilter.length ? categoryFilter.join(",") : null) || hasChanges;
+    hasChanges = syncParam("flag", flagFilter === null ? null : String(flagFilter)) || hasChanges;
+    hasChanges = syncParam("types", selectedFilters.length ? selectedFilters.join(",") : null) || hasChanges;
+
+    if (searchParams.has("type")) {
+      nextParams.delete("type");
+      hasChanges = true;
+    }
+
+    if (hasChanges) {
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [
+    hasCustomDateRange,
+    dateRange,
+    categoryFilter,
+    flagFilter,
+    searchDebounced,
+    searchParams,
+    selectedFilters,
+    setSearchParams,
+    statusFilter,
+  ]);
+
+  useEffect(() => {
+    setSelectedFilters((prevFilters) =>
+      prevFilters.filter((filter) => availableFilterValues.includes(filter))
+    );
+  }, [availableFilterValues]);
+
   // Toggle filter selection
   const toggleFilter = (filterValue) => {
+    setActiveTypeFilterValue(filterValue);
+    setIsTypeFilterLoading(true);
     setSelectedFilters((prev) => {
-      if (prev.includes(filterValue)) {
-        return prev.filter((f) => f !== filterValue);
-      } else {
-        return [...prev, filterValue];
-      }
+      const nextFilters = prev.includes(filterValue)
+        ? prev.filter((f) => f !== filterValue)
+        : [...prev, filterValue];
+
+      pendingTypeFilterSignatureRef.current = buildFilterSignature({ filters: nextFilters });
+      return nextFilters;
     });
   };
 
   // Remove a specific filter
   const removeFilter = (filterValue) => {
-    setSelectedFilters((prev) => prev.filter((f) => f !== filterValue));
+    setActiveTypeFilterValue(filterValue);
+    setIsTypeFilterLoading(true);
+    setSelectedFilters((prev) => {
+      const nextFilters = prev.filter((f) => f !== filterValue);
+      pendingTypeFilterSignatureRef.current = buildFilterSignature({ filters: nextFilters });
+      return nextFilters;
+    });
   };
 
-  // Use documents directly from API (filtering is done server-side)
-  const filteredDocuments = allDocuments;
+  const handleOpenDocument = useCallback(async (doc) => {
+    if (!doc?.id) return;
+
+    const requestId = Date.now();
+    docDetailRequestRef.current = requestId;
+    setSelectedDoc({ ...doc, __isPartial: true });
+    setIsPreviewOpen(true);
+    setIsDocDetailLoading(true);
+
+    try {
+      const fullDocument = await fetchDocumentDetailAPI({
+        documentId: doc.id,
+        type: doc.type,
+      });
+
+      if (docDetailRequestRef.current !== requestId) return;
+      if (fullDocument) {
+        setSelectedDoc((prev) => {
+          if (!prev || prev.id !== doc.id) return prev;
+          return { ...prev, ...fullDocument, __isPartial: false };
+        });
+      }
+    } catch (detailError) {
+      if (docDetailRequestRef.current === requestId) {
+        console.error("Failed to fetch full document details", detailError);
+      }
+    } finally {
+      if (docDetailRequestRef.current === requestId) {
+        setIsDocDetailLoading(false);
+      }
+    }
+
+    if (doc.seen !== true && !isDocActionPending(doc.id, "seen")) {
+      const previousSeen = doc.seen;
+      dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { seen: true } }));
+      setDocActionPending(doc.id, "seen", true);
+      try {
+        const result = await dispatch(updateDocument({ document: doc, seen: true }));
+        if (!updateDocument.fulfilled.match(result)) {
+          dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { seen: previousSeen } }));
+          toast.error(result.payload || "Failed to update seen status");
+        } else {
+          invalidateDocumentRequestCache();
+        }
+      } catch (error) {
+        console.error("Failed to update seen status", error);
+        dispatch(optimisticUpdateDocumentRow({ documentId: doc.id, changes: { seen: previousSeen } }));
+        toast.error("Failed to update seen status");
+      } finally {
+        setDocActionPending(doc.id, "seen", false);
+      }
+    }
+  }, [dispatch, isDocActionPending, setDocActionPending]);
+
+  // Keep visible documents aligned with current admin document permissions
+  const filteredDocuments = useMemo(() => {
+    if (!hasDocumentPermissionRestrictions) {
+      return allDocuments;
+    }
+
+    const allowedTypes = new Set(availableFilterValues);
+    return (allDocuments || []).filter((document) => allowedTypes.has(document?.type));
+  }, [allDocuments, availableFilterValues, hasDocumentPermissionRestrictions]);
+
+  // Type-filter loading now keeps Redux rows in place; overlay can render on top without preserved snapshot rows.
+  const shouldUsePreservedRows = false;
+  const showPreservedRowsSyncOverlay =
+    loading &&
+    page === 1 &&
+    isTypeFilterTransitionActive &&
+    (filteredDocuments?.length || 0) > 0;
+
+  const tableDocuments = filteredDocuments;
 
   function resetDates() {
-    const { start, end } = getDefaultDates();
-    setStartDate(start);
-    setEndDate(end);
     setDateRange({
-      from: new Date(start),
-      to: new Date(end),
+      from: undefined,
+      to: undefined,
     });
   }
-
-  // Handle native date input changes
-  const handleStartDateChange = (e) => {
-    const value = e.target.value;
-    setStartDate(value);
-    if (value && endDate && value > endDate) {
-      setEndDate(value); // If start date is after end date, update end date
-    }
-  };
-
-  const handleEndDateChange = (e) => {
-    const value = e.target.value;
-    setEndDate(value);
-    if (value && startDate && value < startDate) {
-      setStartDate(value); // If end date is before start date, update start date
-    }
-  };
 
   // Group documents by date
   const groupedDocuments = useMemo(() => {
     const groups = {};
-    filteredDocuments?.forEach((doc) => {
+    tableDocuments?.forEach((doc) => {
       const d = new Date(doc.date);
       const today = new Date();
       const yesterday = new Date();
@@ -249,15 +1225,16 @@ export default function Documents() {
       groups[label].push(doc);
     });
     return groups;
-  }, [filteredDocuments]);
+  }, [tableDocuments]);
 
   // Select all functionality
   const allDocIds = useMemo(() => {
-    return new Set(filteredDocuments?.map((doc) => doc.id) || []);
-  }, [filteredDocuments]);
+    return new Set(tableDocuments?.map((doc) => doc.id) || []);
+  }, [tableDocuments]);
 
   const isAllSelected = allDocIds.size > 0 && selectedDocIds.size === allDocIds.size;
   const isIndeterminate = selectedDocIds.size > 0 && selectedDocIds.size < allDocIds.size;
+  const selectionMode = selectedDocIds.size > 0;
 
   const handleSelectAll = (checked) => {
     if (checked) {
@@ -276,6 +1253,142 @@ export default function Documents() {
     }
     setSelectedDocIds(newSelected);
   };
+
+  const getSelectedDocs = useCallback(() => {
+    return tableDocuments?.filter((doc) => selectedDocIds.has(doc.id)) || [];
+  }, [tableDocuments, selectedDocIds]);
+
+  const handleBulkDownload = async () => {
+    const docsToDownload = getSelectedDocs();
+    if (docsToDownload.length === 0) return;
+    setIsBulkDownloading(true);
+    try {
+      for (const doc of docsToDownload) {
+        const docUrl = doc.document_url || doc.url || doc.file_url;
+        if (!docUrl) {
+          toast.error(`Missing file URL for ${doc.driver_name || "document"}`);
+          continue;
+        }
+        try {
+          const res = await fetch(docUrl, { credentials: "omit" });
+          const blob = await res.blob();
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          const ext = (docUrl.split("?")[0]?.split(".").pop() || "file").toLowerCase();
+          const typeLabel = getDocumentTypeLabel(doc.type, FILTER_MAP);
+          const driverName = doc.driver_name || doc.driverName || doc.driver?.name || "Unknown Driver";
+          const fileName = buildDocumentDownloadName({ doc, driverName, typeLabel });
+          a.download = `${fileName}.${ext}`;
+          a.click();
+          URL.revokeObjectURL(a.href);
+        } catch (error) {
+          console.error("Failed to download document", error);
+          toast.error("Download failed");
+        }
+      }
+    } finally {
+      setIsBulkDownloading(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const docsToDelete = getSelectedDocs();
+    if (docsToDelete.length === 0) return;
+    setIsBulkDeleting(true);
+    setShowBulkDeleteModal(false);
+    let didDelete = false;
+    try {
+      const result = await dispatch(deleteDocumentsThunk({ documents: docsToDelete }));
+      if (deleteDocumentsThunk.fulfilled.match(result)) {
+        didDelete = true;
+        invalidateDocumentRequestCache();
+      } else {
+        toast.error(result.payload || "Failed to delete documents");
+      }
+    } catch (error) {
+      console.error("Failed to delete documents", error);
+      toast.error("Failed to delete selected documents");
+    } finally {
+      setIsBulkDeleting(false);
+    }
+
+    if (didDelete) {
+      setSelectedDocIds(new Set());
+      if (selectedDoc && docsToDelete.some((doc) => doc.id === selectedDoc.id)) {
+        setSelectedDoc(null);
+        setIsPreviewOpen(false);
+      }
+      toast.success("Selected documents deleted");
+    }
+  };
+
+  const canRequestDocuments = !(hasDocumentPermissionRestrictions && availableFilterValues.length === 0);
+  const hasVisibleDocuments = (tableDocuments?.length || 0) > 0;
+  const isLatestFlagFilterLoadingSignature =
+    !!activeFlagFilterLoadingSignature &&
+    activeFlagFilterLoadingSignature === latestFilterSignatureRef.current;
+  const isFlagFilterTableReadyWithRows = isLatestFlagFilterLoadingSignature && hasVisibleDocuments;
+  // Head fetch completion alone is insufficient; we also need either visible rows or a fully reconciled empty result.
+  const isFlagFilterTableReadyWithFinalEmpty =
+    isLatestFlagFilterLoadingSignature &&
+    resolvedFlagFilterLoadingSignature === activeFlagFilterLoadingSignature &&
+    reconciledFlagFilterLoadingSignature === activeFlagFilterLoadingSignature &&
+    !hasVisibleDocuments;
+  const showFlagFilterTablePreparationLoader =
+    isLatestFlagFilterLoadingSignature &&
+    flagFilter === true &&
+    page === 1 &&
+    !isFlagFilterTableReadyWithRows &&
+    !isFlagFilterTableReadyWithFinalEmpty;
+
+  useEffect(() => {
+    if (isFlagFilterTableReadyWithRows || isFlagFilterTableReadyWithFinalEmpty || flagFilter !== true) {
+      stopFlagFilterLoadingMessages(activeFlagFilterLoadingSignature);
+    }
+  }, [
+    isFlagFilterTableReadyWithRows,
+    isFlagFilterTableReadyWithFinalEmpty,
+    flagFilter,
+    activeFlagFilterLoadingSignature,
+    stopFlagFilterLoadingMessages,
+  ]);
+
+  useEffect(() => () => {
+    if (flagFilterLoadingIntervalRef.current) {
+      clearInterval(flagFilterLoadingIntervalRef.current);
+      flagFilterLoadingIntervalRef.current = null;
+    }
+  }, []);
+
+  // Keep initial view in loader state until the first request resolves; only then can an empty result mean "No documents found".
+  const showInitialDocumentsLoader =
+    canRequestDocuments &&
+    !hasVisibleDocuments &&
+    (loading || !hasResolvedInitialDocumentsFetch);
+  const showSkeleton = loading && !isManualRefreshing && !showInitialDocumentsLoader && !hasVisibleDocuments;
+  const showEmptyDocumentsState =
+    // empty state must never render while document requests are still loading
+    !loading &&
+    !shouldUsePreservedRows &&
+    !loadingMore &&
+    !isManualRefreshing &&
+    hasResolvedInitialDocumentsFetch &&
+    !hasVisibleDocuments &&
+    !showFlagFilterTablePreparationLoader;
+  const displayedTotalDocuments = useMemo(() => {
+    if (countsLoading) return null;
+
+    if (typeof countsTotal === "number") {
+      return countsTotal;
+    }
+
+    if (typeof total === "number") {
+      return total;
+    }
+
+    return tableDocuments?.length || 0;
+  }, [countsLoading, countsTotal, total, tableDocuments]);
+
   useEffect(() => {
     function handleClickOutside(event) {
       if (
@@ -285,6 +1398,12 @@ export default function Documents() {
         setShowDocumentTypeDropdown(false);
         setShowStatusDropdown(false);
       }
+      if (
+        filterTypeDropdownRef.current &&
+        !filterTypeDropdownRef.current.contains(event.target)
+      ) {
+        setShowFilterTypeDropdown(false);
+      }
     }
   
     document.addEventListener("mousedown", handleClickOutside);
@@ -293,17 +1412,35 @@ export default function Documents() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  // Handle mobile/desktop breakpoint
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 1024);
+      // Close drawer if switching to desktop
+      if (window.innerWidth >= 1024 && selectedDoc) {
+        // Keep selectedDoc but drawer will be hidden by CSS
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [selectedDoc]);
   
 
   // Infinite scroll handler
   const handleLoadMore = useCallback(() => {
+    if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
+      return;
+    }
+
     if (hasMore && !loadingMore && !loading) {
       dispatch(
         fetchMoreDocuments({
-          startDate,
-          endDate,
+          startDateTimeUtc,
+          endDateTimeUtc,
           page: page + 1,
-          limit: 20,
+          limit: FAST_HEAD_PAGE_LIMIT,
           search: searchDebounced,
           isSeen: isSeenParam,
           isFlagged: isFlaggedParam,
@@ -317,14 +1454,16 @@ export default function Documents() {
     hasMore,
     loadingMore,
     loading,
-    startDate,
-    endDate,
+    startDateTimeUtc,
+    endDateTimeUtc,
     page,
     searchDebounced,
     isSeenParam,
     isFlaggedParam,
     categoryParam,
     typeFilters,
+    availableFilterValues.length,
+    hasDocumentPermissionRestrictions,
   ]);
 
   // Intersection Observer for infinite scroll
@@ -353,56 +1492,404 @@ export default function Documents() {
     };
   }, [handleLoadMore]);
 
+  useEffect(() => {
+    // Overlay docs are query-scoped; clear cache when realtime query context changes so
+    // stale rows from previous filters/search/date/category do not bleed into next page-1 view.
+    dispatch(clearLiveDocumentOverlay());
+  }, [dispatch, realtimeOverlayQuerySignature]);
+
+  useEffect(() => {
+    return () => {
+      dispatch(clearLiveDocumentOverlay());
+    };
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (page !== 1) return undefined;
+
+    if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
+      return undefined;
+    }
+
+    // Old admin felt instant because page-1 stayed warm from a latest-first live head stream.
+    // The previous implementation lagged because it skipped first snapshot and only patched later changes.
+    const unsubscribe = subscribeToLiveDocuments({
+      filters: realtimeFilters,
+      onInitialDocuments: (documents) => {
+        dispatch(beginDocumentSync("firebaseOverlay"));
+        try {
+          dispatch(setHeadDocuments(documents));
+          dispatch(trimVisibleDocumentsToPageSize(limit));
+        } finally {
+          dispatch(endDocumentSync("firebaseOverlay"));
+        }
+      },
+      onChanges: (changes) => {
+        dispatch(beginDocumentSync("firebaseOverlay"));
+        try {
+          changes.forEach(({ type, documentId, document }) => {
+            if (type === "removed") {
+              dispatch(removeLiveDocument(documentId));
+              return;
+            }
+            dispatch(upsertLiveDocument(document));
+          });
+          dispatch(trimVisibleDocumentsToPageSize(limit));
+        } finally {
+          dispatch(endDocumentSync("firebaseOverlay"));
+        }
+      },
+      onError: (error) => {
+        console.error("Document realtime listener failed", error);
+      },
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [
+    dispatch,
+    page,
+    limit,
+    realtimeFilters,
+    realtimeOverlayQuerySignature,
+    hasDocumentPermissionRestrictions,
+    availableFilterValues.length,
+  ]);
+
+  useEffect(() => {
+    const pollIntervalMs = 30 * 1000;
+
+    const activeCountFilterSignature = JSON.stringify({
+      startDateTimeUtc,
+      endDateTimeUtc,
+      search: searchDebounced,
+      isSeen: isSeenParam,
+      isFlagged: isFlaggedParam,
+      category: categoryParam,
+      filters: typeFilters,
+    });
+
+    const pollCounts = async ({ bypassCache = false } = {}) => {
+      // Polling is fallback only; realtime overlay + resume reconciliation are primary freshness paths.
+      if (document.visibilityState !== "visible") return;
+      if (loading || loadingMore) return;
+      // Count responses are applied only when their filter signature still matches the active request.
+      dispatch(beginDocumentSync("polling"));
+      try {
+        await dispatch(
+          fetchDocumentCount({
+            startDateTimeUtc,
+            endDateTimeUtc,
+            search: searchDebounced,
+            isSeen: isSeenParam,
+            isFlagged: isFlaggedParam,
+            category: categoryParam,
+            filters: typeFilters,
+            requestSignature: activeCountFilterSignature,
+            bypassCache,
+          })
+        );
+      } finally {
+        dispatch(endDocumentSync("polling"));
+      }
+    };
+
+    if (countPollIntervalRef.current) {
+      clearInterval(countPollIntervalRef.current);
+      countPollIntervalRef.current = null;
+    }
+    if (deferredCountKickoffRef.current) {
+      // requestIdleCallback and setTimeout both return numeric handles in modern browsers,
+      // so we track scheduler type explicitly to avoid leaking stale deferred callbacks.
+      if (deferredCountTypeRef.current === "idle") {
+        window.cancelIdleCallback?.(deferredCountKickoffRef.current);
+      } else if (deferredCountTypeRef.current === "timeout") {
+        clearTimeout(deferredCountKickoffRef.current);
+      }
+      deferredCountKickoffRef.current = null;
+      deferredCountTypeRef.current = null;
+    }
+
+    // Defer counts so first visible rows render first; counts are secondary metadata.
+    const kickoffPolling = () => {
+      pollCounts({ bypassCache: false });
+      countPollIntervalRef.current = setInterval(pollCounts, pollIntervalMs);
+    };
+
+    if ("requestIdleCallback" in window) {
+      deferredCountKickoffRef.current = window.requestIdleCallback(kickoffPolling, { timeout: 1000 });
+      deferredCountTypeRef.current = "idle";
+    } else {
+      deferredCountKickoffRef.current = window.setTimeout(kickoffPolling, 700);
+      deferredCountTypeRef.current = "timeout";
+    }
+
+    return () => {
+      if (countPollIntervalRef.current) {
+        clearInterval(countPollIntervalRef.current);
+        countPollIntervalRef.current = null;
+      }
+      if (deferredCountKickoffRef.current) {
+        if (deferredCountTypeRef.current === "idle") {
+          window.cancelIdleCallback?.(deferredCountKickoffRef.current);
+        } else if (deferredCountTypeRef.current === "timeout") {
+          clearTimeout(deferredCountKickoffRef.current);
+        }
+        deferredCountKickoffRef.current = null;
+        deferredCountTypeRef.current = null;
+      }
+    };
+  }, [dispatch, startDateTimeUtc, endDateTimeUtc, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters, loading, loadingMore]);
+
+  const handleResumeSync = useCallback(async () => {
+    if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - lastReconcileAtRef.current < 1500) {
+      return;
+    }
+
+    if (loading || loadingMore || isResumeFetchInFlightRef.current) {
+      return;
+    }
+
+    isResumeFetchInFlightRef.current = true;
+    lastReconcileAtRef.current = now;
+
+    dispatch(beginDocumentSync("reconciliation"));
+    try {
+      const canRunHead = page === 1;
+      const isVeryStale = !lastFetched || Date.now() - lastFetched > 5 * 60 * 1000;
+      const shouldRunHead = canRunHead && (Date.now() - lastHeadFetchAtRef.current > 1500 || isVeryStale);
+
+      // Head-first resume avoids waiting on expensive count/full-page reconciliation before page-1 updates.
+      if (shouldRunHead) {
+        await dispatch(
+          fetchDocumentsHead({
+            startDateTimeUtc,
+            endDateTimeUtc,
+            search: searchDebounced,
+            isSeen: isSeenParam,
+            isFlagged: isFlaggedParam,
+            category: categoryParam,
+            filters: typeFilters,
+            limit: FAST_HEAD_PAGE_LIMIT,
+          })
+        ).unwrap();
+        lastHeadFetchAtRef.current = Date.now();
+      }
+
+      // Keep backend pagination authoritative; page 2+ or very stale lists reconcile through backend fetch.
+      if (page !== 1 || isVeryStale) {
+        await dispatch(
+          fetchDocuments({
+            ...currentFetchArgs,
+            page,
+            limit,
+            requestSignature: buildFilterSignature({}),
+          })
+        );
+      }
+    } finally {
+      dispatch(endDocumentSync("reconciliation"));
+      isResumeFetchInFlightRef.current = false;
+    }
+  }, [
+    hasDocumentPermissionRestrictions,
+    availableFilterValues.length,
+    loading,
+    loadingMore,
+    dispatch,
+    startDateTimeUtc,
+    endDateTimeUtc,
+    searchDebounced,
+    isSeenParam,
+    isFlaggedParam,
+    categoryParam,
+    typeFilters,
+    currentFetchArgs,
+    page,
+    limit,
+    lastFetched,
+    buildFilterSignature,
+  ]);
+
+  useEffect(() => () => {
+    clearDeferredReconciliation();
+    endPendingFlagFilterSync();
+  }, [clearDeferredReconciliation, endPendingFlagFilterSync]);
+
+  useAppResumeSync(handleResumeSync, { debounceMs: 300 });
+
+  useEffect(() => {
+    // Spinner timing is tuned so restore/head sync is actually visible (old delays hid quick resume work),
+    // while still applying anti-flicker and keeping it pinned until all sync sources finish.
+    if (isDocumentSyncActive) {
+      // Cancel any queued hide when sync restarts, otherwise spinner can stop mid-sync.
+      if (spinnerHideTimerRef.current) {
+        clearTimeout(spinnerHideTimerRef.current);
+        spinnerHideTimerRef.current = null;
+      }
+
+      if (!showSyncSpinner && !spinnerShowTimerRef.current) {
+        spinnerShowTimerRef.current = setTimeout(() => {
+          spinnerShownAtRef.current = Date.now();
+          setShowSyncSpinner(true);
+          spinnerShowTimerRef.current = null;
+        }, 100);
+      }
+      return;
+    }
+
+    if (spinnerShowTimerRef.current) {
+      clearTimeout(spinnerShowTimerRef.current);
+      spinnerShowTimerRef.current = null;
+    }
+
+    if (!showSyncSpinner) return;
+
+    const elapsed = Date.now() - spinnerShownAtRef.current;
+    const remaining = Math.max(0, 450 - elapsed);
+
+    spinnerHideTimerRef.current = setTimeout(() => {
+      setShowSyncSpinner(false);
+      spinnerHideTimerRef.current = null;
+    }, remaining);
+  }, [isDocumentSyncActive, showSyncSpinner]);
+
+  useEffect(() => () => {
+    if (spinnerShowTimerRef.current) clearTimeout(spinnerShowTimerRef.current);
+    if (spinnerHideTimerRef.current) clearTimeout(spinnerHideTimerRef.current);
+  }, []);
 
   return (
-    <div className="text-white h-full overflow-hidden flex flex-col p-4">
+    <div className="text-white h-full overflow-hidden flex flex-col p-1 sm:p-2">
 
       {/* CHIP FILTER INPUT - Document Type Filters */}
-      <div className="mb-4">
-        {/* Selected Filters as Chips */}
-        {/* {selectedFilters.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-3">
-            {selectedFilters.map((filterValue) => {
-              const filterLabel = Object.keys(FILTER_MAP).find(
-                (key) => FILTER_MAP[key] === filterValue
-              );
-              return (
-                <div
-                  key={filterValue}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1f6feb] text-white text-sm"
-                >
-                  <span>{filterLabel}</span>
-          <button
-                    onClick={() => removeFilter(filterValue)}
-                    className="hover:bg-[#1a5fd4] rounded-full p-0.5 transition-colors"
-                    aria-label={`Remove ${filterLabel} filter`}
-          >
-                    <X className="h-3.5 w-3.5" />
-          </button>
-                </div>
-              );
-            })}
-          </div>
-        )} */}
+      <div className="mb-2">
+        {/* Mobile: Dropdown for Document Type Filters */}
+        <div className="sm:hidden">
+          <div className="relative" ref={filterTypeDropdownRef}>
+            <button
+              onClick={() => setShowFilterTypeDropdown(!showFilterTypeDropdown)}
+              className="flex items-center justify-between w-full px-3 py-2 text-sm text-gray-300 bg-[#161b22] border border-gray-700 rounded-md hover:bg-[#1d232a] hover:border-gray-600 transition-colors"
+            >
+              <span>
+                {selectedFilters.length === 0
+                  ? "Document Types"
+                  : selectedFilters.length === 1
+                  ? availableFilterOptions.find((option) => option.filterValue === selectedFilters[0])?.label || "1 selected"
+                  : `${selectedFilters.length} selected`}
+              </span>
+              <ChevronDown className={`h-4 w-4 transition-transform ${showFilterTypeDropdown ? "rotate-180" : ""}`} />
+            </button>
 
-        {/* Filter Options */}
-        <div className="flex flex-wrap gap-3">
-          {Object.keys(FILTER_MAP).map((item) => {
-            const filterValue = FILTER_MAP[item];
+            {/* Dropdown Menu */}
+            {showFilterTypeDropdown && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setShowFilterTypeDropdown(false)}
+                />
+                <div className="absolute top-full left-0 right-0 mt-1 bg-[#161b22] border border-gray-700 rounded-md shadow-lg z-20 max-h-[60vh] overflow-y-auto">
+                  <div className="p-2">
+                    <div className="px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-700 mb-1">
+                      Document Types
+                    </div>
+                    {availableFilterOptions.map(({ label, filterValue }) => {
+                      const isSelected = selectedFilters.includes(filterValue);
+                      return (
+                        <button
+                          key={label}
+                          onClick={() => {
+                            toggleFilter(filterValue);
+                          }}
+                          className={`relative w-full text-left px-3 py-2 text-sm transition-colors flex items-center gap-2 rounded ${
+                            isSelected
+                              ? "text-white bg-[#1f6feb]/80 hover:bg-[#1f6feb]/80 hover:border-[#1f6feb] hover:text-white"
+                              : "text-gray-300 hover:bg-[#1d232a]"
+                          }`}
+                        >
+                          <span className={`w-4 h-4 border rounded flex items-center justify-center ${
+                            isSelected ? "border-[#1f6feb] bg-[#1f6feb]" : "border-gray-600"
+                          }`}>
+                            {isSelected &&
+                              (isTypeFilterLoading ? (
+                                <Loader2 className="h-3 w-3 text-white animate-spin" />
+                              ) : (
+                                <Check className="h-3 w-3 text-white" />
+                              ))}
+                          </span>
+                          <span className="relative z-0">{label}</span>
+                          {shouldShowTypeFilterSpinner(filterValue, isSelected) && (
+                            <span className="absolute inset-0 z-10 flex items-center justify-center rounded bg-black/50">
+                              <Loader2 className="h-3.5 w-3.5 text-white animate-spin" />
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Show selected filters as chips on mobile */}
+          {selectedFilters.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {selectedFilters.map((filterValue) => {
+                const filterLabel = availableFilterOptions.find((option) => option.filterValue === filterValue)?.label || filterValue;
+                return (
+                  <div
+                    key={filterValue}
+                    className="relative inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#1f6feb] text-white text-xs"
+                  >
+                    <span>{filterLabel}</span>
+                    {shouldShowTypeFilterSpinner(filterValue, true) && (
+                      <span className="absolute inset-0 z-10 flex items-center justify-center rounded-full bg-black/50">
+                        <Loader2 className="h-3.5 w-3.5 text-white animate-spin" />
+                      </span>
+                    )}
+                    <button
+                      onClick={() => removeFilter(filterValue)}
+                      className="hover:bg-[#1a5fd4] rounded-full p-0.5 transition-colors"
+                      aria-label={`Remove ${filterLabel} filter`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Desktop: Filter Options as Chips */}
+        <div className="hidden sm:flex flex-wrap gap-1.5 sm:gap-2">
+          {availableFilterOptions.map(({ label, filterValue }) => {
             const isSelected = selectedFilters.includes(filterValue);
             return (
               <Button
-                key={item}
+                key={label}
                 onClick={() => toggleFilter(filterValue)}
                 variant={isSelected ? "default" : "outline"}
                 size="sm"
-                className={`rounded-full ${
+                className={`relative overflow-hidden rounded-full text-xs md:text-sm whitespace-nowrap ${
                   isSelected
-                    ? "bg-[#1f6feb] border-[#1f6feb] text-white"
+                    ? "bg-[#1f6feb] border-[#1f6feb] text-white hover:bg-[#1f6feb]/80 hover:border-[#1f6feb] hover:text-white"
                     : "border-gray-600 bg-[#161b22] text-gray-300 hover:bg-[#1d232a]"
                 }`}
               >
-                {item}
+                <span className="relative z-0">{label}</span>
+                {shouldShowTypeFilterSpinner(filterValue, isSelected) && (
+                  <span className="absolute inset-0 z-10 flex items-center justify-center rounded-full bg-black/50">
+                    <Loader2 className="h-3.5 w-3.5 text-white animate-spin" />
+                  </span>
+                )}
               </Button>
             );
           })}
@@ -410,62 +1897,90 @@ export default function Documents() {
       </div>
 
       {/* FILTER BAR - Horizontal Layout matching image */}
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-2">
         {/* Search Bar */}
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <div className="relative w-full sm:flex-1 sm:min-w-0">
+          {isSearchLoading ? (
+            <Loader2 className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 animate-spin" />
+          ) : (
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          )}
           <Input
             type="text"
             placeholder="Search by driver name"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#1d232a] pl-9 border-gray-700 text-gray-300 placeholder:text-gray-500"
+            className="w-full bg-[#1d232a] pl-9 pr-9 border-gray-700 text-gray-300 placeholder:text-gray-500 text-sm sm:text-base"
           />
+          {search ? (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 transition-colors"
+              aria-label="Clear search"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
         </div>
 
-        {/* Category Filters (C, D, F) */}
-        {["C", "D", "F"].map((cat) => (
-          <Button
-            key={cat}
-            onClick={() => setCategoryFilter(categoryFilter === cat ? null : cat)}
-            variant={categoryFilter === cat ? "default" : "outline"}
-            size="sm"
-            className={`min-w-[40px] h-9 ${
-              categoryFilter === cat
-                ? "bg-[#1f6feb] text-white border-[#1f6feb] hover:bg-[#1a5fd4]"
-                : "bg-[#161b22] border-gray-700 text-gray-300 hover:bg-[#1d232a] hover:border-gray-600"
-            }`}
-          >
-            {cat}
-          </Button>
-        ))}
+        {/* Category Filters (C, D, E, F) - multi-select, sent as category=C&category=D */}
+        <div className="flex gap-1.5 sm:gap-2">
+          {["C", "D", "F"].map((cat) => {
+            const isSelected = Array.isArray(categoryFilter) && categoryFilter.includes(cat);
+            return (
+              <Button
+                key={cat}
+                onClick={() => {
+                  setCategoryFilter(
+                    isSelected ? categoryFilter.filter((c) => c !== cat) : [...categoryFilter, cat]
+                  );
+                }}
+                variant={isSelected ? "default" : "outline"}
+                size="sm"
+                className={`min-w-[36px] sm:min-w-[40px] h-8 sm:h-9 text-xs sm:text-sm ${
+                  isSelected
+                    ? "bg-[#1f6feb] text-white border-[#1f6feb] hover:bg-[#1a5fd4]"
+                    : "bg-[#161b22] border-gray-700 text-gray-300 hover:bg-[#1d232a] hover:border-gray-600"
+                }`}
+              >
+                {cat}
+              </Button>
+            );
+          })}
+        </div>
 
         {/* All Documents Dropdown with Status Filter */}
         <div className="relative" ref={documentDropDownRef} >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               onClick={() => {
                 setShowDocumentTypeDropdown(!showDocumentTypeDropdown);
                 setShowStatusDropdown(false);
               }}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:text-white transition-colors border-b border-gray-700 hover:border-gray-600"
+              className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-300 hover:text-white transition-colors border-b border-gray-700 hover:border-gray-600 whitespace-nowrap"
             >
               {statusFilter === "all" ? "All" : statusFilter === "seen" ? "Seen" : "Unseen Only"}
 
-              <ChevronDown className={`h-4 w-4 transition-transform ${showDocumentTypeDropdown ? "rotate-180" : ""}`} />
+              <ChevronDown className={`h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform ${showDocumentTypeDropdown ? "rotate-180" : ""}`} />
             </button>
-            {(selectedFilters.length > 0 || statusFilter !== "all") && (
+            {(selectedFilters.length > 0 || statusFilter !== "all" || (Array.isArray(categoryFilter) && categoryFilter.length > 0)) && (
           <button
                 onClick={() => {
+                  if (selectedFilters.length > 0) {
+                    setActiveTypeFilterValue(null);
+                    setIsTypeFilterLoading(true);
+                  }
                   setSelectedFilters([]);
                   setStatusFilter("all");
+                  setCategoryFilter([]);
                   setShowDocumentTypeDropdown(false);
                   setShowStatusDropdown(false);
                 }}
                 className="text-gray-400 hover:text-white transition-colors p-1 rounded-full hover:bg-[#1d232a]"
                 aria-label="Clear filters"
               >
-                <X className="h-4 w-4" />
+                <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </button>
         )}
       </div>
@@ -514,7 +2029,7 @@ export default function Documents() {
                     const isSelected = selectedFilters.includes(filterValue);
                     return (
                       <button
-                        key={item}
+                        key={label}
                         onClick={() => toggleFilter(filterValue)}
                         className={`w-full text-left px-4 py-2 text-sm hover:bg-[#1d232a] transition-colors flex items-center gap-2 ${
                           isSelected ? "text-[#1f6feb] bg-[#1d232a]" : "text-gray-300"
@@ -538,103 +2053,209 @@ export default function Documents() {
         {/* Flag Filter */}
         <Button
           onClick={() => {
-            setFlagFilter(flagFilter === null ? true : null);
+            const nextFlagFilter = flagFilter === null ? true : null;
+            const nextSignature = buildFilterSignature({ isFlagged: nextFlagFilter === true ? true : null });
+
+            setFlagFilter(nextFlagFilter);
+            setIsFlagFilterLoading(true);
+            pendingFlagFilterSignatureRef.current = nextSignature;
+            beginFlagFilterSyncForSignature(nextSignature);
+            if (nextFlagFilter === true) {
+              startFlagFilterLoadingMessages(nextSignature);
+              return;
+            }
+
+            stopFlagFilterLoadingMessages();
+            setResolvedFlagFilterLoadingSignature(null);
+            setReconciledFlagFilterLoadingSignature(null);
           }}
           variant="outline"
           size="sm"
-          className={`h-9 px-3 ${
+          className={`h-8 sm:h-9 px-2 sm:px-3 ${
             flagFilter === true
-              ? "bg-[#1f6feb] text-white border-[#1f6feb] hover:bg-[#1a5fd4]"
+              ? "bg-[#2a1114] text-red-500 border-red-500/60 hover:bg-[#3a161a]"
               : "bg-[#161b22] border-gray-700 text-gray-400 hover:bg-[#1d232a] hover:border-gray-600 hover:text-gray-300"
           }`}
           title={flagFilter === true ? "Show flagged only" : "Show all documents"}
         >
-          <Flag className={`h-4 w-4 ${flagFilter === true ? "text-white" : "text-gray-400"}`} />
+          {isFlagFilterLoading ? (
+            <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin text-red-500" />
+          ) : (
+            <Flag
+              className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${flagFilter === true ? "text-red-500" : "text-gray-400"}`}
+              fill={flagFilter === true ? "#ef4444" : "none"}
+            />
+          )}
         </Button>
 
-        {/* Date Range Picker - Native Inputs */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex items-center">
-            <Calendar className="absolute left-2 h-4 w-4 text-gray-400 pointer-events-none" />
-            <Input
-              type="date"
-              value={startDate}
-              onChange={handleStartDateChange}
-              max={endDate || undefined}
-              className="h-9 pl-9 pr-3 bg-[#1d232a] border-gray-700 text-gray-300 hover:bg-[#161b22] hover:border-gray-600 focus:border-[#1f6feb] focus:ring-1 focus:ring-[#1f6feb] [color-scheme:dark]"
-            />
-          </div>
-          <span className="text-gray-400 text-sm">to</span>
-          <div className="relative flex items-center">
-            <Input
-              type="date"
-              value={endDate}
-              onChange={handleEndDateChange}
-              min={startDate || undefined}
-              className="h-9 px-3 bg-[#1d232a] border-gray-700 text-gray-300 hover:bg-[#161b22] hover:border-gray-600 focus:border-[#1f6feb] focus:ring-1 focus:ring-[#1f6feb] [color-scheme:dark]"
-            />
-          </div>
-          {(startDate !== start || endDate !== end) && (
+        {/* Date Range Picker */}
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:justify-end sm:ml-auto">
+          <DateRangePicker
+            value={dateRange}
+            onChange={setDateRange}
+            triggerWidthClassName="w-[260px] sm:w-[320px]"
+            labelClassName="text-center"
+          />
+          {hasCustomDateRange && (
             <Button
               variant="ghost"
               size="sm"
               onClick={resetDates}
-              className="h-9 px-2 text-gray-400 hover:text-gray-300 hover:bg-[#1d232a]"
+              className="h-8 sm:h-9 px-2 text-gray-400 hover:text-gray-300 hover:bg-[#1d232a]"
               title="Reset dates"
             >
-              <X className="h-4 w-4" />
+              <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </Button>
           )}
         </div>
+
+        {selectionMode && (
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleBulkDownload}
+              disabled={isBulkDownloading}
+              className="h-8 sm:h-9 border-gray-600/80 bg-[#0f172a]/70 text-slate-200 shadow-sm hover:bg-[#1f2937] hover:text-white hover:border-slate-400 hover:shadow-md active:shadow-sm"
+            >
+              <Download className="h-4 w-4 mr-1.5" />
+              {isBulkDownloading ? "Downloading..." : "Download"}&nbsp;
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (selectedDocIds.size === 0) return;
+                setShowBulkDeleteModal(true);
+              }}
+              disabled={isBulkDeleting}
+              className="h-8 mr-0.5 sm:h-9 border-red-500/60 bg-[#0f172a]/70 text-red-400 shadow-sm hover:bg-red-500/20 hover:text-red-100 hover:border-red-400 hover:shadow-md active:shadow-sm"
+            >
+              <Trash2 className="h-4 w-4 mr-1.5" />
+              {isBulkDeleting ? "Deleting..." : "Delete"}&nbsp;
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* MAIN LAYOUT */}
-        <div className="flex-1 bg-[#161b22] p-4 rounded-lg border border-gray-700 overflow-hidden flex flex-col">
-
-  {/* Date Filter (FIXED) */}
-
-
-  {/* 📜 TABLE (ONLY THIS SCROLLS) */}
-        <div className="flex-1 overflow-y-auto chat-list-scroll">
-          <Table>
-            <TableHeader className="sticky top-0 bg-[#161b22] z-10 border-b border-gray-700">
+      <div className="flex-1 bg-[#161b22] rounded-lg border border-gray-700 overflow-hidden flex flex-col">
+        {/* FLEX CONTAINER: TABLE + PREVIEW */}
+          <div
+            ref={layoutRef}
+            className="flex-1 flex flex-col lg:flex-row gap-0 overflow-hidden"
+          >
+            {/* 📜 TABLE SECTION */}
+            <div
+              className={`flex-1 min-w-0 overflow-hidden flex flex-col ${
+                isPreviewOpen ? "lg:border-r border-gray-700" : ""
+              }`}
+            >
+            <div ref={tableScrollRef} className="flex-1 overflow-auto chat-list-scroll flex flex-col">
+              <div className="relative flex-1">
+                {showPreservedRowsSyncOverlay && (
+                  <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-[#0b0f14]/35">
+                    <div className="flex flex-col items-center justify-center rounded-md border border-gray-700/70 bg-[#11161d]/85 px-4 py-3 text-gray-200 shadow-lg">
+                      <Loader2 className="h-5 w-5 animate-spin text-gray-200" />
+                      <p className="mt-1 text-xs">Syncing...</p>
+                    </div>
+                  </div>
+                )}
+                <TooltipProvider>
+                <Table containerClassName="h-full overflow-visible">
+            <TableHeader className="sticky top-0 z-30 border-b border-gray-700 [&_th]:sticky [&_th]:top-0 [&_th]:z-30 [&_th]:bg-[#161b22]">
               <TableRow className="hover:bg-transparent border-gray-700">
-                <TableHead className="w-14 h-12">
-                  <div className="flex items-center gap-2">
+                <TableHead className="w-10 sm:w-12 h-8 px-1 sm:px-2">
+                  <div className="flex items-center gap-0.5 sm:gap-1">
                     <Checkbox
-                      checked={isAllSelected || isIndeterminate}
+                      checked={isIndeterminate ? "indeterminate" : isAllSelected}
                       onCheckedChange={handleSelectAll}
                       aria-label="Select all"
+                      className="h-3 w-3 sm:h-3.5 sm:w-3.5"
                     />
-                    <span className="text-xs font-medium text-gray-400">Select All</span>
+                    <span className="text-[9px] sm:text-[10px] font-medium text-gray-400 hidden sm:inline">
+                      
+                    </span>
                   </div>
                 </TableHead>
-                <TableHead className="h-12 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   Status
                 </TableHead>
-                <TableHead className="h-12 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                  Flag
+                </TableHead>
+                <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   Uploaded By
                 </TableHead>
-                <TableHead className="h-12 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider hidden md:table-cell">
                   Date & Time
                 </TableHead>
-                <TableHead className="h-12 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider hidden sm:table-cell">
                   Type
                 </TableHead>
-                <TableHead className="h-12 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <TableHead className="h-8 px-1 sm:px-2 text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   Category
                 </TableHead>
-                <TableHead className="h-12 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  Flag
+                <TableHead className="h-8 px-1 sm:px-2 text-right">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleManualRefresh}
+                    disabled={isManualRefreshing}
+                    title="Refresh"
+                    aria-label="Refresh"
+                    className="h-7 w-7 text-gray-400 hover:text-gray-200 disabled:opacity-60"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${showSyncSpinner ? "animate-spin" : ""}`} />
+                  </Button>
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? (
-                <DocumentTableSkeleton rows={12} />
-              ) : Object.keys(groupedDocuments).length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="h-64 text-center">
+              {showInitialDocumentsLoader ? (
+                <TableRow className="hover:bg-transparent cursor-default">
+                  <TableCell colSpan={8} className="h-64 text-center">
+                    <div className="flex flex-col items-center justify-center text-gray-400">
+                      <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
+                      <p className="text-xs mt-2">Loading documents...</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : showSkeleton ? (
+                <DocumentTableSkeleton
+                  rows={skeletonRows}
+                  showFlag
+                  compact
+                  responsive
+                  rowHeightClass="h-9"
+                  showActionColumn
+                />
+              ) : showFlagFilterTablePreparationLoader ? (
+                <TableRow className="hover:bg-transparent cursor-default">
+                  <TableCell colSpan={8} className="h-64 text-center">
+                    <div className="flex flex-col items-center justify-center text-gray-400">
+                      <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
+                      <p className="text-xs mt-2">{flagFilterLoadingMessage || FLAG_FILTER_LOADING_MESSAGES[0]}</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : showEmptyDocumentsState && showSyncSpinner ?
+              (
+                <TableRow className="hover:bg-transparent cursor-default">
+                  <TableCell colSpan={8} className="h-64 text-center">
+                    <div className="flex flex-col items-center justify-center text-gray-400">
+                      <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
+                      <p className="text-xs mt-2">Syncing...</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )
+              : showEmptyDocumentsState ? (
+                <TableRow className="hover:bg-transparent cursor-default">
+                  <TableCell colSpan={8} className="h-64 text-center">
                     <div className="flex flex-col items-center justify-center text-gray-400">
                       <p className="text-sm font-medium">No documents found</p>
                       <p className="text-xs mt-1">Try adjusting your filters</p>
@@ -643,13 +2264,13 @@ export default function Documents() {
                 </TableRow>
               ) : (
                 Object.keys(groupedDocuments).map((group) => (
-                  <>
+                  <Fragment key={`group-${group}`}>
                     {/* Group Header */}
-                    <TableRow key={`group-${group}`} className="bg-[#0d1117] border-gray-800 hover:bg-[#0d1117]">
-                      <TableCell colSpan={7} className="px-4 py-3">
+                    <TableRow className="bg-[#0d1117] border-gray-800 hover:bg-[#0d1117]">
+                      <TableCell colSpan={8} className="px-2 py-1">
                         <div className="flex items-center gap-2">
                           <div className="h-px flex-1 bg-gradient-to-r from-transparent via-blue-500/30 to-transparent" />
-                          <span className="text-sm font-semibold text-blue-400 px-3">
+                          <span className="text-xs font-semibold text-blue-400 px-2">
                             {group}
                           </span>
                           <div className="h-px flex-1 bg-gradient-to-r from-transparent via-blue-500/30 to-transparent" />
@@ -658,85 +2279,225 @@ export default function Documents() {
                     </TableRow>
 
                     {/* Group Rows */}
-                    {groupedDocuments[group].map((doc) => (
+                    {groupedDocuments[group].map((doc) => {
+                      const isActive = selectedDoc?.id === doc.id;
+                      const isSelected = selectedDocIds.has(doc.id);
+                      const isDocFlagged =
+                        doc.flag?.flagged || doc.flagged || doc.isFlagged;
+                      const flagReason = (
+                        doc.flag?.reason ||
+                        doc.flagged_reason ||
+                        ""
+                      ).trim();
+
+                      return (
                       <TableRow
                         key={doc.id}
-                        className="border-gray-800 hover:bg-[#1d232a]/50 cursor-pointer transition-colors"
-                        onClick={() => setSelectedDoc(doc)}
+                        data-state={isSelected ? "selected" : undefined}
+                        className={`group h-9 border-gray-800 hover:bg-[#1d232a]/50 cursor-pointer transition-colors ${
+                          isActive ? "bg-[#1f6feb]/15 ring-1 ring-inset ring-[#1f6feb]/40" : ""
+                        } ${
+                          isSelected && !isActive ? "bg-[#1f6feb]/10 ring-1 ring-inset ring-[#1f6feb]/30" : ""
+                        }`}
+                        onClick={() => handleOpenDocument(doc)}
                       >
-                        <TableCell className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <TableCell className="px-1 sm:px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
                           <Checkbox
                             checked={selectedDocIds.has(doc.id)}
                             onCheckedChange={(checked) => handleSelectDoc(doc.id, checked)}
                             onClick={(e) => e.stopPropagation()}
                             aria-label={`Select ${doc.driver_name}`}
+                            className="h-3 w-3 sm:h-3.5 sm:w-3.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 data-[state=checked]:opacity-100 data-[state=indeterminate]:opacity-100"
                           />
                         </TableCell>
-                        <TableCell className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`w-2.5 h-2.5 rounded-full ${doc.seen === false
-                                  ? "bg-blue-500"
-                                  : doc.seen === true
-                                    ? "bg-green-500"
-                                    : "bg-gray-500"
+                        <TableCell className="px-1 sm:px-2 py-1.5">
+                          <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
+                            <div className="flex items-center gap-1 sm:gap-1.5" title={doc.seen === false ? "Unseen" : doc.seen === true ? "Seen" : "Unknown"}>
+                              <span
+                                className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full flex-shrink-0 ${
+                                  doc.seen === false
+                                    ? "bg-blue-500"
+                                    : doc.seen === true
+                                      ? "bg-green-500"
+                                      : "bg-gray-500"
                                 }`}
-                            />
-                            <span className="text-xs text-gray-400">
-                              {doc.seen === false ? "Unseen" : doc.seen === true ? "Seen" : "Unknown"}
-                            </span>
-      </div>
-                        </TableCell>
-                        <TableCell className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            {doc.driver_image && (
-                              <img
-                                src={doc.driver_image}
-                                alt={doc.driver_name}
-                                className="w-8 h-8 rounded-full object-cover border border-gray-700"
-                                onError={(e) => {
-                                  e.target.style.display = "none";
-                                }}
                               />
+                            </div>
+                            {doc.completed === true && (
+                              <span className="inline-flex items-center text-emerald-400" title="Done">
+                                <Check className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0" />
+                              </span>
                             )}
-                            <span className="text-sm font-medium text-white">
-                              {doc.driver_name || "Unknown"}
-                            </span>
+                            {doc.state === "markedForResend" && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] sm:text-[10px] text-orange-400" title="Marked for Resend">
+                                <Redo2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0" />
+                                Resend
+                              </span>
+                            )}
                           </div>
                         </TableCell>
-                        <TableCell className="px-4 py-3">
-                          <div className="text-sm text-gray-300">
+                        <TableCell className="px-1 sm:px-2 py-1.5">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                className="group inline-flex items-center justify-center rounded-full transition-transform duration-200 ease-out hover:-translate-y-0.5 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:opacity-60 disabled:pointer-events-none"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleToggleFlag(doc);
+                                }}
+                                aria-label={isDocFlagged ? "Unflag document" : "Flag document"}
+                                disabled={isDocActionPending(doc.id, "flag") || isFlagUpdating}
+                              >
+                                {isDocFlagged ? (
+                                  <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-red-500 transition-colors duration-200 group-hover:animate-pulse" fill="#ef4444" />
+                                ) : (
+                                  <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-gray-600 transition-colors duration-200 group-hover:text-red-400 group-hover:animate-pulse" />
+                                )}
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {isDocFlagged ? (
+                                flagReason ? (
+                                  <div className="max-w-xs">
+                                    <p className="font-medium">Unflag Document</p>
+                                    <p className="mt-2 text-xs text-gray-300 break-words whitespace-pre-wrap">
+                                      {flagReason}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <p>Unflag Document</p>
+                                )
+                              ) : (
+                                <p>Flag Document</p>
+                              )}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TableCell>
+                        <TableCell className="px-1 sm:px-2 py-1.5">
+                          {(() => {
+                            const driverName = doc.driver_name || "Unknown";
+                            const matchedDriver = findDriverByEmailOrName(doc.driver_email, doc.driver_name);
+                            const driverEmail =
+                              doc.driver_email || matchedDriver?.email || matchedDriver?.driver_email;
+                            const driverPhone =
+                              doc.driver_phone ||
+                              doc.driver_mobile ||
+                              doc.phone ||
+                              matchedDriver?.phone;
+                            const driverImage =
+                              doc.driver_image ||
+                              matchedDriver?.profilePic ||
+                              matchedDriver?.image ||
+                              "/default-user.png";
+
+                            return (
+                              <div className="flex items-center gap-1.5 sm:gap-2">
+                                <Popover
+                                  open={driverPopupDoc?.id === doc.id}
+                                  onOpenChange={(open) => !open && setDriverPopupDoc(null)}
+                                >
+                                  <PopoverTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className="flex items-center rounded-full border border-gray-700 overflow-hidden"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDriverPopupDoc(driverPopupDoc?.id === doc.id ? null : doc);
+                                      }}
+                                      aria-label={`View ${driverName} contact details`}
+                                    >
+                                      <img
+                                        src={driverImage}
+                                        alt={driverName}
+                                        className="w-5 h-5 sm:w-6 sm:h-6 object-cover"
+                                        onError={(e) => {
+                                          e.currentTarget.src = "/default-user.png";
+                                        }}
+                                      />
+                                    </button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-72 p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                                    <div className="p-4 space-y-3 border-b border-gray-700">
+                                      <div className="flex items-center gap-3">
+                                        <img
+                                          src={driverImage}
+                                          alt={driverName}
+                                          className="w-14 h-14 rounded-full object-cover border border-gray-700"
+                                          onError={(e) => { e.currentTarget.src = "/default-user.png"; }}
+                                        />
+                                        <div className="min-w-0 flex-1">
+                                          <p className="text-sm font-semibold text-white truncate">{driverName}</p>
+                                          {driverEmail && <p className="text-xs text-gray-400 truncate">{driverEmail}</p>}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="p-3 space-y-2 text-xs text-gray-300">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <span className="text-gray-500">Driver Name</span>
+                                        <div className="flex items-center gap-2 min-w-0">
+                                          <span className="text-white truncate">{driverName}</span>
+                                          {renderCopyButton(driverName, "driver name")}
+                                        </div>
+                                      </div>
+                                      {driverEmail && (
+                                        <div className="flex items-center justify-between gap-3">
+                                          <span className="text-gray-500">Email</span>
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            <span className="text-white truncate">{driverEmail}</span>
+                                            {renderCopyButton(driverEmail, "driver email")}
+                                          </div>
+                                        </div>
+                                      )}
+                                      {driverPhone && (
+                                        <div className="flex items-center justify-between gap-3">
+                                          <span className="text-gray-500">Phone</span>
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            <span className="text-white truncate">{driverPhone}</span>
+                                            {renderCopyButton(driverPhone, "driver phone")}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                                <span className="text-[10px] sm:text-xs font-medium text-white truncate max-w-[100px] sm:max-w-none">
+                                  {driverName}
+                                </span>
+                              </div>
+                            );
+                          })()}
+                        </TableCell>
+                        <TableCell className="px-1 sm:px-2 py-1.5 hidden md:table-cell">
+                          <div className="text-[10px] sm:text-xs text-gray-300">
                             {new Date(doc.date).toLocaleString("en-US", {
                               dateStyle: "short",
                               timeStyle: "short",
                             })}
-      </div>
+                          </div>
                         </TableCell>
-                        <TableCell className="px-4 py-3">
-                          <span className="text-sm text-gray-300">{doc.type || "—"}</span>
+                        <TableCell className="px-1 sm:px-2 py-1.5 hidden sm:table-cell">
+                          <span className="text-[10px] sm:text-xs text-gray-300 truncate max-w-[80px]">
+                            {doc.type ? getDocumentTypeLabel(doc.type, FILTER_MAP) : "—"}
+                          </span>
                         </TableCell>
-                        <TableCell className="px-4 py-3">
-                          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-800/50 text-gray-300 border border-gray-700">
+                        <TableCell className="px-1 sm:px-2 py-1.5">
+                          <span className="inline-flex items-center px-1 sm:px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-medium bg-gray-800/50 text-gray-300 border border-gray-700">
                             {doc.category || "—"}
                           </span>
                         </TableCell>
-                        <TableCell className="px-4 py-3">
-                          {doc.flag?.flagged || doc.flagged || doc.isFlagged ? (
-                            <Flag className="h-4 w-4 text-[#1f6feb]" fill="#1f6feb" />
-                          ) : (
-                            <Flag className="h-4 w-4 text-gray-600" />
-                          )}
-                        </TableCell>
+                        <TableCell className="px-1 sm:px-2 py-1.5" />
                       </TableRow>
-                    ))}
-                  </>
+                      );
+                    })}
+                  </Fragment>
                 ))
               )}
 
               {/* Infinite Scroll Trigger */}
               {hasMore && !loading && (
                 <TableRow>
-                  <TableCell colSpan={7} ref={observerTarget} className="h-16">
+                  <TableCell colSpan={8} ref={observerTarget} className="h-16">
                     {loadingMore && (
                       <div className="flex items-center justify-center gap-2 text-gray-400">
                         <div className="w-4 h-4 border-2 border-gray-600 border-t-blue-500 rounded-full animate-spin" />
@@ -748,69 +2509,196 @@ export default function Documents() {
               )}
 
               {/* End of Results */}
-              {!hasMore && !loading && filteredDocuments?.length > 0 && (
+              {!hasMore && !loading && tableDocuments?.length > 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-12 text-center">
+                  <TableCell colSpan={8} className="h-12 text-center">
                     <p className="text-xs text-gray-500">No more documents to load</p>
                   </TableCell>
                 </TableRow>
               )}
             </TableBody>
-          </Table>
+                </Table>
+                </TooltipProvider>
+              </div>
 
-          {!loading && (
-            <div className="mt-4 sticky bottom-0 items-center justify-between text-sm text-gray-400 w-full bg-gray-900 p-2 rounded-b-lg">
-              <div className="flex items-center gap-4">
-                <span>
-                  Showing: <span className="font-semibold text-white">{filteredDocuments?.length || 0}</span> of{" "}
-                  <span className="font-semibold text-white">{total || filteredDocuments?.length || 0}</span> documents
-                </span>
-                {selectedDocIds.size > 0 && (
-                  <span>
-                    Selected: <span className="font-semibold text-blue-400">{selectedDocIds.size}</span>
+              <div className="mt-2 sticky bottom-0 items-center justify-between text-[10px] sm:text-xs text-gray-400 w-full bg-gray-900 p-1 sm:p-1.5 rounded-b-lg">
+                <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span>
+                      Showing: <span className="font-semibold text-white">{tableDocuments?.length || 0}</span> of
+                    </span>
+                    {displayedTotalDocuments === null ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-300" aria-label="Loading total document count" />
+                    ) : (
+                      <span className="font-semibold text-white">{displayedTotalDocuments}</span>
+                    )}
+                    <span>documents</span>
                   </span>
-    )}
-  </div>
+                  {selectedDocIds.size > 0 && (
+                    <span>
+                      Selected: <span className="font-semibold text-blue-400">{selectedDocIds.size}</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
 
-</div>
+          {/* 📄 PREVIEW CONTAINER - Hidden on mobile, shown in drawer */}
+          {isPreviewOpen && selectedDoc && (
+            <div
+              className="hidden lg:flex lg:flex-none min-w-[320px] max-w-[75%] flex-col bg-[#161b22] relative overflow-auto"
+              style={{ width: previewWidth, maxWidth: "75%" }}
+            >
+              <div
+                className="absolute left-0 top-0 h-full w-3 -translate-x-1/2 cursor-ew-resize"
+                role="separator"
+                aria-orientation="vertical"
+                onMouseDown={handleResizeStart}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  docDetailRequestRef.current = 0;
+                  setIsDocDetailLoading(false);
+                  setSelectedDoc(null);
+                  setIsPreviewOpen(false);
+                }}
+                className="absolute top-1 right-3 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-700 bg-slate-900/90 text-slate-200 shadow-sm transition hover:bg-slate-700 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                aria-label="Close document preview"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              {/* Preview Content */}
+              <div className="document-preview-scroll flex-1 overflow-y-auto p-0">
+                <div className="flex h-full flex-col p-4">
+                  {isDocDetailLoading && (
+                    <div className="mb-3 flex items-center gap-2 rounded-md border border-gray-700 bg-[#0f141a] px-3 py-2 text-xs text-gray-300">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Loading latest document details…</span>
+                    </div>
+                  )}
+                  <DocumentPreviewContent
+                    selectedDoc={selectedDoc}
+                    onDocUpdate={(updatedDoc) => {
+                      if (updatedDoc === null) {
+                        // Document was deleted, close preview
+                        docDetailRequestRef.current = 0;
+                        setIsDocDetailLoading(false);
+                        setSelectedDoc(null);
+                        setIsPreviewOpen(false);
+                      } else {
+                        setSelectedDoc(updatedDoc);
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>
 
-      {/* DRAWER FOR DOCUMENT PREVIEW */}
-      <Drawer open={!!selectedDoc} onOpenChange={(open) => !open && setSelectedDoc(null)} direction="right">
-        <DrawerContent className="w-full sm:max-w-2xl h-full bg-[#161b22] border-gray-700">
-          <DrawerHeader className="border-b border-gray-700">
+      {/* Bulk Delete Confirmation Modal */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-md rounded-lg border border-gray-700 bg-[#161b22] p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <DrawerTitle className="text-xl font-semibold text-white">
-                Document Details
-              </DrawerTitle>
-              <DrawerClose asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-white">
-                  <X className="h-4 w-4" />
-                </Button>
-              </DrawerClose>
+              <h3 className="text-lg font-semibold text-white">Delete Selected Documents</h3>
+              <button
+                onClick={() => setShowBulkDeleteModal(false)}
+                className="text-gray-400 hover:text-white"
+                disabled={isBulkDeleting}
+                aria-label="Close delete confirmation"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
-            {selectedDoc && (
-              <DrawerDescription className="text-sm text-gray-400">
-                Preview and details for the selected document
-              </DrawerDescription>
-            )}
-          </DrawerHeader>
-
-          <div className="flex-1 overflow-y-auto p-6 bg-[#161b22]">
-            {selectedDoc ? (
-              <DocumentPreviewContent selectedDoc={selectedDoc} />
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <p className="text-gray-400 text-center">
-                  No document selected
-                </p>
-              </div>
-            )}
+            <div className="space-y-2">
+              <p className="text-sm text-gray-300">
+                You have selected {selectedDocIds.size} document{selectedDocIds.size === 1 ? "" : "s"} for deletion.
+                This action cannot be undone.
+              </p>
+              <p className="text-xs text-gray-400">
+                The selected documents will be removed permanently and cannot be recovered.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 justify-end">
+              <Button
+                onClick={() => setShowBulkDeleteModal(false)}
+                variant="outline"
+                size="sm"
+                className="border-gray-600 text-gray-800 hover:bg-[#1d232a] hover:text-white"
+                disabled={isBulkDeleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleBulkDelete}
+                size="sm"
+                disabled={isBulkDeleting}
+                className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isBulkDeleting ? "Deleting..." : "Delete"}
+              </Button>
+            </div>
           </div>
-        </DrawerContent>
-      </Drawer>
+        </div>
+      )}
+
+      {/* Mobile Drawer for Document Preview */}
+      {isMobile && (
+        <Drawer
+          open={!!selectedDoc}
+          onOpenChange={(open) => {
+            if (!open) {
+              docDetailRequestRef.current = 0;
+              setIsDocDetailLoading(false);
+              setSelectedDoc(null);
+            }
+          }}
+        >
+          <DrawerContent className="max-h-[85vh] bg-[#161b22] border-gray-700">
+            <DrawerHeader className="border-b border-gray-700">
+              <div className="flex items-center justify-between">
+                <DrawerTitle className="text-white">Document Preview</DrawerTitle>
+                <DrawerClose className="text-gray-400 hover:text-white">
+                  <X className="h-5 w-5" />
+                </DrawerClose>
+              </div>
+            </DrawerHeader>
+            <div className="document-preview-scroll overflow-y-auto p-0">
+              <div className="flex h-full flex-col p-4">
+                {isDocDetailLoading && (
+                  <div className="mb-3 flex items-center gap-2 rounded-md border border-gray-700 bg-[#0f141a] px-3 py-2 text-xs text-gray-300">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Loading latest document details…</span>
+                  </div>
+                )}
+                {selectedDoc && (
+                  <DocumentPreviewContent
+                    selectedDoc={selectedDoc}
+                    onDocUpdate={(updatedDoc) => {
+                      if (updatedDoc === null) {
+                        // Document was deleted, close preview
+                        docDetailRequestRef.current = 0;
+                        setIsDocDetailLoading(false);
+                        setSelectedDoc(null);
+                      } else {
+                        setSelectedDoc(updatedDoc);
+                      }
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+            
+            {/* Mark document as seen/unseen - Toggle functionality - Mobile */}
+            
+          </DrawerContent>
+        </Drawer>
+      )}
+
     </div>
   );
 }

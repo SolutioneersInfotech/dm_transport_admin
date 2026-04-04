@@ -1,5 +1,59 @@
+import { FaBullhorn } from "react-icons/fa";
+import Broadcast from "../pages/Broadcast";
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import { useLocation } from "react-router-dom";
+import { motion } from "framer-motion";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
+<<<<<<< HEAD
+import { fetchUsers, fetchMoreUsers, updateUserLastMessage } from "../store/slices/usersSlice";
+import { fetchMaintenanceUsers, updateMaintenanceUserLastMessage } from "../store/slices/maintenanceUsersSlice";
+import ChatListItem from "./ChatListItem";
+import SkeletonLoader from "./skeletons/Skeleton";
+import { Input } from "./ui/input";
+import { Button } from "./ui/button";
+import {
+  subscribeLastMessage as defaultSubscribeLastMessage,
+} from "../services/chatAPI";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { Eye } from "lucide-react";
+
+const STATUS_OPTIONS = [
+  { value: "all", label: "All" },
+  { value: "seen", label: "Seen" },
+  { value: "unseen", label: "Unseen" },
+];
+
+const statusColorClass = {
+  all: "text-muted-foreground",
+  seen: "text-emerald-400",
+  unseen: "text-amber-400",
+};
+
+const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
+  const dispatch = useAppDispatch();
+  const location = useLocation();
+  const isMaintenanceChat = location.pathname === "/maintenance-chat";
+
+  const usersState = useAppSelector((state) => state.users);
+  const maintenanceUsersState = useAppSelector((state) => state.maintenanceUsers);
+
+  const users = isMaintenanceChat ? maintenanceUsersState.users : usersState.users;
+  const loading = isMaintenanceChat ? maintenanceUsersState.loading : usersState.loading;
+  const loadingMore = isMaintenanceChat ? false : usersState.loadingMore;
+  const hasMore = isMaintenanceChat ? false : usersState.hasMore;
+  const page = usersState.page;
+  const limit = usersState.limit;
+  // Ensure we never use an invalid or cached -1 limit for pagination.
+  // Fallback to a sane default page size (e.g. 25) when limit is <= 0 or falsy.
+  const DEFAULT_PAGE_SIZE = 25;
+  const pageSize =
+    typeof limit === "number" && limit > 0 ? limit : DEFAULT_PAGE_SIZE;
+  const hasLoaded = isMaintenanceChat ? maintenanceUsersState.hasLoaded : usersState.hasLoaded;
+
+  const updateLastMessageAction = isMaintenanceChat ? updateMaintenanceUserLastMessage : updateUserLastMessage;
+  // console.log(users);
+=======
 import { fetchChatThreads, fetchMoreChatThreads, markThreadReadOptimistic } from "../store/slices/chatThreadsSlice";
 import ChatListItem from "./ChatListItem";
 import SkeletonLoader from "./skeletons/Skeleton";
@@ -11,12 +65,27 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const { threads, loading, loadingMore, hasMore, page, limit, lastSearch } = useAppSelector(
     (state) => state.chatThreads
   );
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
   const [search, setSearch] = useState("");
-  const [searchDebounced, setSearchDebounced] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState([]); // Array of selected categories: ["F", "D", "C"]
+  const [statusFilter, setStatusFilter] = useState("all"); // "all" | "seen" | "unseen"
+  const [isStatusPopoverOpen, setIsStatusPopoverOpen] = useState(false);
   const observerTarget = useRef(null);
+<<<<<<< HEAD
+  const [unreadCounts, setUnreadCounts] = useState({});
+  const unsubscribeUnreadRefs = useRef({});
+  const unsubscribeLastMessageRefs = useRef({});
+  const unsubscribeSummaryRefs = useRef({});
+
+  const subscribeUnreadCount = chatApi?.subscribeUnreadCount;
+  const subscribeLastMessage =
+    chatApi?.subscribeLastMessage || defaultSubscribeLastMessage;
+  const subscribeChatSummary = chatApi?.subscribeChatSummary;
+=======
   const hasInitiallyFetched = useRef(false);
   const threadType = chatApi?.chatType ?? "general";
   const markThreadRead = chatApi?.markThreadRead || defaultMarkThreadRead;
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
 
   function getDriverId(driver) {
     const candidate =
@@ -32,9 +101,25 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       return null;
     }
 
-    return candidate;
+    const normalizedId = String(candidate).trim();
+    return normalizedId || null;
   }
 
+<<<<<<< HEAD
+  // Initial fetch: maintenance chat uses fetchMaintenanceUsers (GET /admin/fetchmaintenanceusers), regular chat uses fetchUsers.
+  useEffect(() => {
+    if (isMaintenanceChat) {
+      if (!hasLoaded && !loading) {
+        dispatch(fetchMaintenanceUsers({ limit: -1 }));
+      }
+    } else {
+      if (!hasLoaded && !loading) {
+        // Fetch a single, paginated first page using the safe pageSize.
+        dispatch(fetchUsers({ page: 1, limit: pageSize }));
+      }
+    }
+  }, [dispatch, isMaintenanceChat, hasLoaded, loading, pageSize]);
+=======
   function normalizeTimestamp(value) {
     if (!value) return null;
 
@@ -78,9 +163,45 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       dispatch(fetchChatThreads({ page: 1, limit, type: threadType }));
     }
   }, [dispatch, limit, loading, threadType]);
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
 
-  // Refetch when search changes
+  // Auto-load remaining regular-chat pages in the background so that
+  // ordering becomes globally correct without requiring manual scroll.
   useEffect(() => {
+<<<<<<< HEAD
+    // Only apply this behavior to regular chat.
+    if (isMaintenanceChat) return;
+
+    // Wait until the first page has loaded.
+    if (!hasLoaded || loading) return;
+
+    // If there are no more pages or we're already loading more, do nothing.
+    if (!hasMore || loadingMore) return;
+
+    // Schedule a single background page load.
+    const timeoutId = setTimeout(() => {
+      const nextPage = page + 1;
+      dispatch(fetchMoreUsers({ page: nextPage, limit: pageSize })).catch(
+        (error) => {
+          console.error("Background fetchMoreUsers failed:", error);
+        }
+      );
+    }, 50);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [
+    dispatch,
+    isMaintenanceChat,
+    hasLoaded,
+    loading,
+    hasMore,
+    loadingMore,
+    page,
+    pageSize,
+  ]);
+=======
     // Only refetch if search actually changed (using strict comparison)
     const searchValue = searchDebounced.trim() || undefined;
     const lastSearchValue = lastSearch !== undefined ? lastSearch : undefined;
@@ -89,6 +210,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       dispatch(fetchChatThreads({ page: 1, limit, search: searchValue, type: threadType }));
     }
   }, [dispatch, limit, searchDebounced, lastSearch, loading, threadType]);
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
 
   // Infinite scroll observer - prevent duplicate calls
   const isLoadingRef = useRef(false);
@@ -97,12 +219,20 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     if (hasMore && !loadingMore && !loading && !isLoadingRef.current) {
       isLoadingRef.current = true;
       const nextPage = page + 1;
+<<<<<<< HEAD
+      dispatch(fetchMoreUsers({ page: nextPage, limit: pageSize })).finally(() => {
+        isLoadingRef.current = false;
+      });
+    }
+  }, [dispatch, hasMore, loadingMore, loading, page, pageSize]);
+=======
       const searchValue = searchDebounced.trim() || undefined;
       dispatch(fetchMoreChatThreads({ page: nextPage, limit, search: searchValue, type: threadType })).finally(() => {
         isLoadingRef.current = false;
       });
     }
   }, [dispatch, hasMore, loadingMore, loading, page, limit, searchDebounced, threadType]);
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
 
   useEffect(() => {
     // Only set up observer if we have more to load and not currently loading
@@ -134,9 +264,201 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     };
   }, [handleLoadMore, hasMore, loadingMore, loading]);
 
+<<<<<<< HEAD
+
+  useEffect(() => {
+    // If chatApi doesn't provide subscribeChatSummary, skip this effect.
+    if (!subscribeChatSummary || !users?.length) return;
+
+    users.forEach((u) => {
+      const userId = getDriverId(u);
+      if (!userId) return;
+
+      if (unsubscribeSummaryRefs.current[userId]) return;
+
+      const unsubscribe = subscribeChatSummary(u, (summary) => {
+        const lastMessage = summary?.lastMessage || null;
+        const unreadCount = summary?.unreadCount ?? 0;
+
+        let lastMessageText =
+          lastMessage?.content?.message ||
+          lastMessage?.message ||
+          (lastMessage?.content ? "" : "");
+
+        if (!lastMessageText || lastMessageText.trim() === "") {
+          const attachmentUrl =
+            lastMessage?.content?.attachmentUrl ||
+            lastMessage?.attachmentUrl ||
+            "";
+          if (attachmentUrl && attachmentUrl.trim() !== "") {
+            lastMessageText = "Attachment";
+          }
+        }
+
+        const lastChatTime = lastMessage?.dateTime || null;
+
+        dispatch(
+          updateLastMessageAction({
+            userid: userId,
+            lastMessage: lastMessageText || "",
+            lastChatTime,
+          })
+        );
+
+        setUnreadCounts((prev) => ({
+          ...prev,
+          [userId]: unreadCount,
+        }));
+      });
+
+      unsubscribeSummaryRefs.current[userId] = unsubscribe;
+    });
+
+    return () => {
+      const currentUserIds = new Set(
+        users.map((u) => getDriverId(u)).filter(Boolean)
+      );
+
+      Object.keys(unsubscribeSummaryRefs.current).forEach((userId) => {
+        if (!currentUserIds.has(userId)) {
+          const unsubscribe = unsubscribeSummaryRefs.current[userId];
+          if (typeof unsubscribe === "function") {
+            unsubscribe();
+          }
+          delete unsubscribeSummaryRefs.current[userId];
+
+          setUnreadCounts((prev) => {
+            const next = { ...prev };
+            delete next[userId];
+            return next;
+          });
+        }
+      });
+    };
+  }, [users, subscribeChatSummary, dispatch, updateLastMessageAction]);
+
+  // Subscribe to latest-message updates so ordering refreshes for both driver and admin sends
+  useEffect(() => {
+    // If we have subscribeChatSummary, we skip this path.
+    if (subscribeChatSummary) return;
+    if (!subscribeLastMessage || !users?.length) return;
+
+    users.forEach((u) => {
+      const userId = getDriverId(u);
+      if (!userId) return;
+      if (unsubscribeLastMessageRefs.current[userId]) return;
+
+      const unsubscribe = subscribeLastMessage(u, (lastMessage) => {
+        let lastMessageText =
+          lastMessage?.content?.message ||
+          lastMessage?.message ||
+          (lastMessage?.content ? "" : "");
+
+        if (!lastMessageText || lastMessageText.trim() === "") {
+          const attachmentUrl =
+            lastMessage?.content?.attachmentUrl ||
+            lastMessage?.attachmentUrl ||
+            "";
+          if (attachmentUrl && attachmentUrl.trim() !== "") {
+            lastMessageText = "Attachment";
+          }
+        }
+
+        const lastChatTime = lastMessage?.dateTime || null;
+
+        dispatch(
+          updateLastMessageAction({
+            userid: userId,
+            lastMessage: lastMessageText || "",
+            lastChatTime: lastChatTime,
+          })
+        );
+      });
+
+      unsubscribeLastMessageRefs.current[userId] = unsubscribe;
+    });
+
+    const subscriptionsRef = unsubscribeLastMessageRefs.current;
+
+    return () => {
+      const currentUserIds = new Set(
+        users.map((u) => getDriverId(u)).filter(Boolean)
+      );
+      Object.keys(subscriptionsRef).forEach((userId) => {
+        if (!currentUserIds.has(userId)) {
+          const unsubscribe = subscriptionsRef[userId];
+          if (unsubscribe) {
+            unsubscribe();
+            delete subscriptionsRef[userId];
+          }
+        }
+      });
+    };
+  }, [users, subscribeLastMessage, dispatch, updateLastMessageAction, subscribeChatSummary]);
+
+  const showInitialLoader = loading && !hasLoaded && users.length === 0;
+
+  // Subscribe to unread counts for all users
+  useEffect(() => {
+    // If we have subscribeChatSummary, it already provides unreadCount.
+    if (subscribeChatSummary) return;
+    if (!subscribeUnreadCount || !users?.length) return;
+
+    // Subscribe to unread counts for each user
+    users.forEach((u) => {
+      const userId = getDriverId(u);
+      if (!userId) return;
+
+      // If already subscribed, skip
+      if (unsubscribeUnreadRefs.current[userId]) return;
+
+      // Subscribe to unread count changes
+      const unsubscribe = subscribeUnreadCount(u, (count) => {
+        setUnreadCounts((prev) => ({
+          ...prev,
+          [userId]: count,
+        }));
+      });
+
+      unsubscribeUnreadRefs.current[userId] = unsubscribe;
+    });
+
+    // Cleanup: unsubscribe from users that are no longer in the list
+    const subscriptionsRef = unsubscribeUnreadRefs.current;
+
+    return () => {
+      const currentUserIds = new Set(users.map((u) => getDriverId(u)).filter(Boolean));
+
+      Object.keys(subscriptionsRef).forEach((userId) => {
+        if (!currentUserIds.has(userId)) {
+          const unsubscribe = subscriptionsRef[userId];
+          if (unsubscribe) {
+            unsubscribe();
+            delete subscriptionsRef[userId];
+          }
+          // Remove from unread counts
+          setUnreadCounts((prev) => {
+            const next = { ...prev };
+            delete next[userId];
+            return next;
+          });
+        }
+      });
+    };
+  }, [users, subscribeUnreadCount, subscribeChatSummary]);
+
+
+=======
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
   // Transform users from Redux to drivers format
+  // Redux already preserves all users, so we use it directly
   const drivers = useMemo(() => {
+<<<<<<< HEAD
+    if (!users?.length) return [];
+   
+=======
     if (!threads?.length) return [];
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
 
     return threads
       .map((thread) => {
@@ -144,10 +466,39 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         if (!userId) {
           return null;
         }
+        
+        // console.log(u.last_chat_time);
 
         const lastMessage = thread?.lastMessage || {};
         return {
           userid: userId,
+<<<<<<< HEAD
+          driver_name: u.name || u.driver_name,
+          email: u.email || null,
+          phone: u.phone || null,
+          driver_image: u.profilePic || u.image || null,
+          lastSeen: u.lastSeen || null,
+          last_message: u.last_message || "",
+          last_chat_time: u.last_chat_time || null,
+          unreadCount: unreadCounts[userId] || 0,
+          category: u.category || null, // Include category field
+        };
+      })
+      .filter(Boolean);
+
+    // SORT by last MESSAGE time only (last_chat_time). Do NOT use lastSeen.
+    const driversWithIds = withLastChat.filter(Boolean);
+    driversWithIds.sort((a, b) => {
+      const timeA = a.last_chat_time ? new Date(a.last_chat_time).getTime() : 0;
+      const timeB = b.last_chat_time ? new Date(b.last_chat_time).getTime() : 0;
+      if (timeB !== timeA) return timeB - timeA; // newest message first
+      return (a.userid || "").localeCompare(b.userid || ""); // stable order when same time
+    });
+   
+
+    return driversWithIds;
+  }, [users, unreadCounts]);
+=======
           driver_name: thread?.name || thread?.driver_name,
           driver_image: thread?.avatarUrl || thread?.driver_image || null,
           phone: thread?.phone ?? null,
@@ -160,11 +511,50 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       })
       .filter(Boolean);
   }, [threads]);
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
 
-  // No client-side filtering - API handles search
-  const filtered = drivers;
+  // Client-side filtering - filter by search, category, and seen/unseen
+  const filtered = useMemo(() => {
+    // Create a copy of the drivers array to avoid mutating the original
+    let driversCopy = [...drivers];
+
+    // Filter by seen/unseen status
+    if (statusFilter === "seen") {
+      driversCopy = driversCopy.filter((driver) => (driver.unreadCount || 0) === 0);
+    } else if (statusFilter === "unseen") {
+      driversCopy = driversCopy.filter((driver) => (driver.unreadCount || 0) > 0);
+    }
+
+    // Filter by category (multiple categories allowed)
+    if (categoryFilter.length > 0) {
+      driversCopy = driversCopy.filter((driver) => {
+        return categoryFilter.includes(driver.category);
+      });
+    }
+
+    // Then filter by search term (case-insensitive)
+    if (search && search.trim()) {
+      const searchTerm = search.toLowerCase().trim();
+      driversCopy = driversCopy.filter((driver) => {
+        const driverName = (driver.driver_name || "").toLowerCase();
+        return driverName.includes(searchTerm);
+      });
+    }
+
+    return driversCopy;
+  }, [drivers, search, categoryFilter, statusFilter]);
+  
   const selectedDriverId = getDriverId(selectedDriver);
 
+<<<<<<< HEAD
+  useEffect(() => {
+    if (!isMaintenanceChat) return;
+    if (selectedDriverId) return;
+    if (!drivers.length) return;
+
+    onSelectDriver(drivers[0]);
+  }, [drivers, isMaintenanceChat, onSelectDriver, selectedDriverId]);
+=======
   const handleSelectDriver = async (driver) => {
     const driverId = getDriverId(driver);
     onSelectDriver(driver);
@@ -180,28 +570,149 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       dispatch(fetchChatThreads({ page: 1, limit, search: searchValue, type: threadType }));
     }
   };
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
 
   return (
     <div className="h-full flex flex-col">
       {/* 🔍 SEARCH BAR (STICKY) */}
-      <div className="p-5 border-b border-gray-700 sticky top-0 bg-[#0d1117] z-20">
-        <Input
-          type="text"
-          placeholder="Search drivers..."
-          className="w-full bg-[#1f2937]"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+      <div className="p-5 border-b border-gray-700 sticky top-0 bg-[#0d1117] z-20 space-y-3">
+        <div className="flex items-center justify-center gap-3">
+          <Input
+            type="text"
+            placeholder="Search drivers..."
+            className="flex-1 max-w-md bg-[#1f2937]"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+
+          {/* Category Filters */}
+          <div className="flex items-center gap-2">
+            {["C", "D", "F"].map((cat) => {
+              const isSelected = categoryFilter.includes(cat);
+              return (
+                <Button
+                  key={cat}
+                  onClick={() => {
+                    if (isSelected) {
+                      // Remove category from filter
+                      setCategoryFilter(categoryFilter.filter((c) => c !== cat));
+                    } else {
+                      // Add category to filter
+                      setCategoryFilter([...categoryFilter, cat]);
+                    }
+                  }}
+                  variant={isSelected ? "default" : "outline"}
+                  size="sm"
+                  className={`min-w-[36px] h-8 text-xs border-0 ${
+                    isSelected
+                      ? "bg-[#0066ff50] text-white hover:bg-[#1a5ed45c]"
+                      : "bg-[#161b22] text-gray-300 hover:bg-[#1d232a]"
+                  }`}
+                >
+                  {cat}
+                </Button>
+              );
+            })}
+
+            <Popover open={isStatusPopoverOpen} onOpenChange={setIsStatusPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-8 w-8 rounded-full border border-transparent hover:border-white/10 hover:bg-white/5",
+                    statusColorClass[statusFilter]
+                  )}
+                  aria-label={`Status filter: ${statusFilter}`}
+                  title={`Status: ${statusFilter}`}
+                >
+                  <span className="relative">
+                    <Eye className="h-4 w-4" />
+                    {statusFilter !== "all" && (
+                      <span
+                        className={cn(
+                          "absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full",
+                          statusFilter === "seen" ? "bg-emerald-400" : "bg-amber-400"
+                        )}
+                      />
+                    )}
+                  </span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                side="bottom"
+                className="w-36 p-1 bg-[#0b1220] border border-white/10 text-white shadow-xl"
+              >
+                {STATUS_OPTIONS.map((opt) => {
+                  const isActive = statusFilter === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        setStatusFilter(opt.value);
+                        setIsStatusPopoverOpen(false);
+                      }}
+                      className={cn(
+                        "w-full text-left px-2 py-2 rounded-md text-sm flex items-center justify-between",
+                        "hover:bg-white/5",
+                        isActive && "bg-white/10"
+                      )}
+                    >
+                      <span>{opt.label}</span>
+                      {isActive && (
+                        <span
+                          className={cn(
+                            "h-2 w-2 rounded-full",
+                            opt.value === "all"
+                              ? "bg-slate-400"
+                              : opt.value === "seen"
+                              ? "bg-emerald-400"
+                              : "bg-amber-400"
+                          )}
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </PopoverContent>
+            </Popover>
+
+            <Button
+              onClick={() => {
+                // Navigate to broadcast page
+                window.location.href = '/broadcast';
+              }}
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-full border border-transparent hover:border-white/10 hover:bg-white/5 text-blue-400"
+              aria-label="Send broadcast"
+              title="Send broadcast message"
+            >
+              <FaBullhorn className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* 📜 DRIVER LIST (ONLY THIS SCROLLS) */}
       <div className="flex-1 overflow-y-auto chat-list-scroll">
+<<<<<<< HEAD
+        {/* Show loading skeleton only during the very first users fetch */}
+        {showInitialLoader && (
+          <SkeletonLoader count={10} />
+        )}
+=======
         {/* Initial loading skeleton - only show on first load */}
         {loading && drivers.length === 0 && <SkeletonLoader count={10} />}
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
 
-        {/* Show list items - even when loading more */}
-        {!loading && filtered.length > 0 && (
-          <>
+        {/* Show list immediately after users are loaded; message preview hydration runs in background */}
+        {!showInitialLoader && filtered.length > 0 && (
+          <motion.div layout className="flex flex-col">
             {filtered.map((driver) => (
               <ChatListItem
                 key={driver.userid}
@@ -210,9 +721,13 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
                 onClick={() => handleSelectDriver(driver)}
               />
             ))}
-          </>
+          </motion.div>
         )}
 
+<<<<<<< HEAD
+        {/* Infinite scroll trigger - only show when hasMore (disabled since we fetch all) */}
+        {hasMore && !showInitialLoader && (
+=======
         {/* Show existing items while loading more */}
         {loading && drivers.length > 0 && (
           <>
@@ -229,6 +744,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
 
         {/* Infinite scroll trigger - only show when hasMore */}
         {hasMore && !loading && (
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
           <div 
             ref={observerTarget} 
             className="h-16 flex items-center justify-center py-2"
@@ -245,14 +761,25 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         )}
 
         {/* Empty state */}
+<<<<<<< HEAD
+        {!showInitialLoader && users.length === 0 && filtered.length === 0 && (
+=======
         {!loading && drivers.length === 0 && filtered.length === 0 && (
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
           <p className="text-center text-gray-500 text-sm mt-4">
             No drivers found
           </p>
         )}
+        {!showInitialLoader && users.length > 0 && filtered.length === 0 && (
+          <p className="text-center text-gray-500 text-sm mt-4">
+            {statusFilter === "seen" && "No seen chats"}
+            {statusFilter === "unseen" && "No unseen chats"}
+            {statusFilter === "all" && "No matching chats"}
+          </p>
+        )}
 
         {/* No more to load */}
-        {!hasMore && !loading && !loadingMore && filtered.length > 0 && (
+        {!hasMore && !showInitialLoader && !loadingMore && filtered.length > 0 && (
           <p className="text-center text-gray-500 text-xs mt-2 py-2">
             All drivers loaded
           </p>

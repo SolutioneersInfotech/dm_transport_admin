@@ -16,6 +16,7 @@ export default function Login() {
   const { isAuthenticated, login } = useAuth();
 
   useEffect(() => {
+    // Navigate when authenticated (even if loading, as login is complete)
     if (isAuthenticated) {
       navigate("/", { replace: true });
     }
@@ -37,16 +38,30 @@ export default function Login() {
 
       if (!res.ok) {
         setError(data.message || "Invalid credentials");
+        setLoading(false);
         return;
       }
 
-      login(data.admin, data.token);
-      navigate("/", { replace: true });
+      // Wait for login to complete (including token validation)
+      await login(data.admin, data.token);
+      // Navigation will happen automatically via useEffect when isAuthenticated becomes true
+      // No need to navigate manually here
     } catch {
       setError("Something went wrong. Please try again.");
-    } finally {
       setLoading(false);
     }
+  }
+
+  // Show full-screen loading overlay when loading
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#101418] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-gray-600 border-t-[#1f6feb] rounded-full animate-spin"></div>
+          <p className="text-gray-400 text-sm">Authenticating...</p>
+        </div>
+      </div>
+    );
   }
 
   return (

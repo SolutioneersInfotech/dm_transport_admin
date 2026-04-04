@@ -53,15 +53,21 @@ export const deleteChatHistoryRoute = `${baseBackendUrl}/deletechathistory`;
 export const deleteSpecificChatRoute = `${baseBackendUrl}/deletespecificchats`;
 
 // Document routes
-export const fetchDocumentsRoute = (startDate, endDate, options = {}) => {
+export const fetchDocumentsRoute = ({ startDateTimeUtc, endDateTimeUtc } = {}, options = {}) => {
   const baseUrl = `${baseBackendUrl}/fetchdocuments`;
   const params = new URLSearchParams();
 
   // Required parameters
+<<<<<<< HEAD
+  if (startDateTimeUtc && endDateTimeUtc) {
+    params.append("startDateTimeUtc", startDateTimeUtc);
+    params.append("endDateTimeUtc", endDateTimeUtc);
+=======
   if (startDate && endDate) {
     params.append("start_date", startDate);
     params.append("end_date", endDate);
     params.append("tz_offset", String(new Date().getTimezoneOffset()));
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
   }
 
   // Pagination
@@ -87,9 +93,12 @@ export const fetchDocumentsRoute = (startDate, endDate, options = {}) => {
     params.append("isFlagged", options.isFlagged);
   }
 
-  // Category filter (document type) - single value
-  if (options.category) {
-    params.append("category", options.category);
+  // Category filter - send as array: repeated param (category=C&category=D)
+  if (options.category != null && options.category !== "") {
+    const arr = Array.isArray(options.category)
+      ? options.category.filter(Boolean).map((c) => String(c).trim())
+      : String(options.category).trim().split(/\s*,\s*/).filter(Boolean);
+    arr.forEach((c) => params.append("category", c));
   }
 
   // Type filters (multiple document types) - for backward compatibility
@@ -104,16 +113,64 @@ export const fetchDocumentsRoute = (startDate, endDate, options = {}) => {
   return queryString ? `${baseUrl}?${queryString}` : baseUrl;
 };
 
+export const fetchDocumentsHeadRoute = ({ startDateTimeUtc, endDateTimeUtc } = {}, options = {}) => {
+  const baseUrl = `${baseBackendUrl}/fetchdocumentshead`;
+  const params = new URLSearchParams();
+
+  if (startDateTimeUtc && endDateTimeUtc) {
+    params.append("startDateTimeUtc", startDateTimeUtc);
+    params.append("endDateTimeUtc", endDateTimeUtc);
+  }
+
+  if (options.limit) {
+    params.append("limit", options.limit);
+  }
+
+  if (options.search !== undefined) {
+    params.append("search", options.search || "");
+  }
+
+  if (options.isSeen !== undefined && options.isSeen !== null) {
+    params.append("isSeen", options.isSeen);
+  }
+
+  if (options.isFlagged !== undefined && options.isFlagged !== null) {
+    params.append("isFlagged", options.isFlagged);
+  }
+
+  if (options.category != null && options.category !== "") {
+    const arr = Array.isArray(options.category)
+      ? options.category.filter(Boolean).map((c) => String(c).trim())
+      : String(options.category).trim().split(/\s*,\s*/).filter(Boolean);
+    arr.forEach((c) => params.append("category", c));
+  }
+
+  if (options.filters && Array.isArray(options.filters) && options.filters.length > 0) {
+    options.filters.forEach((filter) => {
+      params.append("type", filter);
+    });
+  }
+
+  const queryString = params.toString();
+  return queryString ? `${baseUrl}?${queryString}` : baseUrl;
+};
+
 // Document count route
-export const fetchDocumentCountRoute = (startDate, endDate, options = {}) => {
+export const fetchDocumentCountRoute = ({ startDateTimeUtc, endDateTimeUtc } = {}, options = {}) => {
   const baseUrl = `${baseBackendUrl}/fetchdocumentcount`;
   const params = new URLSearchParams();
 
   // Required parameters
+<<<<<<< HEAD
+  if (startDateTimeUtc && endDateTimeUtc) {
+    params.append("startDateTimeUtc", startDateTimeUtc);
+    params.append("endDateTimeUtc", endDateTimeUtc);
+=======
   if (startDate && endDate) {
     params.append("start_date", startDate);
     params.append("end_date", endDate);
     params.append("tz_offset", String(new Date().getTimezoneOffset()));
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
   }
 
   // Status filters
@@ -124,6 +181,23 @@ export const fetchDocumentCountRoute = (startDate, endDate, options = {}) => {
   // Flagged filter
   if (options.isFlagged !== undefined && options.isFlagged !== null) {
     params.append("isFlagged", options.isFlagged);
+  }
+
+  if (options.search !== undefined) {
+    params.append("search", options.search || "");
+  }
+
+  if (options.category != null && options.category !== "") {
+    const arr = Array.isArray(options.category)
+      ? options.category.filter(Boolean).map((c) => String(c).trim())
+      : String(options.category).trim().split(/\s*,\s*/).filter(Boolean);
+    arr.forEach((c) => params.append("category", c));
+  }
+
+  if (options.filters && Array.isArray(options.filters) && options.filters.length > 0) {
+    options.filters.forEach((filter) => {
+      params.append("type", filter);
+    });
   }
 
   const queryString = params.toString();
@@ -143,9 +217,56 @@ export const fetchDocumentByIdRoute = (documentId, type) => {
   return `${baseUrl}?${params.toString()}`;
 };
 
+// Update document route
+export const updateDocumentRoute = `${baseBackendUrl}/updateDocument`;
+export const deleteDocumentsRoute = `${baseBackendUrl}/deletedocuments`;
+
+// Change document type route
+export const changeDocumentTypeRoute = `${baseBackendUrl}/changedocumenttype`;
+
+// Acknowledgement routes
+export const fetchAcknowledgementsRoute = `${baseBackendUrl}/fetchchatacknowledgement`;
+export const createAcknowledgementRoute = `${baseBackendUrl}/createchatacknowledgement`;
+export const updateAcknowledgementRoute = `${baseBackendUrl}/updatechatacknowledgement`;
+export const deleteAcknowledgementRoute = `${baseBackendUrl}/deletechatacknowledgement`;
+export const sendPushNotificationRoute = `${baseBackendUrl}/sendpushnotification`;
+
 // Maintenance chat routes
+export const fetchMaintenanceUsersRoute = (limit = -1, search = undefined) => {
+  const baseUrl = `${baseBackendUrl}/fetchmaintenanceusers`;
+  const params = new URLSearchParams();
+  params.append("limit", limit);
+  if (search !== undefined) {
+    params.append("search", search);
+  }
+  return `${baseUrl}?${params.toString()}`;
+};
 export const maintenanceFetchUsersRoute = `${baseBackendUrl}/fetchusers`;
 export const maintenanceFetchChatHistoryRoute = (userid) => `${baseBackendUrl}/fetchchathistory?userid=${userid}`;
 export const maintenanceSendChatMessageRoute = `${baseBackendUrl}/sendchatmessage`;
 export const maintenanceDeleteChatHistoryRoute = `${baseBackendUrl}/deletechathistory`;
 export const maintenanceDeleteSpecificChatRoute = `${baseBackendUrl}/deletespecificchats`;
+
+// Driver routes
+export const fetchDriverCountRoute = (options = {}) => {
+  const baseUrl = `${baseBackendUrl}/fetchdrivercount`;
+  const params = new URLSearchParams();
+
+  if (options.search !== undefined) {
+    params.append("search", options.search);
+  }
+
+  if (options.status && options.status !== "all") {
+    params.append("status", options.status);
+  }
+
+  if (options.category && options.category !== "all") {
+    params.append("category", options.category);
+  }
+
+  const queryString = params.toString();
+  return queryString ? `${baseUrl}?${queryString}` : baseUrl;
+};
+
+// Broadcast routes
+export const broadcastRoute = `${baseBackendUrl}/broadcast`;

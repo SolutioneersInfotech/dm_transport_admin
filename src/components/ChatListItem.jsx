@@ -26,7 +26,30 @@
 
 // export default ChatListItem;
 
+import { motion } from "framer-motion";
+
+function formatLastChatTime(isoString) {
+  if (!isoString) return "";
+  const d = new Date(isoString);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const msgDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+  if (msgDate.getTime() === today.getTime()) {
+    return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: true });
+  }
+  if (msgDate.getTime() === yesterday.getTime()) {
+    return "Yesterday";
+  }
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+}
+
 const ChatListItem = ({ driver, onClick, isSelected }) => {
+<<<<<<< HEAD
+  const time = formatLastChatTime(driver.last_chat_time);
+=======
   const time = (() => {
     if (!driver.last_chat_time) {
       return "";
@@ -42,15 +65,26 @@ const ChatListItem = ({ driver, onClick, isSelected }) => {
       month: "short",
     });
   })();
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
 
   const unreadCount = driver.unreadCount || 0;
+  const itemStateClass = isSelected
+    ? "bg-[#253243] ring-1 ring-inset ring-[#4c8dff]"
+    : unreadCount > 0
+    ? "bg-[#1d232a]"
+    : "";
 
   return (
-    <div
+    <motion.div
+      layout
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{
+        layout: { type: "spring", stiffness: 350, damping: 30 },
+        opacity: { duration: 0.2 },
+      }}
       onClick={onClick}
-      className={`flex items-center gap-3 p-3 cursor-pointer hover:bg-[#1b222c] ${
-        isSelected ? "bg-[#1b222c]" : ""
-      } ${unreadCount > 0 ? "bg-[#1d232a]" : ""}`}
+      className={`flex items-center gap-3 p-3 cursor-pointer transition-colors hover:bg-[#1b222c] ${itemStateClass}`}
     >
       <div className="relative">
       <img
@@ -76,19 +110,21 @@ const ChatListItem = ({ driver, onClick, isSelected }) => {
         <p className={`text-xs truncate ${
           unreadCount > 0 ? "text-gray-300 font-medium" : "text-gray-400"
         }`}>
-          {driver.last_message || "No messages yet"}
+          {driver.last_message && driver.last_message.trim() !== ""
+            ? driver.last_message
+            : "—"}
         </p>
       </div>
 
-      <div className="flex flex-col items-end gap-1">
-      <span className="text-[10px] text-gray-500 whitespace-nowrap">
-        {time}
-      </span>
+      <div className="flex flex-col items-end gap-0.5">
+        <span className="text-[10px] text-gray-500 whitespace-nowrap">
+          {time}
+        </span>
         {unreadCount > 0 && (
-          <div className="w-2 h-2 bg-[#1f6feb] rounded-full"></div>
+          <div className="w-2 h-2 bg-[#1f6feb] rounded-full mt-0.5"></div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 };
 

@@ -185,8 +185,12 @@
 //   );
 // }
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
+import { useLocation } from "react-router-dom";
+import { ChevronDown, Copy, Download, FileText, Image, Mail, Megaphone, Paperclip, Phone, Trash2, Video, X } from "lucide-react";
 import {
+  fetchMessages as defaultFetchMessages,
   subscribeMessages as defaultSubscribeMessages,
   sendMessage as defaultSendMessage,
   deleteChatHistory as defaultDeleteChatHistory,
@@ -194,17 +198,26 @@ import {
 } from "../services/chatAPI";
 
 import ChatMessageBubble from "./ChatMessageBubble";
+import FilePreviewModal from "./FilePreviewModal";
 import { groupMessagesByDate } from "../utils/groupMessages";
-import ChatWindowSkeleton from "./skeletons/ChatWindowSkeleton";
+import ConversationListShimmer from "./skeletons/ConversationListShimmer";
+import { useAuth } from "../context/AuthContext";
+import { useAppDispatch } from "../store/hooks";
+import { updateUserLastMessage } from "../store/slices/usersSlice";
+import { updateMaintenanceUserLastMessage } from "../store/slices/maintenanceUsersSlice";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+import { Checkbox } from "./ui/checkbox";
+import { toast } from "sonner";
+import { ADMIN_PERMISSION_KEYS, hasAdminPermission } from "../utils/adminPermissions";
+import { sendBroadcast } from "../services/broadcastAPI";
 
 /* ================= LAST SEEN FORMATTER ================= */
 function formatLastSeen(lastSeen) {
-  if (!lastSeen || !lastSeen._seconds) return "Recently";
-
-  const date = new Date(lastSeen._seconds * 1000);
-
+  if (!lastSeen) return "Recently";
+  const sec = lastSeen._seconds ?? lastSeen.seconds;
+  const date = sec != null ? new Date(sec * 1000) : new Date(lastSeen);
+  if (Number.isNaN(date.getTime())) return "Recently";
   return date.toLocaleString("en-GB", {
     day: "2-digit",
     month: "short",
@@ -213,11 +226,131 @@ function formatLastSeen(lastSeen) {
   });
 }
 
-export default function ChatWindow({ driver, chatApi }) {
+function parseTimestampMs(value) {
+  if (!value) return null;
+
+  const sec = value?._seconds ?? value?.seconds;
+  if (typeof sec === "number") {
+    const ms = sec * 1000;
+    return Number.isFinite(ms) ? ms : null;
+  }
+
+  const direct = new Date(value).getTime();
+  return Number.isNaN(direct) ? null : direct;
+}
+
+
+function resolveReplyTargetId(message) {
+  if (!message) return null;
+
+  if (typeof message.replyToId === "string" && message.replyToId.trim()) {
+    return message.replyToId;
+  }
+
+  if (typeof message.replyTo === "string" && message.replyTo.trim()) {
+    return message.replyTo;
+  }
+
+  const nestedId = message.replyTo?.id ?? message.replyTo?.msgId ?? null;
+  return typeof nestedId === "string" && nestedId.trim() ? nestedId : null;
+}
+
+export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
+  const { user } = useAuth();
+  const dispatch = useAppDispatch();
+  const location = useLocation();
+  const isMaintenanceChat = location.pathname === "/maintenance-chat";
+  const updateLastMessageAction = isMaintenanceChat ? updateMaintenanceUserLastMessage : updateUserLastMessage;
+
+  const adminId = user?.userid || user?.userId || "admin";
+  const canDeleteAllMessages = useMemo(
+    () => hasAdminPermission(user?.permissions, ADMIN_PERMISSION_KEYS.deleteMultipleUsersChart),
+    [user?.permissions]
+  );
   const [messages, setMessages] = useState([]);
   const [selected, setSelected] = useState([]);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [replyTo, setReplyTo] = useState(null);
   const [text, setText] = useState("");
+  const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [showFilePreview, setShowFilePreview] = useState(false);
+  const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
+  const [lightboxMedia, setLightboxMedia] = useState(null);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [deleteActionType, setDeleteActionType] = useState(null);
+  const [isDeleteInProgress, setIsDeleteInProgress] = useState(false);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [showBroadcastDialog, setShowBroadcastDialog] = useState(false);
+  const [broadcastMessage, setBroadcastMessage] = useState("");
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const buildChatMediaFileName = useCallback((url, sender, dateTime) => {
+    const safeSender = String(sender || "unknown_sender")
+      .trim()
+      .replace(/\s+/g, "_")
+      .replace(/[^a-zA-Z0-9_-]/g, "") || "unknown_sender";
+
+    const dt = dateTime ? new Date(dateTime) : new Date();
+    const safeDateTime = Number.isNaN(dt.getTime())
+      ? new Date().toISOString().replace(/[:.]/g, "-")
+      : dt.toISOString().replace(/[:.]/g, "-");
+
+    let extension = "jpg";
+    try {
+      const pathName = new URL(url).pathname || "";
+      const fileName = pathName.split("/").pop() || "";
+      const fromPath = fileName.includes(".") ? fileName.split(".").pop() : "";
+      if (fromPath) {
+        extension = fromPath.toLowerCase();
+      }
+    } catch {
+      const directMatch = String(url || "").match(/\.([a-zA-Z0-9]+)(?:\?|$)/);
+      if (directMatch?.[1]) {
+        extension = directMatch[1].toLowerCase();
+      }
+    }
+
+    return `chat_media_${safeSender}_${safeDateTime}.${extension}`;
+  }, []);
+
+  const downloadChatMedia = useCallback(async (url, senderName, dateTime) => {
+    if (!url) return;
+
+    try {
+      const response = await fetch(url, { mode: "cors" });
+      if (!response.ok) {
+        throw new Error(`Download failed with status ${response.status}`);
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = buildChatMediaFileName(
+        url,
+        senderName,
+        dateTime
+      );
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (error) {
+      console.error("Failed to download chat media:", error);
+    }
+  }, [buildChatMediaFileName]);
+
+  const handleLightboxDownload = useCallback(async () => {
+    if (!lightboxMedia?.url) return;
+
+    await downloadChatMedia(
+      lightboxMedia.url,
+      lightboxMedia.senderName,
+      lightboxMedia.dateTime
+    );
+  }, [downloadChatMedia, lightboxMedia]);
   const driverId = (() => {
     const candidate =
       driver?.userid ??
@@ -232,18 +365,43 @@ export default function ChatWindow({ driver, chatApi }) {
       return null;
     }
 
-    return candidate;
+    const numericOnly = String(candidate).replace(/\D/g, "");
+    return numericOnly || null;
   })();
 
+  const messageSubscriptionTarget = useMemo(() => {
+    if (!driverId) return null;
+
+    return {
+      userid: driverId,
+      phoneNumber: driver?.phoneNumber ?? null,
+      phone: driver?.phone ?? null,
+      mobile: driver?.mobile ?? null,
+      contact: driver?.contact ?? null,
+      whatsappNumber: driver?.whatsappNumber ?? null,
+    };
+  }, [
+    driverId,
+    driver?.phoneNumber,
+    driver?.phone,
+    driver?.mobile,
+    driver?.contact,
+    driver?.whatsappNumber,
+  ]);
+
   const bottomRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+  const shouldScrollToBottomRef = useRef(true);
 
   const {
+    fetchMessages,
     subscribeMessages,
     sendMessage,
     deleteChatHistory,
     deleteSpecificMessage,
     markMessagesAsSeen,
   } = chatApi || {
+    fetchMessages: defaultFetchMessages,
     subscribeMessages: defaultSubscribeMessages,
     sendMessage: defaultSendMessage,
     deleteChatHistory: defaultDeleteChatHistory,
@@ -253,7 +411,7 @@ export default function ChatWindow({ driver, chatApi }) {
 
   /* ================= LOAD MESSAGES ================= */
   useEffect(() => {
-    if (!driverId) {
+    if (!driverId || !messageSubscriptionTarget) {
       setMessages([]);
       setSelected([]);
       setLoading(false);
@@ -263,22 +421,28 @@ export default function ChatWindow({ driver, chatApi }) {
     setLoading(true);
     setMessages([]);
     setSelected([]);
+    setSelectionMode(false);
+    setContextMenu(null);
+    setReplyTo(null);
+    setIsAtBottom(true);
 
     // Mark messages as seen when chat window opens
     if (markMessagesAsSeen) {
-      markMessagesAsSeen(driverId).catch((error) => {
+      markMessagesAsSeen(messageSubscriptionTarget).catch((error) => {
         console.error("Failed to mark messages as seen:", error);
       });
     }
 
-    const unsubscribe = subscribeMessages(driverId, (nextMessages) => {
+    // Reset scroll flag when driver changes
+    shouldScrollToBottomRef.current = true;
+
+    const unsubscribe = subscribeMessages(messageSubscriptionTarget, (nextMessages) => {
       setMessages(nextMessages || []);
       setLoading(false);
-      scrollToBottom();
       
       // Mark messages as seen after loading
       if (markMessagesAsSeen) {
-        markMessagesAsSeen(driverId).catch((error) => {
+        markMessagesAsSeen(messageSubscriptionTarget).catch((error) => {
           console.error("Failed to mark messages as seen:", error);
         });
       }
@@ -289,13 +453,100 @@ export default function ChatWindow({ driver, chatApi }) {
         unsubscribe();
       }
     };
-  }, [driverId, subscribeMessages, markMessagesAsSeen]);
+  }, [driverId, messageSubscriptionTarget, subscribeMessages, markMessagesAsSeen]);
 
-  function scrollToBottom() {
-    setTimeout(() => {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 100);
-  }
+  useEffect(() => {
+    if (!driverId || !messageSubscriptionTarget || !refreshSignal) return;
+
+    let isCancelled = false;
+
+    fetchMessages(messageSubscriptionTarget, 200)
+      .then((response) => {
+        if (isCancelled) return;
+        setMessages(response?.messages || []);
+      })
+      .catch((error) => {
+        console.error("Failed to refetch messages on focus:", error);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [driverId, messageSubscriptionTarget, fetchMessages, refreshSignal]);
+
+  // Focus input when driver changes
+  useEffect(() => {
+    if (!driverId) return;
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+  }, [driverId]);
+
+  // Robust scroll to bottom function with multiple attempts
+  // const scrollToBottom = useCallback((behavior = "auto") => {
+  //   // Use multiple attempts to ensure scroll happens after DOM updates
+  //   const scroll = () => {
+  //     if (bottomRef.current && messagesContainerRef.current) {
+  //       const container = messagesContainerRef.current;
+  //       const bottom = bottomRef.current;
+        
+  //       // Method 1: Scroll container to bottom (most reliable)
+  //       container.scrollTop = container.scrollHeight;
+        
+  //       // Method 2: Scroll into view as fallback
+  //       setTimeout(() => {
+  //         bottom.scrollIntoView({ behavior, block: "end" });
+  //       }, 50);
+  //     }
+  //   };
+    
+  //   // Try immediately
+  //   requestAnimationFrame(() => {
+  //     scroll();
+  //     // Try again after a short delay to ensure DOM is fully rendered
+  //     setTimeout(scroll, 100);
+  //     setTimeout(scroll, 300);
+  //   });
+  // }, []);
+  const scrollToBottom = useCallback((behavior = "auto") => {
+    if (!messagesContainerRef.current) return;
+
+    requestAnimationFrame(() => {
+      const el = messagesContainerRef.current;
+      if (!el) return;
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior,
+      });
+    });
+  }, []);
+
+  const updateIsAtBottom = useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+
+    const threshold = 24;
+    const distanceFromBottom = el.scrollHeight - (el.scrollTop + el.clientHeight);
+    setIsAtBottom(distanceFromBottom <= threshold);
+  }, []);
+  
+
+  // Scroll to bottom when messages change (after initial load or new messages)
+  useEffect(() => {
+    if (!messages.length || !shouldScrollToBottomRef.current) return;
+  
+    scrollToBottom("auto");
+    shouldScrollToBottomRef.current = false;
+  }, [messages.length, scrollToBottom]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      updateIsAtBottom();
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [messages.length, updateIsAtBottom]);
+  
 
   function toggleSelect(msgId) {
     setSelected((prev) =>
@@ -303,6 +554,116 @@ export default function ChatWindow({ driver, chatApi }) {
         ? prev.filter((id) => id !== msgId)
         : [...prev, msgId]
     );
+  }
+
+  function openContextMenu(e, msg) {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, msg });
+  }
+
+  function closeContextMenu() {
+    setContextMenu(null);
+  }
+
+  function handleContextReply() {
+    const msg = contextMenu?.msg;
+    if (!msg) return;
+
+    const rawMessage = msg.content?.message;
+    const messageText =
+      typeof rawMessage === "string"
+        ? rawMessage.trim()
+        : rawMessage != null
+          ? String(rawMessage).trim()
+          : "";
+    const replyMessage = messageText || "Attachment";
+    const replySender =
+      typeof driver?.driver_name === "string"
+        ? driver.driver_name
+        : driver?.driver_name != null
+          ? String(driver.driver_name)
+          : "Driver";
+
+    setReplyTo({
+      msgId: msg.msgId,
+      senderName: msg.type === 1 ? (msg.sendername ?? "You") : replySender,
+      message: replyMessage,
+    });
+
+    inputRef.current?.focus();
+    closeContextMenu();
+  }
+  
+
+  function handleContextSelect() {
+    if (contextMenu?.msg?.msgId) {
+      setSelectionMode(true);
+      setSelected((prev) =>
+        prev.includes(contextMenu.msg.msgId)
+          ? prev
+          : [...prev, contextMenu.msg.msgId]
+      );
+    }
+    closeContextMenu();
+  }
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const onDocClick = () => closeContextMenu();
+    const t = setTimeout(() => document.addEventListener("click", onDocClick), 0);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener("click", onDocClick);
+    };
+  }, [contextMenu]);
+
+  useEffect(() => {
+    if (!lightboxMedia?.url) return;
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") setLightboxMedia(null);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [lightboxMedia]);
+
+  /* ================= FILE ATTACHMENT ================= */
+  function openFilePicker(accept) {
+    if (!fileInputRef.current) return;
+    fileInputRef.current.accept = accept;
+    fileInputRef.current.click();
+    setShowAttachmentOptions(false);
+  }
+
+  function handleFileSelect(e) {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      setShowFilePreview(true);
+    }
+    e.target.value = "";
+  }
+
+  function handleAttachmentSent(url) {
+    const tempMsg = {
+      msgId: Math.random().toString(),
+      type: 1,
+      content: { message: "", attachmentUrl: url },
+      dateTime: new Date().toISOString(),
+      status: 0,
+      sendername: user?.name || user?.userid || "Admin",
+    };
+    setMessages((prev) => [...prev, tempMsg]);
+    setSelectedFile(null);
+    setShowFilePreview(false);
+    setReplyTo(null);
+    shouldScrollToBottomRef.current = true;
+    scrollToBottom("smooth");
+    const now = new Date().toISOString();
+    dispatch(updateLastMessageAction({ userid: driverId, lastMessage: "Attachment", lastChatTime: now }));
+    sendMessage(driver, "", undefined, replyTo?.msgId ?? null, url).catch((err) => {
+      console.error("Failed to send attachment message:", err);
+    });
   }
 
   /* ================= SEND MESSAGE ================= */
@@ -318,133 +679,677 @@ export default function ChatWindow({ driver, chatApi }) {
     };
 
     setMessages((prev) => [...prev, tempMsg]);
-    scrollToBottom();
     setText("");
 
-    await sendMessage(driverId, text);
+    const now = new Date().toISOString();
+    dispatch(updateLastMessageAction({ userid: driverId, lastMessage: text.trim(), lastChatTime: now }));
+
+    // Refocus input for better UX (allows continuous typing)
+    inputRef.current?.focus();
+
+    // Always scroll smoothly when sending a message to show the new message
+    shouldScrollToBottomRef.current = true;
+    scrollToBottom("smooth");
+
+    await sendMessage(driver, text, undefined, replyTo?.msgId ?? null);
+    setReplyTo(null);
   }
 
   /* ================= DELETE SELECTED ================= */
-  async function handleDeleteSelected() {
+  function handleDeleteSelected() {
     if (selected.length === 0) return;
-
-    for (let id of selected) {
-      await deleteSpecificMessage(id, driverId);
-    }
-
-    setMessages((prev) => prev.filter((m) => !selected.includes(m.msgId)));
-    setSelected([]);
+    setDeleteActionType("selected");
+    setIsDeleteConfirmOpen(true);
   }
 
   /* ================= DELETE ALL ================= */
-  async function handleDeleteAll() {
-    if (!window.confirm("Delete all messages?")) return;
+  function handleDeleteAll() {
+    setDeleteActionType("all");
+    setIsDeleteConfirmOpen(true);
+  }
 
-    await deleteChatHistory(driverId);
-    setMessages([]);
-    setSelected([]);
+  async function handleConfirmDelete() {
+    if (!deleteActionType || isDeleteInProgress) return;
+
+    setIsDeleteInProgress(true);
+    try {
+      if (deleteActionType === "selected") {
+        const selectedMessageIds = [...selected];
+        for (const id of selectedMessageIds) {
+          await deleteSpecificMessage(id, driverId);
+        }
+        setMessages((prev) => prev.filter((m) => !selectedMessageIds.includes(m.msgId)));
+        setSelected([]);
+      }
+
+      if (deleteActionType === "all") {
+        await deleteChatHistory(driverId);
+        setMessages([]);
+        setSelected([]);
+        setSelectionMode(false);
+      }
+
+      setIsDeleteConfirmOpen(false);
+      setDeleteActionType(null);
+    } finally {
+      setIsDeleteInProgress(false);
+    }
+  }
+
+  const deleteConfirmTitle = deleteActionType === "selected" ? "Delete Selected Messages" : "Delete All Messages";
+  const deleteConfirmDescription =
+    deleteActionType === "selected"
+      ? selected.length === 1
+        ? "Would you like to delete selected message for everyone?"
+        : `Would you like to delete ${selected.length} selected messages for everyone?`
+      : "Would you like to delete all messages for everyone?";
+
+  const emailText = driver?.email ? driver.email : "—";
+  const phoneText = driver?.phone ? driver.phone : "—";
+
+  const handleCopyField = async (value, label) => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`Copied ${label}`);
+    } catch {
+      toast.error(`Failed to copy ${label}`);
+    }
+  };
+
+  /* ================= BROADCAST MESSAGE HANDLER ================= */
+  async function handleSendBroadcast() {
+    if (!broadcastMessage.trim()) {
+      toast.error("Please enter a broadcast message");
+      return;
+    }
+
+    setIsBroadcasting(true);
+    try {
+      // Send broadcast to all users
+      await sendBroadcast("all", broadcastMessage.trim());
+      toast.success("Broadcast message sent successfully!");
+      setBroadcastMessage("");
+      setShowBroadcastDialog(false);
+    } catch (error) {
+      console.error("Error sending broadcast:", error);
+      toast.error("Failed to send broadcast message");
+    } finally {
+      setIsBroadcasting(false);
+    }
   }
 
   /* ================= GROUP MESSAGES ================= */
-  const grouped = groupMessagesByDate(messages);
+  const allMessages = [...messages];
 
-  /* ================= LOADER ================= */
-  if (loading) {
-    return <ChatWindowSkeleton />;
-  }
+allMessages.sort(
+  (a, b) =>
+    new Date(a.dateTime || a.timestamp) -
+    new Date(b.dateTime || b.timestamp)
+);
+
+const grouped = groupMessagesByDate(allMessages);
+  const effectiveLastSeen = useMemo(() => {
+    const presenceCandidates = [
+      // Live presence metadata should win when available.
+      driver?.presence?.lastSeen,
+      driver?.presenceLastSeen,
+      driver?.lastActiveAt,
+      driver?.onlineAt,
+    ];
+
+     const messageCandidates = [
+  driver?.last_chat_time,
+  messages.length
+  ? messages[messages.length - 1]?.dateTime
+  : null
+];
+
+    const fallbackCandidates = [
+      // Previous header used only driver.lastSeen, which can be stale.
+      driver?.lastSeen,
+    ];
+
+    const allCandidates = [
+      ...presenceCandidates,
+      ...messageCandidates,
+      ...fallbackCandidates,
+    ]
+      .map(parseTimestampMs)
+      .filter((ts) => typeof ts === "number" && Number.isFinite(ts));
+
+    if (!allCandidates.length) return null;
+    return new Date(Math.max(...allCandidates)).toISOString();
+  }, [
+    driver?.lastSeen,
+    driver?.last_chat_time,
+    driver?.lastActiveAt,
+    driver?.onlineAt,
+    driver?.presence,
+    driver?.presenceLastSeen,
+    messages,
+  ]);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* ================= HEADER ================= */}
-      <div className="px-4 py-3 border-b border-gray-700 bg-[#111827] sticky top-0 z-40 flex justify-between items-center">
-        <div className="flex items-center gap-3">
+    <div className="relative flex flex-col h-full overflow-hidden bg-[#0b141a]">
+      {/* ================= HEADER (WhatsApp-like) ================= */}
+      <div className="px-4 py-3 border-b border-[#2c3e52] bg-[#1c2530] sticky top-0 z-40 flex justify-between items-center">
+        <div className="flex items-center gap-3 min-w-0">
           <img
             src={driver.driver_image || "/default-user.png"}
-            className="w-10 h-10 rounded-full"
+            alt=""
+            className="w-10 h-10 rounded-full object-cover flex-shrink-0"
           />
-
-          <div>
-            <p className="font-semibold">{driver.driver_name}</p>
-            <p className="text-gray-400 text-xs">
-              Last seen: {formatLastSeen(driver.lastSeen)}
-            </p>
+          <div className="min-w-0">
+            <div className="pt-1 flex items-center gap-2 min-w-0">
+              <span className="font-semibold text-white truncate max-w-[260px]">
+                {driver?.driver_name || "Unknown"}
+              </span>
+              <div className="flex items-center gap-1.5 text-xs text-gray-300 min-w-0 max-w-[320px]">
+                <Mail className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                <span className="truncate">{emailText}</span>
+                {driver?.email ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleCopyField(driver.email, "email")}
+                    title="Copy email"
+                    aria-label="Copy email"
+                    className="h-5 w-5 text-gray-600 hover:text-white"
+                  >
+                    <Copy className="w-2 h-2" />
+                  </Button>
+                ) : null}
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-gray-300 min-w-0 max-w-[220px]">
+                <Phone className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                <span className="truncate">{phoneText}</span>
+                {driver?.phone ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleCopyField(driver.phone, "phone number")}
+                    title="Copy phone number"
+                    aria-label="Copy phone number"
+                    className="h-5 w-5 text-gray-600 hover:text-white"
+                  >
+                    <Copy className="w-2 h-2" />
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+            <div className="pt-1 text-xs text-gray-400">{formatLastSeen(effectiveLastSeen)}</div>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <Button
-            onClick={handleDeleteSelected}
-            disabled={selected.length === 0}
-            variant="ghost"
-            size="icon"
-            className={`text-xl ${
-              selected.length
-                ? "text-red-500 hover:text-red-600"
-                : "text-gray-600"
-            }`}
-          >
-            🗑
-          </Button>
-
-          <Button
-            onClick={handleDeleteAll}
-            variant="destructive"
-            size="sm"
-          >
-            Delete All
-          </Button>
+        <div className="flex items-center gap-2">
+          {selectionMode ? (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSelectionMode(false);
+                  setSelected([]);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleDeleteSelected}
+                disabled={selected.length === 0}
+                variant="ghost"
+                size="icon"
+                className={selected.length ? "text-red-500 hover:text-red-600" : "text-gray-600"}
+              >
+                <Trash2 className="h-5 w-5" strokeWidth={1.8} />
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                onClick={handleDeleteSelected}
+                disabled={selected.length === 0}
+                variant="ghost"
+                size="icon"
+                className={selected.length ? "text-red-500 hover:text-red-600" : "text-gray-600"}
+              >
+                <Trash2 className="h-5 w-5" strokeWidth={1.8} />
+              </Button>
+              {canDeleteAllMessages && (
+                <Button onClick={handleDeleteAll} variant="ghost" size="sm" className="bg-red-900 text-red-100 hover:bg-red-600 hover:text-white">
+                  Delete All
+                </Button>
+              )}
+            </>
+          )}
         </div>
       </div>
 
-      {/* ================= MESSAGE AREA ================= */}
-      <div className="flex-1 overflow-y-auto chat-list-scroll p-4 space-y-6 bg-[#0d1117]">
-        {Object.keys(grouped).length === 0 && (
-          <p className="text-center text-gray-500 text-sm mt-6">
-            No messages yet
-          </p>
+      {/* Context menu (right-click on message) */}
+      {contextMenu &&
+        createPortal(
+          <div
+            className="fixed z-[100] min-w-[140px] rounded-lg border border-gray-700 bg-[#161b22] py-1 shadow-xl"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="w-full px-3 py-2 text-left text-sm text-gray-200 hover:bg-[#1d232a]"
+              onClick={handleContextReply}
+            >
+              Reply
+            </button>
+            <button
+              type="button"
+              className="w-full px-3 py-2 text-left text-sm text-gray-200 hover:bg-[#1d232a]"
+              onClick={handleContextSelect}
+            >
+              Select
+            </button>
+          </div>,
+          document.body
         )}
 
-        {Object.keys(grouped).map((date) => (
+      {/* ================= MESSAGE AREA (fixed header above, fixed footer below) ================= */}
+      <div className="relative flex-1 flex flex-col min-h-0">
+        {loading ? (
+          <ConversationListShimmer />
+        ) : (
+          <>
+            <div
+              ref={messagesContainerRef}
+              onScroll={updateIsAtBottom}
+              className={`flex-1 overflow-y-auto chat-list-scroll space-y-6 bg-[#0b141a] chat-bg-pattern ${selectionMode ? "pl-2 pr-4 pt-4 pb-4" : "p-4"}`}
+            >
+              {Object.keys(grouped).length === 0 && (
+                <p className="text-center text-[#8696a0] text-sm mt-6">
+                  No messages yet
+                </p>
+              )}
+
+              {Object.keys(grouped).map((date) => (
           <div key={date}>
-            <div className="text-center text-gray-400 text-xs my-2">{date}</div>
+            <div className="text-center text-[#8696a0] text-xs my-2">{date}</div>
+            {grouped[date].map((msg, idx) => {
+              const isSelected = selected.includes(msg.msgId);
+              const lastMsg = messages.length ? messages[messages.length - 1] : null;
+              const isLastMessageInChat = lastMsg && msg.msgId === lastMsg.msgId;
+              const senderName = msg.type === 1
+                ? (msg.sendername ?? "You")
+                : (driver?.driver_name ?? msg.sendername ?? "Driver");
+              const prevMsg = grouped[date][idx - 1];
+              const sameType = prevMsg && prevMsg.type === msg.type;
+              const sameAdmin =
+                sameType &&
+                msg.type === 1 &&
+                (prevMsg.sendername ?? "") === (msg.sendername ?? "");
+              const showSenderName = !prevMsg || !sameType || !sameAdmin;
+              const replyTargetId = resolveReplyTargetId(msg);
+              // Prefer resolving the live target from currently loaded thread messages.
+              const liveReplyTarget = replyTargetId
+                ? messages.find((m) => m.msgId === replyTargetId)
+                : null;
+              // Fall back to legacy/mobile reply snapshot when the target message is not loaded.
+              const replyToMessage = liveReplyTarget || msg.replyToSnapshot || null;
+              return (
+                <div
+                  key={msg.msgId}
+                  id={`msg-${msg.msgId}`}
+                  className={`flex items-start gap-2 rounded-lg transition-colors ${
+                    selectionMode
+                      ? isSelected
+                        ? "bg-[#1f3146]"
+                        : "hover:bg-[#162436]"
+                      : "relative"
+                  }`}
+                  onClick={() => {
+                    if (selectionMode) {
+                      toggleSelect(msg.msgId);
+                    }
+                  }}
+                  onContextMenu={(e) => openContextMenu(e, msg)}
+                >
+                  {selectionMode && (
+                    <div className="flex-shrink-0 pt-6">
+                      <Checkbox
+                        checked={selected.includes(msg.msgId)}
+                        onCheckedChange={() => toggleSelect(msg.msgId)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="border-gray-500 data-[state=checked]:bg-[#1f6feb] data-[state=checked]:border-[#1f6feb]"
+                      />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <ChatMessageBubble
+                      msg={msg}
+                      isBroadcast={msg.type === "broadcast"}
+                      senderName={senderName}
+                      showSenderName={showSenderName}
+                      replyToMessage={replyToMessage}
+                      replyTargetId={replyTargetId}
+                      isLastMessageInChat={isLastMessageInChat}
+                      onReplyClick={(msgId) => {
+                        if (!msgId) return;
+                        const el = document.getElementById(`msg-${msgId}`);
+                        if (!el) return;
+                        el.scrollIntoView({ behavior: "smooth", block: "center" });
+                        el.classList.add("ring-2", "ring-blue-500");
+                        setTimeout(() => el.classList.remove("ring-2", "ring-blue-500"), 1200);
+                      }}
+                      onImageClick={(url) =>
+                        setLightboxMedia({
+                          url,
+                          senderName,
+                          dateTime: msg?.dateTime,
+                        })
+                      }
+                      onDownloadMedia={(url) =>
+                        downloadChatMedia(url, senderName, msg?.dateTime)
+                      }
+                    />
 
-            {grouped[date].map((msg) => (
-              <div
-                key={msg.msgId}
-                className="relative"
-                onClick={() => toggleSelect(msg.msgId)}
-              >
-                {selected.includes(msg.msgId) && (
-                  <div className="absolute -left-3 top-3 w-3 h-3 bg-red-500 rounded-full" />
-                )}
-
-                <ChatMessageBubble msg={msg} />
-              </div>
-            ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ))}
-        <div ref={bottomRef} />
+              <div ref={bottomRef} />
+            </div>
+            {!isAtBottom && (
+              <button
+                type="button"
+                onClick={() => scrollToBottom("smooth")}
+                className="absolute bottom-4 right-5 rounded-full border border-[#1f6feb] bg-transparent p-2.5 text-[#6ca8ff] shadow-lg hover:bg-[#1f6feb]/45 focus:outline-none focus:ring-2 focus:ring-[#1f6feb] focus:ring-offset-2 focus:ring-offset-[#0b141a] z-10"
+                aria-label="Scroll to bottom"
+              >
+                <ChevronDown className="w-5 h-5" />
+              </button>
+            )}
+          </>
+        )}
       </div>
+      {!loading && replyTo && (
+  <div className="px-4 py-2 border-t border-[#2c3e52] bg-[#1c2530] flex items-center justify-between">
+    <div className="border-l-4 border-[#1f6feb] pl-3">
+      <p className="text-xs font-semibold text-[#1f6feb]">
+        Replying to {replyTo.senderName}
+      </p>
+      <p className="text-xs text-[#8696a0] truncate max-w-[260px]">
+        {typeof replyTo.message === "string"
+          ? replyTo.message
+          : replyTo.message != null
+            ? String(replyTo.message)
+            : ""}
+      </p>
+    </div>
+    <button
+      className="text-[#8696a0] hover:text-[#e9edef] p-1"
+      onClick={() => setReplyTo(null)}
+      aria-label="Cancel reply"
+    >
+      ✕
+    </button>
+  </div>
+)}
 
-      {/* ================= INPUT BAR ================= */}
-      <div className="p-4 border-t border-gray-700 bg-[#111827] sticky bottom-0 flex gap-2">
-        <Button variant="ghost" size="icon" className="text-2xl text-gray-300 hover:text-white">📎</Button>
+      {/* ================= INPUT BAR (fixed footer; show shimmer when loading) ================= */}
+      {loading ? (
+        <div className="p-3 border-t border-[#2c3e52] bg-[#1c2530] sticky bottom-0 flex items-end gap-2">
+          <div className="h-9 w-9 rounded-full bg-[#243644] animate-pulse flex-shrink-0" />
+          <div className="flex-1 h-12 rounded-full bg-[#243644] animate-pulse max-w-[400px]" />
+          <div className="h-11 w-11 rounded-full bg-[#243644] animate-pulse flex-shrink-0" />
+        </div>
+      ) : (
+      <div className="p-3 border-t border-[#2c3e52] bg-[#1c2530] sticky bottom-0 flex items-end gap-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,video/*"
+          onChange={handleFileSelect}
+          className="hidden"
+          aria-label="Attach file"
+        />
+        <div className="relative">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="rounded-full text-[#8696a0] hover:bg-[#2c3e52] hover:text-[#e9edef]"
+            onClick={() => setShowAttachmentOptions((prev) => !prev)}
+            aria-label="Attach file"
+            aria-expanded={showAttachmentOptions}
+            aria-haspopup="true"
+          >
+            <Paperclip className="h-5 w-5" strokeWidth={1.8} />
+          </Button>
+          {showAttachmentOptions && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setShowAttachmentOptions(false)}
+                aria-hidden="true"
+              />
+              <div
+                className="absolute bottom-full left-0 z-50 mb-2 w-48 rounded-xl border border-[#2c3e52] bg-[#1c2530] py-2 shadow-xl"
+                role="menu"
+                aria-label="Choose attachment type"
+              >
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-[#e9edef] hover:bg-[#2c3e52]"
+                  onClick={() => openFilePicker("image/*")}
+                  role="menuitem"
+                >
+                  <Image className="h-5 w-5 text-[#8ab4f8]" aria-hidden="true" />
+                  <span className="text-sm">Photo</span>
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-[#e9edef] hover:bg-[#2c3e52]"
+                  onClick={() => openFilePicker("video/*")}
+                  role="menuitem"
+                >
+                  <Video className="h-5 w-5 text-[#b5a3ff]" aria-hidden="true" />
+                  <span className="text-sm">Video</span>
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-[#e9edef] hover:bg-[#2c3e52]"
+                  onClick={() => openFilePicker("application/pdf")}
+                  role="menuitem"
+                >
+                  <FileText className="h-5 w-5 text-[#fca5a5]" aria-hidden="true" />
+                  <span className="text-sm">PDF</span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
 
         <Input
-          className="flex-1 bg-[#1f2937]"
-          placeholder="Type a message..."
+          className="flex-1 rounded-full bg-[#2c3e52] border-0 text-[#e9edef] placeholder:text-[#8696a0] py-5 px-4 focus-visible:ring-[#1f6feb]"
+          placeholder="Type a message"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
+          ref={inputRef}
         />
 
         <Button
           onClick={handleSend}
-          size="sm"
+          size="icon"
+          className="rounded-full bg-[#1f6feb] hover:bg-[#1a5fd4] text-white h-11 w-11 flex-shrink-0"
+          aria-label="Send message"
         >
-          Send
+          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+          </svg>
         </Button>
       </div>
+      )}
+
+      {isDeleteConfirmOpen && (
+        <div className="fixed inset-0 z-[180] flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label="Delete confirmation dialog">
+          <div className="w-full max-w-md rounded-lg border border-[#2c3e52] bg-[#1c2530] p-6 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white">{deleteConfirmTitle}</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  if (isDeleteInProgress) return;
+                  setIsDeleteConfirmOpen(false);
+                  setDeleteActionType(null);
+                }}
+                className="text-gray-400 hover:text-white"
+                disabled={isDeleteInProgress}
+                aria-label="Close delete confirmation"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-300">{deleteConfirmDescription}</p>
+            <p className="text-xs text-gray-400">This action cannot be undone.</p>
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="border-gray-600 text-gray-800 hover:bg-[#2c3e52] hover:text-white"
+                onClick={() => {
+                  setIsDeleteConfirmOpen(false);
+                  setDeleteActionType(null);
+                }}
+                disabled={isDeleteInProgress}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="bg-red-600 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={handleConfirmDelete}
+                disabled={isDeleteInProgress}
+              >
+                {isDeleteInProgress ? "Deleting..." : "Delete"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= BROADCAST MESSAGE DIALOG ================= */}
+      {showBroadcastDialog && (
+        <div className="fixed inset-0 z-[180] flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label="Broadcast message dialog">
+          <div className="w-full max-w-md rounded-lg border border-[#2c3e52] bg-[#1c2530] p-6 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Megaphone className="h-5 w-5 text-blue-400" />
+                <h3 className="text-lg font-semibold text-white">Broadcast Message</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (isBroadcasting) return;
+                  setShowBroadcastDialog(false);
+                }}
+                className="text-gray-400 hover:text-white"
+                disabled={isBroadcasting}
+                aria-label="Close broadcast dialog"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-300">Send a message to all users at once</p>
+            <textarea
+              value={broadcastMessage}
+              onChange={(e) => setBroadcastMessage(e.target.value)}
+              placeholder="Enter your broadcast message..."
+              className="w-full h-24 px-3 py-2 bg-[#2c3e52] border border-[#3d5a80] rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none"
+              disabled={isBroadcasting}
+            />
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="border-gray-600 text-gray-800 hover:bg-[#2c3e52] hover:text-white"
+                onClick={() => {
+                  setShowBroadcastDialog(false);
+                  setBroadcastMessage("");
+                }}
+                disabled={isBroadcasting}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="bg-blue-600 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={handleSendBroadcast}
+                disabled={isBroadcasting || !broadcastMessage.trim()}
+              >
+                {isBroadcasting ? "Sending..." : "Send Broadcast"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showFilePreview && selectedFile && driverId && (
+        <FilePreviewModal
+          file={selectedFile}
+          adminId={adminId}
+          driverId={driverId}
+          onClose={() => {
+            setShowFilePreview(false);
+            setSelectedFile(null);
+          }}
+          onSent={handleAttachmentSent}
+        />
+      )}
+
+      {/* Image lightbox dialog */}
+      {lightboxMedia?.url && (
+        <div
+          className="absolute inset-0 z-[200] flex items-center justify-center bg-black/90 p-4"
+          onClick={() => setLightboxMedia(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Image preview"
+        >
+          <div className="absolute right-38 top-10 flex items-center gap-2">
+            <a
+              href="#"
+              className="rounded-full bg-white/10 p-2 text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50"
+              aria-label="Download image"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleLightboxDownload();
+              }}
+            >
+              <Download className="h-4 w-4" />
+            </a>
+            <button
+              type="button"
+              className="rounded-full bg-white/10 p-2 text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50"
+              onClick={() => setLightboxMedia(null)}
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <img
+            src={lightboxMedia.url}
+            alt="Full size"
+            className="max-h-[90vh] max-w-full rounded-lg object-contain shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

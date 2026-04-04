@@ -44,8 +44,12 @@
 //   );
 // }
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { useAppSelector } from "../store/hooks";
+import { useAuth } from "../context/AuthContext";
+import { hasDocumentAccess } from "../utils/documentPermissions";
+import { ADMIN_PERMISSION_KEYS, hasAdminPermission } from "../utils/adminPermissions";
 import {
   Bell,
   Folder,
@@ -67,7 +71,7 @@ const menuSections = [
     items: [
       { title: "Dashboard", icon: LayoutDashboard, path: "/" },
       { title: "Documents", icon: Folder, path: "/documents" },
-      { title: "Chat", icon: MessageCircle, badge: 12, path: "/chat" },
+      { title: "Chat", icon: MessageCircle, badge: null, path: "/chat" }, // badge will be set dynamically
     ],
   },
   {
@@ -76,7 +80,7 @@ const menuSections = [
       {
         title: "Maintenance Chat",
         icon: Wrench,
-        badge: 1,
+        badge: null, // badge will be set dynamically
         path: "/maintenance-chat",
       },
       { title: "Drivers", icon: Truck, path: "/drivers" },
@@ -88,10 +92,12 @@ const menuSections = [
 
 export default function Sidebar() {
   const location = useLocation();
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showMenuIcon, setShowMenuIcon] = useState(false);
-  const [user, setUser] = useState(null);
+  const userMenuRef = useRef(null);
+  const [storedUser, setStoredUser] = useState(null);
   const [notifications, setNotifications] = useState([
     {
       id: "notif-1",
@@ -114,10 +120,79 @@ export default function Sidebar() {
   ]);
   const unreadCount = useMemo(() => notifications.length, [notifications]);
 
+  // Get unread data from Redux - badge shows number of users with unseen messages, not total messages
+  const { unreadCountsByUser } = useAppSelector((state) => state.chatUnread);
+
+  // Count how many users have at least one unread (regular vs maintenance)
+  const regularChatUnreadUserCount = useMemo(() => {
+    return Object.values(unreadCountsByUser || {}).filter((c) => (c?.regular || 0) > 0).length;
+  }, [unreadCountsByUser]);
+  const maintenanceChatUnreadUserCount = useMemo(() => {
+    return Object.values(unreadCountsByUser || {}).filter((c) => (c?.maintenance || 0) > 0).length;
+  }, [unreadCountsByUser]);
+
+  const currentUser = user || storedUser;
+  const displayName = currentUser?.name || currentUser?.username || currentUser?.userid || "Admin";
+  const userRole = currentUser?.role || currentUser?.userType || currentUser?.designation || "Admin";
+  const displaySubtitle =
+    currentUser?.email && currentUser.email !== displayName && currentUser.email !== currentUser?.userid
+      ? currentUser.email
+      : userRole;
+  const canAccessDocuments = useMemo(
+    () => hasDocumentAccess(currentUser?.permissions),
+    [currentUser?.permissions]
+  );
+  const canAccessChat = useMemo(
+    () => hasAdminPermission(currentUser?.permissions, ADMIN_PERMISSION_KEYS.chat),
+    [currentUser?.permissions]
+  );
+  const canAccessMaintenanceChat = useMemo(
+    () => hasAdminPermission(currentUser?.permissions, ADMIN_PERMISSION_KEYS.maintenanceChat),
+    [currentUser?.permissions]
+  );
+  const canAccessDrivers = useMemo(
+    () => hasAdminPermission(currentUser?.permissions, ADMIN_PERMISSION_KEYS.viewDrivers),
+    [currentUser?.permissions]
+  );
+  const canAccessAdmins = useMemo(
+    () => hasAdminPermission(currentUser?.permissions, ADMIN_PERMISSION_KEYS.viewAdmin),
+    [currentUser?.permissions]
+  );
+
+  // Create menu sections with dynamic badges (number of users with unseen, not total unseen)
+  const menuSectionsWithBadges = useMemo(() => {
+    return menuSections.map((section) => ({
+      ...section,
+      items: section.items
+        .filter((item) => item.path !== "/documents" || canAccessDocuments)
+        .filter((item) => item.path !== "/chat" || canAccessChat)
+        .filter((item) => item.path !== "/maintenance-chat" || canAccessMaintenanceChat)
+        .filter((item) => item.path !== "/drivers" || canAccessDrivers)
+        .filter((item) => item.path !== "/admins" || canAccessAdmins)
+        .map((item) => {
+        if (item.path === "/chat") {
+          return { ...item, badge: regularChatUnreadUserCount > 0 ? regularChatUnreadUserCount : null };
+        }
+        if (item.path === "/maintenance-chat") {
+          return { ...item, badge: maintenanceChatUnreadUserCount > 0 ? maintenanceChatUnreadUserCount : null };
+        }
+        return item;
+      }),
+    }));
+  }, [
+    canAccessDocuments,
+    canAccessChat,
+    canAccessMaintenanceChat,
+    canAccessDrivers,
+    canAccessAdmins,
+    regularChatUnreadUserCount,
+    maintenanceChatUnreadUserCount,
+  ]);
+
   useEffect(() => {
     const savedUser = localStorage.getItem("adminUser");
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
+      setStoredUser(JSON.parse(savedUser));
     }
   }, []);
 
@@ -133,6 +208,30 @@ export default function Sidebar() {
 
     return () => clearInterval(interval);
   }, [isCollapsed]);
+
+  useEffect(() => {
+    if (isCollapsed) {
+      setOpen(false);
+    }
+  }, [isCollapsed]);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const handleOutsideClick = (event) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, [open]);
 
   function handleLogout() {
     localStorage.removeItem("adminToken");
@@ -195,7 +294,7 @@ export default function Sidebar() {
           isCollapsed ? "px-2 py-4" : "px-4 py-6"
         }`}
       >
-        {menuSections.map((section) => (
+        {menuSectionsWithBadges.map((section) => (
           <div key={section.label} className="space-y-3">
             {!isCollapsed && (
               <p className="px-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
@@ -297,6 +396,7 @@ export default function Sidebar() {
 
       <div className="border-t border-slate-800 px-4 py-4">
         <div
+          ref={userMenuRef}
           className={`relative flex items-center rounded-lg bg-slate-900 px-3 py-3 ${
             isCollapsed ? "justify-center" : "gap-3"
           }`}
@@ -308,8 +408,12 @@ export default function Sidebar() {
           )}
           {!isCollapsed && (
             <div className="flex-1">
-              <p className="text-sm font-semibold">Admin Team</p>
-              <p className="text-xs text-slate-400">admin@dmtransport.io</p>
+              <p className="text-sm font-semibold">
+                {displayName}
+              </p>
+              <p className="text-xs text-slate-400">
+                {displaySubtitle}
+              </p>
             </div>
           )}
           <button
@@ -323,7 +427,7 @@ export default function Sidebar() {
             <div className="absolute bottom-16 right-0 w-56 rounded-lg border border-slate-700 bg-slate-950 p-2 shadow-xl">
               <p className="px-3 pb-2 text-xs text-slate-400">Logged in as</p>
               <p className="px-3 pb-2 text-sm font-semibold text-slate-100">
-                {user?.userid || "Admin"}
+                {currentUser?.userid || "Admin"}
               </p>
               <button className="w-full rounded-md px-3 py-2 text-left text-sm text-slate-300 transition hover:bg-slate-900 hover:text-white">
                 Change Password

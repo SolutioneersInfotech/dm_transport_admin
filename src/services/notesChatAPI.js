@@ -3,16 +3,23 @@ import {
   collection,
   deleteDoc,
   doc,
+  getFirestore,
   onSnapshot,
   orderBy,
   query,
-  runTransaction,
   serverTimestamp,
-  updateDoc,
 } from "firebase/firestore";
-import { signInAnonymously } from "firebase/auth";
-import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
-import { auth, firestore, storage } from "../firebase/firebaseApp";
+import { getApps, initializeApp } from "firebase/app";
+import { getAuth, signInWithCustomToken } from "firebase/auth";
+import { getDownloadURL, getStorage, ref, uploadBytesResumable } from "firebase/storage";
+import { app, firestore } from "../firebase/firebaseApp";
+import { getAdminFirebaseCustomToken } from "./adminFirebaseToken";
+
+const adminRawBase =
+  import.meta.env.VITE_API_BASE_URL ??
+  "https://northamerica-northeast1-dmtransport-1.cloudfunctions.net/api";
+
+const ADMIN_BASE_URL = adminRawBase.replace(/\/+$/, "");
 
 const PRIORITY_FILTERS = {
   all: () => true,
@@ -22,21 +29,48 @@ const PRIORITY_FILTERS = {
 };
 
 let authPromise = null;
+let notesUploadServices = null;
 
-async function ensureAnonymousAuth() {
-  if (auth.currentUser) {
-    return auth.currentUser;
+function getOrCreateNotesUploadApp() {
+  const appName = "notes-upload";
+  const existing = getApps().find((entry) => entry.name === appName);
+  if (existing) {
+    return existing;
+  }
+
+  return initializeApp(app.options, appName);
+}
+
+async function ensureAdminUploadServices() {
+  if (notesUploadServices) {
+    return notesUploadServices;
   }
 
   if (!authPromise) {
-    authPromise = signInAnonymously(auth).catch((error) => {
+    authPromise = (async () => {
+      const uploadApp = getOrCreateNotesUploadApp();
+      const uploadAuth = getAuth(uploadApp);
+
+      if (!uploadAuth.currentUser?.uid?.startsWith("admin_")) {
+        const token = await getAdminFirebaseCustomToken();
+        await signInWithCustomToken(uploadAuth, token);
+      }
+
+      notesUploadServices = {
+        app: uploadApp,
+        auth: uploadAuth,
+        storage: getStorage(uploadApp),
+        firestore: getFirestore(uploadApp),
+      };
+
+      return notesUploadServices;
+    })().catch((error) => {
       authPromise = null;
       throw error;
     });
   }
 
-  const credential = await authPromise;
-  return credential.user;
+  return authPromise;
 }
 
 function getAdminUser() {
@@ -45,6 +79,90 @@ function getAdminUser() {
   } catch {
     return null;
   }
+}
+
+function parseResponseText(text) {
+  if (!text) return {};
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: text };
+  }
+}
+
+const apiClient = {
+  async post(path, body) {
+    const adminToken = localStorage.getItem("adminToken");
+    const response = await fetch(`${ADMIN_BASE_URL}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const text = await response.text();
+    const data = parseResponseText(text);
+    if (!response.ok) {
+      const message =
+        data?.message || data?.error || text || "Request failed.";
+      throw new Error(message);
+    }
+
+    return data;
+  },
+
+  async patch(path, body) {
+    const adminToken = localStorage.getItem("adminToken");
+    const response = await fetch(`${ADMIN_BASE_URL}${path}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const text = await response.text();
+    const data = parseResponseText(text);
+    if (!response.ok) {
+      const message =
+        data?.message || data?.error || text || "Request failed.";
+      throw new Error(message);
+    }
+
+    return data;
+  },
+};
+
+async function sendNotesMessageViaBackend(payload) {
+  const adminToken = localStorage.getItem("adminToken");
+
+  if (!adminToken) {
+    throw new Error("Missing admin token for sending notes message.");
+  }
+
+  const response = await fetch(`${ADMIN_BASE_URL}/admin/notes/message`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${adminToken}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const text = await response.text();
+  const data = parseResponseText(text);
+
+  if (!response.ok) {
+    const message =
+      data?.message || data?.error || text || "Failed to send notes message.";
+    throw new Error(message);
+  }
+
+  return data;
 }
 
 export const subscribeNotesMessages = ({
@@ -70,13 +188,24 @@ export const subscribeNotesMessages = ({
               ? data.timestamp.toDate()
               : null;
 
+          let priorityValue = 0;
+
+          if (typeof data.priority === "number") {
+            priorityValue = data.priority;
+          } else if (typeof data.priority === "string") {
+            const parsed = Number(data.priority);
+            if (Number.isFinite(parsed)) {
+              priorityValue = parsed;
+            }
+          }
+
           return {
             id: docSnapshot.id,
             senderId: data.senderId ?? "",
             senderName: data.senderName ?? "",
             content: data.content ?? "",
             type: data.type ?? "text",
-            priority: typeof data.priority === "number" ? data.priority : 0,
+            priority: priorityValue,
             timestamp,
             reactions: data.reactions ?? {},
           };
@@ -104,16 +233,17 @@ export const sendNotesMessage = async ({
   const senderId = resolvedAdmin?.userid || "admin";
   const senderName = resolvedAdmin?.name || senderId || "Admin";
   const contentValue = contentOverride ?? text ?? "";
-
-  await addDoc(collection(firestore, "messages"), {
+  const payload = {
     senderId,
     senderName,
     content: contentValue,
     type,
     priority: 0,
-    timestamp: serverTimestamp(),
-    reactions: {},
-  });
+  };
+
+  await sendNotesMessageViaBackend(payload);
+
+  const { firestore: adminFirestore } = await ensureAdminUploadServices();
 
   let notificationMessage = `${senderName}: ${text ?? ""}`;
   if (type === "image") {
@@ -124,7 +254,7 @@ export const sendNotesMessage = async ({
     notificationMessage = `${senderName} shared a document`;
   }
 
-  await addDoc(collection(firestore, "Notes_notifications"), {
+  await addDoc(collection(adminFirestore, "Notes_notifications"), {
     message: notificationMessage,
     type,
     timestamp: serverTimestamp(),
@@ -145,9 +275,22 @@ export const updateNotesMessagePriority = async (messageId, priorityValue) => {
     return;
   }
 
-  await updateDoc(doc(firestore, "messages", messageId), {
-    priority: priorityValue,
-  });
+  const numericPriority =
+    typeof priorityValue === "number" ? priorityValue : Number(priorityValue);
+
+  try {
+    await apiClient.patch("/admin/notes/message/priority", {
+      messageId,
+      priority: numericPriority,
+    });
+  } catch (error) {
+    console.error("[Notes] Failed to update priority via backend", {
+      messageId,
+      priorityValue,
+      error,
+    });
+    throw error;
+  }
 };
 
 export const addReaction = async ({ messageId, emoji, userId }) => {
@@ -155,48 +298,30 @@ export const addReaction = async ({ messageId, emoji, userId }) => {
     return;
   }
 
-  const messageRef = doc(firestore, "messages", messageId);
-
-  await runTransaction(firestore, async (transaction) => {
-    const snapshot = await transaction.get(messageRef);
-    const data = snapshot.data() ?? {};
-    const reactions = { ...(data.reactions ?? {}) };
-    const currentUsers = Array.isArray(reactions[emoji])
-      ? [...reactions[emoji]]
-      : [];
-
-    if (!currentUsers.includes(userId)) {
-      currentUsers.push(userId);
-    }
-
-    reactions[emoji] = currentUsers;
-
-    transaction.update(messageRef, { reactions });
+  await apiClient.post("/admin/notes/reaction", {
+    messageId,
+    emoji,
+    userId,
   });
 };
 
 export const uploadNotesAttachment = async (file, type) => {
-  void type;
-  try {
-    await ensureAnonymousAuth();
-  } catch (error) {
-    const errorCode = error?.code || "";
-    const errorMessage = error?.message || "";
-    const isAdminOnly =
-      errorCode === "auth/admin-restricted-operation" ||
-      errorMessage.includes("ADMIN_ONLY_OPERATION");
-
-    if (!isAdminOnly) {
-      throw error;
-    }
-
-    console.warn(
-      "[Notes] Anonymous auth disabled; continuing without sign-in.",
-      error
-    );
+  if (!(file instanceof File)) {
+    throw new Error("Invalid file");
   }
-  const safeName = file?.name || "file";
-  const storageRef = ref(storage, `uploads/${Date.now()}_${safeName}`);
+
+  const { auth: uploadAuth, storage: uploadStorage } =
+    await ensureAdminUploadServices();
+
+  const safeName = (file.name || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
+  const normalizedType = ["image", "video", "document"].includes(type)
+    ? type
+    : "document";
+  const uploaderUid = uploadAuth.currentUser?.uid || "admin_unknown";
+  const storageRef = ref(
+    uploadStorage,
+    `chat/uploads/${uploaderUid}/notes/${normalizedType}_${Date.now()}_${safeName}`
+  );
   const uploadTask = uploadBytesResumable(storageRef, file);
 
   return new Promise((resolve, reject) => {

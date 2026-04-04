@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Settings } from "lucide-react";
+import { Settings, Megaphone } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import NotesNotifications from "./NotesNotifications";
@@ -20,6 +20,10 @@ export default function Navbar() {
     <div className="relative flex justify-end items-center p-4 bg-[#161b22] border-b border-gray-700">
       <div className="flex items-center gap-6">
         <NotesNotifications />
+        {/* Broadcast Icon */}
+        <div className="cursor-pointer hover:opacity-80 transition" onClick={() => navigate("/broadcast")} title="Broadcast Messages">
+          <Megaphone className="w-5 h-5" />
+        </div>
         {/* Settings Icon */}
         <div className="cursor-pointer" onClick={() => setOpen(!open)}>
           <Settings className="w-5 h-5" />

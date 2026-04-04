@@ -4,9 +4,12 @@ import {
   ChevronRight,
   Plus,
   Save,
+  Loader2,
   Trash2,
   ShieldCheck,
-  KeyRound
+  KeyRound,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   createAdmin,
@@ -16,22 +19,21 @@ import {
 } from "../services/adminAPI";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { toast } from "sonner";
+import { useAuth } from "../context/AuthContext";
+import { ADMIN_PERMISSION_KEYS, hasAdminPermission } from "../utils/adminPermissions";
 
 const permissionSections = [
   {
-    title: "CTPAT",
+    title: "Document Management",
     items: [
+      "CTPAT",
       "Delivery Proof",
       "Driver expense",
       "Load Image",
       "Stamp Paper",
       "Pickup Doc",
       "Repair and maintenance",
-    ],
-  },
-  {
-    title: "Operational Forms",
-    items: [
       "DM Transport Trip Envelope",
       "DM Trans Inc Trip Envelope",
       "DM Transport City Worksheet",
@@ -52,21 +54,35 @@ const permissionSections = [
   },
 ];
 
-const permissionDefaults = permissionSections
-  .flatMap((section) => section.items)
-  .reduce((acc, permission) => {
-    acc[permission] = true;
-    return acc;
-  }, {});
+const permissionDefaults = {
+  "Delivery Proof": false,
+  "Driver expense": false,
+  "Load Image": false,
+  "Stamp Paper": false,
+  "Pickup Doc": false,
+  "Repair and maintenance": false,
+  "DM Transport Trip Envelope": false,
+  "DM Trans Inc Trip Envelope": false,
+  "DM Transport City Worksheet": false,
+  "Fuel Receipt": false,
+  "Manage Drivers": false,
+  "View Drivers": false,
+  "Maintenance Chat": false,
+  "View Admin": false,
+  "Manage Admin": false,
+  Chat: false,
+  "Delete Multiple Users Chart": false,
+  CTPAT: false,
+};
 
 const permissionKeyMap = {
-  CTPAT: "CTPAT",
+  "CTPAT": "CTPAT",
   "Delivery Proof": "delivery",
   "Driver expense": "driver_expense_sheet",
   "Load Image": "load_image",
   "Stamp Paper": "paper_logs",
   "Pickup Doc": "pick_up",
-  "Repair and maintenance": "repair_and_maintenance",
+  "Repair and maintenance": "trip_envelope",
   "DM Transport Trip Envelope": "dm_transport_trip_envelope",
   "DM Trans Inc Trip Envelope": "dm_trans_inc_trip_envelope",
   "DM Transport City Worksheet": "dm_transport_city_worksheet_trip_envelope",
@@ -76,14 +92,16 @@ const permissionKeyMap = {
   "Maintenance Chat": "maintenance_chat",
   "View Admin": "view_admin",
   "Manage Admin": "manage_admin",
-  Chat: "chat",
+  "Chat": "chat",
   "Delete Multiple Users Chart": "delete_multiple_users_chart",
 };
 
-const buildPermissionsForAdmin = (name) => {
-  const seed = name.length % 2 === 0;
-  return Object.keys(permissionDefaults).reduce((acc, permission, index) => {
-    acc[permission] = seed ? index % 3 !== 0 : index % 4 !== 0;
+const buildPermissionsFromRaw = (rawPermissions) => {
+  const active = new Set(Array.isArray(rawPermissions) ? rawPermissions : []);
+
+  return Object.keys(permissionDefaults).reduce((acc, label) => {
+    const key = permissionKeyMap[label] || label;
+    acc[label] = active.has(key);
     return acc;
   }, {});
 };
@@ -114,9 +132,9 @@ const normalizeAdmins = (payload) => {
 };
 
 const ADMIN_CACHE_KEY = "dm_admins_cache_v1";
-const ADMIN_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export default function Admins() {
+  const { user } = useAuth();
   const [query, setQuery] = useState("");
   const [admins, setAdmins] = useState([]);
   const [selectedAdmin, setSelectedAdmin] = useState("");
@@ -125,8 +143,9 @@ export default function Admins() {
   const [isAddAdminOpen, setIsAddAdminOpen] = useState(false);
   const [newAdminName, setNewAdminName] = useState("");
   const [newAdminPassword, setNewAdminPassword] = useState("");
+  const [showNewAdminPassword, setShowNewAdminPassword] = useState(false);
   const [newAdminPermissions, setNewAdminPermissions] = useState(() =>
-    permissionSections[0].items.reduce((acc, permission) => {
+    Object.keys(permissionDefaults).reduce((acc, permission) => {
       acc[permission] = false;
       return acc;
     }, {})
@@ -141,31 +160,50 @@ export default function Admins() {
   const [isDeletingAdmin, setIsDeletingAdmin] = useState(false);
   const [deleteAdminError, setDeleteAdminError] = useState("");
   const [adminPermissions, setAdminPermissions] = useState({});
+  const [savedAdminPermissions, setSavedAdminPermissions] = useState({});
+  const [isSavingPermissions, setIsSavingPermissions] = useState(false);
+  const [savePermissionsError, setSavePermissionsError] = useState("");
+
+  const canManageAdmins = useMemo(
+    () => hasAdminPermission(user?.permissions, ADMIN_PERMISSION_KEYS.manageAdmin),
+    [user?.permissions]
+  );
 
   useEffect(() => {
     let isMounted = true;
     async function loadAdmins() {
+      let hasHydratedFromCache = false;
       try {
         const cached = localStorage.getItem(ADMIN_CACHE_KEY);
         if (cached) {
           const parsed = JSON.parse(cached);
-          if (Date.now() - parsed.timestamp < ADMIN_CACHE_TTL_MS) {
-            const cachedAdmins = normalizeAdmins(parsed.data);
-            if (cachedAdmins.length > 0) {
-              setAdmins(cachedAdmins);
-              setSelectedAdmin(cachedAdmins[0]?.name || "");
-              setAdminPermissions(
-                cachedAdmins.reduce((acc, admin) => {
-                  acc[admin.name] = buildPermissionsForAdmin(admin.name);
-                  return acc;
-                }, {})
-              );
-              setIsLoading(false);
-            }
+          const cachedAdmins = normalizeAdmins(parsed.data);
+          if (cachedAdmins.length > 0) {
+            hasHydratedFromCache = true;
+            setAdmins(cachedAdmins);
+            setSelectedAdmin(cachedAdmins[0]?.name || "");
+            setAdminPermissions(
+              cachedAdmins.reduce((acc, admin) => {
+                const rawPerms = admin.raw?.permissions;
+                acc[admin.name] = buildPermissionsFromRaw(rawPerms);
+                return acc;
+              }, {})
+            );
+            setSavedAdminPermissions(
+              cachedAdmins.reduce((acc, admin) => {
+                const rawPerms = admin.raw?.permissions;
+                acc[admin.name] = buildPermissionsFromRaw(rawPerms);
+                return acc;
+              }, {})
+            );
+            setIsLoading(false);
           }
         }
 
-        setIsLoading(true);
+        if (!hasHydratedFromCache) {
+          setIsLoading(true);
+        }
+
         const response = await fetchAdmins();
         if (!isMounted) return;
         const normalized = normalizeAdmins(response);
@@ -173,7 +211,15 @@ export default function Admins() {
         setSelectedAdmin(normalized[0]?.name || "");
         setAdminPermissions(
           normalized.reduce((acc, admin) => {
-            acc[admin.name] = buildPermissionsForAdmin(admin.name);
+            const rawPerms = admin.raw?.permissions;
+            acc[admin.name] = buildPermissionsFromRaw(rawPerms);
+            return acc;
+          }, {})
+        );
+        setSavedAdminPermissions(
+          normalized.reduce((acc, admin) => {
+            const rawPerms = admin.raw?.permissions;
+            acc[admin.name] = buildPermissionsFromRaw(rawPerms);
             return acc;
           }, {})
         );
@@ -184,9 +230,11 @@ export default function Admins() {
         setError("");
       } catch (err) {
         if (!isMounted) return;
-        setError(err?.message || "Unable to fetch admins right now.");
-        setAdmins([]);
-        setSelectedAdmin("");
+        if (!hasHydratedFromCache) {
+          setError(err?.message || "Unable to fetch admins right now.");
+          setAdmins([]);
+          setSelectedAdmin("");
+        }
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -221,9 +269,16 @@ export default function Admins() {
   const permissions = selectedAdmin
     ? adminPermissions[selectedAdmin] || permissionDefaults
     : permissionDefaults;
+  const savedPermissions = selectedAdmin
+    ? savedAdminPermissions[selectedAdmin] || permissionDefaults
+    : permissionDefaults;
+  const hasPermissionChanges = Object.keys(permissionDefaults).some(
+    (permission) => Boolean(permissions?.[permission]) !== Boolean(savedPermissions?.[permission])
+  );
 
   const togglePermission = (permission) => {
-    if (!selectedAdmin) return;
+    if (!selectedAdmin || !canManageAdmins) return;
+    setSavePermissionsError("");
     setAdminPermissions((prev) => ({
       ...prev,
       [selectedAdmin]: {
@@ -236,6 +291,8 @@ export default function Admins() {
   const selectedAdminMeta = admins.find(
     (admin) => admin.name === selectedAdmin
   );
+
+  const adminListSkeletonRows = Array.from({ length: 21 }, (_, index) => index);
 
   const handleAddAdmin = async (event) => {
     event.preventDefault();
@@ -267,16 +324,18 @@ export default function Admins() {
       setAdmins((prev) => [createdAdmin, ...prev]);
       setAdminPermissions((prev) => ({
         ...prev,
-        [createdAdmin.name]: {
-          ...buildPermissionsForAdmin(createdAdmin.name),
-          ...newAdminPermissions,
-        },
+        [createdAdmin.name]: { ...permissionDefaults, ...newAdminPermissions },
+      }));
+      setSavedAdminPermissions((prev) => ({
+        ...prev,
+        [createdAdmin.name]: { ...permissionDefaults, ...newAdminPermissions },
       }));
       setSelectedAdmin(createdAdmin.name);
       setNewAdminName("");
       setNewAdminPassword("");
+      setShowNewAdminPassword(false);
       setNewAdminPermissions(
-        permissionSections[0].items.reduce((acc, permission) => {
+        Object.keys(permissionDefaults).reduce((acc, permission) => {
           acc[permission] = false;
           return acc;
         }, {})
@@ -342,6 +401,11 @@ export default function Admins() {
         delete next[selectedAdmin];
         return next;
       });
+      setSavedAdminPermissions((prev) => {
+        const next = { ...prev };
+        delete next[selectedAdmin];
+        return next;
+      });
       setSelectedAdmin("");
       setIsDeleteModalOpen(false);
     } catch (err) {
@@ -351,12 +415,39 @@ export default function Admins() {
     }
   };
 
+  const handleSavePermissions = async () => {
+    if (!selectedAdmin || !hasPermissionChanges || !canManageAdmins) return;
+    const permissionsForAdmin = adminPermissions[selectedAdmin] || permissionDefaults;
+    const permissions = Object.entries(permissionsForAdmin)
+      .filter(([, enabled]) => enabled)
+      .map(([label]) => permissionKeyMap[label] || label)
+      .filter(Boolean);
+    const userid = selectedAdminMeta?.raw?.userid || selectedAdmin;
+
+    try {
+      setIsSavingPermissions(true);
+      setSavePermissionsError("");
+      await updateAdmin({ permissions, userid });
+      setSavedAdminPermissions((prev) => ({
+        ...prev,
+        [selectedAdmin]: { ...permissionsForAdmin },
+      }));
+      toast.success("Permissions updated successfully");
+    } catch (err) {
+      setSavePermissionsError(
+        err?.message || "Unable to save permissions right now."
+      );
+    } finally {
+      setIsSavingPermissions(false);
+    }
+  };
+
   return (
-    <div className="flex min-h-screen h-full flex-col overflow-hidden bg-[#101418] px-4 py-4 text-white">
+    <div className="flex min-h-screen h-full flex-col overflow-hidden bg-[#101418] px-2 py-2 text-white">
 
       {isAddAdminOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
-          <div className="w-full max-w-2xl rounded-2xl border border-slate-800 bg-[#151a1f] p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 py-4">
+          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-[#151a1f] p-6 shadow-xl">
             <div className="flex items-start justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-slate-100">
@@ -373,7 +464,7 @@ export default function Admins() {
               </button>
             </div>
 
-            <form onSubmit={handleAddAdmin} className="mt-6 space-y-6">
+            <form onSubmit={handleAddAdmin} className="mt-6 flex min-h-0 flex-1 flex-col gap-6">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className="text-sm text-slate-300">Admin ID</label>
@@ -381,20 +472,30 @@ export default function Admins() {
                     value={newAdminName}
                     onChange={(event) => setNewAdminName(event.target.value)}
                     placeholder="Enter Admin ID"
-                    className="mt-2 w-full border-b border-slate-700 bg-transparent px-1 py-2 text-sm text-slate-100 focus:border-slate-400 focus:outline-none"
+                    className="mt-2 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-slate-400 focus:outline-none"
                   />
                 </div>
                 <div>
                   <label className="text-sm text-slate-300">Password</label>
-                  <input
-                    type="password"
-                    value={newAdminPassword}
-                    onChange={(event) =>
-                      setNewAdminPassword(event.target.value)
-                    }
-                    placeholder="Enter Password"
-                    className="mt-2 w-full border-b border-slate-700 bg-transparent px-1 py-2 text-sm text-slate-100 focus:border-slate-400 focus:outline-none"
-                  />
+                  <div className="relative mt-2">
+                    <input
+                      type={showNewAdminPassword ? "text" : "password"}
+                      value={newAdminPassword}
+                      onChange={(event) =>
+                        setNewAdminPassword(event.target.value)
+                      }
+                      placeholder="Enter Password"
+                      className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 pr-10 text-sm text-slate-100 placeholder:text-slate-500 focus:border-slate-400 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewAdminPassword((prev) => !prev)}
+                      className="absolute inset-y-0 right-2 flex items-center text-slate-400 transition hover:text-slate-200"
+                      aria-label={showNewAdminPassword ? "Hide password" : "Show password"}
+                    >
+                      {showNewAdminPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
               </div>
               {createAdminError && (
@@ -403,42 +504,43 @@ export default function Admins() {
 
               <div className="flex items-center justify-between text-sm font-semibold text-slate-200">
                 <div className="flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4 text-slate-400" />
-                  Permissions
+                  <ShieldCheck className="h-5 w-5 text-slate-400" />
+                  Assign Permissions
                 </div>
-                <button
-                  type="button"
-                  className="rounded-full border border-slate-700 px-4 py-1 text-xs text-slate-400"
-                  disabled
-                >
-                  Save
-                </button>
+                
               </div>
 
-              <div className="space-y-2">
-                {permissionSections[0].items.map((permission) => (
-                  <div
-                    key={permission}
-                    className="flex items-center justify-between border-b border-slate-800 py-3"
-                  >
-                    <span className="text-sm text-slate-200">{permission}</span>
-                    <button
-                      type="button"
-                      onClick={() => toggleNewAdminPermission(permission)}
-                      className={`flex h-7 w-12 items-center rounded-full border transition ${
-                        newAdminPermissions[permission]
-                          ? "border-sky-400 bg-sky-500"
-                          : "border-slate-700 bg-slate-800"
-                      }`}
-                    >
-                      <span
-                        className={`h-5 w-5 rounded-full bg-white shadow transition ${
-                          newAdminPermissions[permission]
-                            ? "translate-x-6"
-                            : "translate-x-1"
-                        }`}
-                      />
-                    </button>
+              <div className="admin-scroll min-h-0 flex-1 space-y-5 overflow-y-auto pr-1">
+                {permissionSections.map((section) => (
+                  <div key={section.title} className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                      {section.title}
+                    </p>
+                    {section.items.map((permission) => (
+                      <div
+                        key={permission}
+                        className="flex items-center justify-between border-b border-slate-800 py-3"
+                      >
+                        <span className="text-sm text-slate-200">{permission}</span>
+                        <button
+                          type="button"
+                          onClick={() => toggleNewAdminPermission(permission)}
+                          className={`flex h-7 w-12 items-center rounded-full border transition ${
+                            newAdminPermissions[permission]
+                              ? "border-sky-400 bg-sky-500"
+                              : "border-slate-700 bg-slate-800"
+                          }`}
+                        >
+                          <span
+                            className={`h-5 w-5 rounded-full bg-white shadow transition ${
+                              newAdminPermissions[permission]
+                                ? "translate-x-6"
+                                : "translate-x-1"
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>
@@ -538,8 +640,8 @@ export default function Admins() {
         </div>
       )}
 
-      <div className="grid flex-1 min-h-0 gap-4 overflow-hidden lg:grid-cols-[320px_1fr]">
-        <div className="flex min-h-0 flex-col rounded-2xl border border-slate-800 bg-[#151a1f] p-3 shadow-lg">
+      <div className="grid flex-1 min-h-0 gap-2 overflow-hidden lg:grid-cols-[320px_1fr]">
+        <div className="flex min-h-0 flex-col rounded-m border border-slate-800 bg-[#151a1f] p-3 shadow-lg">
           <div className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-2">
             <Search className="h-4 w-4 text-slate-400" />
             <Input
@@ -554,8 +656,16 @@ export default function Admins() {
             <p className="text-sm text-slate-400">Admins</p>
             <div className="admin-scroll mt-3 flex-1 space-y-1 overflow-y-auto pr-1">
               {isLoading ? (
-                <div className="rounded-lg border border-dashed border-slate-700 px-4 py-6 text-center text-sm text-slate-500">
-                  Loading admins...
+                <div className="space-y-2">
+                  {adminListSkeletonRows.map((row) => (
+                    <div
+                      key={`admin-skeleton-${row}`}
+                      className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/30 px-3 py-2"
+                    >
+                      <div className="h-4 w-32 animate-pulse rounded-full bg-slate-800" />
+                      <div className="h-4 w-4 animate-pulse rounded-full bg-slate-800" />
+                    </div>
+                  ))}
                 </div>
               ) : error ? (
                 <div className="rounded-lg border border-dashed border-rose-500/50 bg-rose-500/10 px-4 py-6 text-center text-sm text-rose-200">
@@ -613,7 +723,7 @@ export default function Admins() {
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-col rounded-2xl border border-slate-800 bg-[#151a1f] px-6 py-5 shadow-lg">
+        <div className="flex min-h-0 flex-col rounded-m border border-slate-800 bg-[#151a1f] px-6 py-5 shadow-lg">
           {isLoading ? (
             <div className="flex h-full flex-col gap-6">
               <div className="flex items-start justify-between">
@@ -627,7 +737,6 @@ export default function Admins() {
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="h-9 w-9 animate-pulse rounded-lg bg-slate-800" />
-                  <div className="h-8 w-28 animate-pulse rounded-full bg-slate-800" />
                   <div className="h-9 w-9 animate-pulse rounded-lg bg-slate-800" />
                 </div>
               </div>
@@ -638,12 +747,12 @@ export default function Admins() {
               </div>
 
               <div className="admin-scroll flex-1 space-y-4 overflow-y-auto pr-1">
-                {["CTPAT", "Operational Forms", "Admin Tools"].map((title) => (
-                  <div key={title} className="space-y-3">
+                {permissionSections.map((section) => (
+                  <div key={section.title} className="space-y-3">
                     <div className="h-3 w-24 animate-pulse rounded-full bg-slate-800" />
-                    {[0, 1, 2].map((item) => (
+                    {section.items.map((permission) => (
                       <div
-                        key={`${title}-${item}`}
+                        key={`${section.title}-${permission}`}
                         className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3"
                       >
                         <div className="h-4 w-40 animate-pulse rounded-full bg-slate-800" />
@@ -676,9 +785,22 @@ export default function Admins() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    onClick={handleSavePermissions}
+                    disabled={!selectedAdmin || !hasPermissionChanges || isSavingPermissions || !canManageAdmins}
+                    className="rounded-lg border border-slate-700 bg-slate-900 p-2 text-emerald-300 transition hover:border-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+                    aria-label="Save updated permissions"
+                  >
+                    {isSavingPermissions ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setIsChangePasswordOpen(true)}
                     className="rounded-lg border border-slate-700 bg-slate-900 p-2 text-slate-300 transition hover:border-slate-500"
-                    aria-label="Save permissions"
+                    aria-label="Change password"
                   >
                     <KeyRound className="h-4 w-4" />
                   </button>
@@ -698,6 +820,9 @@ export default function Admins() {
                 <ShieldCheck className="h-4 w-4 text-slate-400" />
                 Permissions
               </div>
+              {savePermissionsError && (
+                <p className="mt-3 text-xs text-rose-300">{savePermissionsError}</p>
+              )}
 
               <div className="admin-scroll mt-4 flex-1 space-y-6 overflow-y-auto pr-1">
                 {permissionSections.map((section) => (
@@ -717,7 +842,7 @@ export default function Admins() {
                           <button
                             type="button"
                             onClick={() => togglePermission(permission)}
-                            disabled={!selectedAdmin}
+                            disabled={!selectedAdmin || !canManageAdmins}
                             className={`flex h-7 w-12 items-center rounded-full border transition ${
                               permissions?.[permission]
                                 ? "border-sky-400 bg-sky-500"

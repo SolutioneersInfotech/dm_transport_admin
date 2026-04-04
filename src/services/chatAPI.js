@@ -1,22 +1,32 @@
 import {
   get,
-  limitToLast,
   onValue,
   push,
-  query,
   ref,
   remove,
   set,
   update,
 } from "firebase/database";
 import { database } from "../firebase/firebaseApp";
+<<<<<<< HEAD
+import { sendChatMessageRoute } from "../utils/apiRoutes";
+=======
 import { fetchChatThreadsRoute, markChatThreadReadRoute } from "../utils/apiRoutes";
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
 
 const ADMIN_GENERAL_PATH = "chat/users/admin/general";
 const USER_MIRROR_BASE = "chat/users";
 const FETCH_USERS_URL =
+<<<<<<< HEAD
+  "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin/fetchusers";
+
+function isDevMode() {
+  return typeof import.meta !== "undefined" && Boolean(import.meta?.env?.DEV);
+}
+=======
   "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin/fetchUsers";
 export const chatType = "general";
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
 
 function getToken() {
   return localStorage.getItem("adminToken");
@@ -26,16 +36,41 @@ function getAdminUser() {
   return JSON.parse(localStorage.getItem("adminUser"));
 }
 
+function normalizeReplySnapshot(replyTo) {
+  if (!replyTo || typeof replyTo !== "object") {
+    return { replyToId: null, replyToSnapshot: null };
+  }
+
+  const id = replyTo?.id ?? replyTo?.msgId ?? null;
+  return {
+    replyToId: id,
+    // Legacy/mobile payloads can embed the full replied message object in replyTo.
+    replyToSnapshot: {
+      id,
+      msgId: id,
+      sendername: replyTo?.sendername ?? "Unknown",
+      type: replyTo?.type,
+      content: {
+        message: replyTo?.content?.message ?? replyTo?.message ?? "",
+        attachmentUrl: replyTo?.content?.attachmentUrl ?? replyTo?.attachmentUrl ?? "",
+      },
+      dateTime: replyTo?.dateTime ?? replyTo?.datetime ?? null,
+    },
+  };
+}
+
 function normalizeMessage(messageId, msg) {
-  const rawDate = msg?.dateTime || msg?.datetime;
-  const date = rawDate ? new Date(rawDate) : new Date();
-  const dateTime = Number.isNaN(date.getTime())
-    ? new Date().toISOString()
-    : date.toISOString();
+  const rawDate = msg?.dateTime || msg?.datetime || "";
+  const parsedTime = parseDateTimeMs(rawDate);
+  const dateTime = parsedTime > 0 ? new Date(parsedTime).toISOString() : String(rawDate || "");
   const type =
     msg?.type === 0 ? 1 :
     msg?.type === 1 ? 0 :
     msg?.type;
+  const rawReplyTo = msg?.replyTo ?? null;
+  const replyMeta = typeof rawReplyTo === "string"
+    ? { replyToId: rawReplyTo, replyToSnapshot: null }
+    : normalizeReplySnapshot(rawReplyTo);
 
   return {
     msgId: messageId,
@@ -49,18 +84,118 @@ function normalizeMessage(messageId, msg) {
     type: typeof type === "number" ? type : 0,
     contactId: msg?.contactId ?? msg?.userid ?? null,
     sendername: msg?.sendername ?? "Unknown",
-    replyTo: msg?.replyTo ?? null,
+    replyTo: rawReplyTo,
+    replyToId: replyMeta.replyToId,
+    replyToSnapshot: replyMeta.replyToSnapshot,
+    seenByAdmin: msg?.seenByAdmin ?? false,
+    seenByAdmins: msg?.seenByAdmins ?? null,
+    seenAt: msg?.seenAt ?? null,
+    seenBy: msg?.seenBy ?? null,
   };
+}
+
+function parseDateTimeMs(rawDate) {
+  if (!rawDate) return 0;
+
+  const direct = new Date(rawDate).getTime();
+  if (!Number.isNaN(direct)) return direct;
+
+  const asString = String(rawDate).trim();
+  if (!asString) return 0;
+
+  let normalized = asString.includes(" ") ? asString.replace(" ", "T") : asString;
+  if (!/[zZ]|[+-]\d{2}:?\d{2}$/.test(normalized)) {
+    normalized = `${normalized}Z`;
+  }
+
+  const tolerant = new Date(normalized).getTime();
+  return Number.isNaN(tolerant) ? 0 : tolerant;
+}
+
+function normalizeContactId(value) {
+  if (value === null || value === undefined) return null;
+  const cleaned = String(value).trim().replace(/[+\s-]/g, "");
+  return cleaned || null;
+}
+
+function resolveUserId(chatTarget) {
+  if (chatTarget && typeof chatTarget === "object") {
+    const candidate =
+      chatTarget.userid ??
+      chatTarget.userId ??
+      chatTarget.uid ??
+      chatTarget.id ??
+      null;
+
+    return normalizeContactId(candidate);
+  }
+
+  return normalizeContactId(chatTarget);
+}
+
+function resolveContactId(chatTarget) {
+  if (chatTarget && typeof chatTarget === "object") {
+    const preferred = [
+      chatTarget.phoneNumber,
+      chatTarget.phone,
+      chatTarget.mobile,
+      chatTarget.contact,
+      chatTarget.whatsappNumber,
+    ];
+
+    for (const option of preferred) {
+      const normalized = normalizeContactId(option);
+      if (normalized) return normalized;
+    }
+  }
+
+  return resolveUserId(chatTarget);
+}
+
+function buildMessageDedupKey(message) {
+  if (message?.id) return `id:${message.id}`;
+
+  const dt = String(message?.dateTime || "");
+  const sender = String(message?.sendername || "");
+  const text = String(message?.content?.message ?? message?.message ?? "");
+  const type = String(message?.type ?? "");
+  const mediaUrl = String(message?.content?.attachmentUrl ?? message?.attachmentUrl ?? "");
+
+  return `fallback:${dt}|${sender}|${text}|${type}|${mediaUrl}`;
+}
+
+function mergeMessageObjects(primaryMessagesObject = {}, fallbackMessagesObject = {}) {
+  const mergedMap = new Map();
+
+  const addMessages = (messagesObject) => {
+    Object.entries(messagesObject || {}).forEach(([id, msg]) => {
+      const normalized = normalizeMessage(id, msg);
+      const dedupKey = buildMessageDedupKey(normalized);
+
+      if (!mergedMap.has(dedupKey)) {
+        mergedMap.set(dedupKey, normalized);
+      }
+    });
+  };
+
+  addMessages(primaryMessagesObject);
+  addMessages(fallbackMessagesObject);
+
+  return sortByDateTimeAsc(Array.from(mergedMap.values()));
 }
 
 function sortByDateTimeAsc(messages) {
   return messages.sort((a, b) => {
-    const left = a?.dateTime ? new Date(a.dateTime).getTime() : 0;
-    const right = b?.dateTime ? new Date(b.dateTime).getTime() : 0;
+    const left = parseDateTimeMs(a?.dateTime);
+    const right = parseDateTimeMs(b?.dateTime);
     return left - right;
   });
 }
 
+/**
+ * Fetch users for chat from the API
+ * @returns {Promise<{users: Array}>}
+ */
 export async function fetchUsersForChat() {
   const token = getToken();
   const response = await fetch(FETCH_USERS_URL, {
@@ -79,6 +214,20 @@ export async function fetchUsersForChat() {
   return { users };
 }
 
+<<<<<<< HEAD
+/**
+ * Fetch messages for a specific user with pagination
+ * @param {string} userid - User ID
+ * @param {number} messageLimit - Number of messages to fetch (default: 10)
+ * @returns {Promise<{messages: Array}>}
+ */
+export async function fetchMessages(chatTarget, messageLimit = 10) {
+  const userid = resolveUserId(chatTarget);
+  const contactId = resolveContactId(chatTarget);
+  if (!userid || !contactId) {
+    return { messages: [] };
+  }
+=======
 export async function fetchChatThreads({ page = 1, limit = 20, search = undefined, type = chatType } = {}) {
   const token = getToken();
   const url = fetchChatThreadsRoute({ page, limit, search, type });
@@ -124,67 +273,205 @@ export async function fetchMessages(userid) {
   );
   const snapshot = await get(messagesRef);
   const messagesObject = snapshot.exists() ? snapshot.val() : {};
+>>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
 
-  const messages = sortByDateTimeAsc(
-    Object.entries(messagesObject).map(([id, msg]) =>
-      normalizeMessage(id, msg)
-    )
+  const primaryPath = `${ADMIN_GENERAL_PATH}/${contactId}`;
+  const fallbackPath = `${USER_MIRROR_BASE}/${userid}/admin`;
+
+  if (isDevMode()) {
+    console.log("[chatAPI] fetchMessages", { userid, contactId, primaryPath, fallbackPath });
+  }
+
+  const [primarySnapshot, fallbackSnapshot] = await Promise.all([
+    get(ref(database, primaryPath)),
+    get(ref(database, fallbackPath)),
+  ]);
+
+  const messages = mergeMessageObjects(
+    primarySnapshot.exists() ? primarySnapshot.val() : {},
+    fallbackSnapshot.exists() ? fallbackSnapshot.val() : {}
   );
 
-  return { messages };
+  // If we only need 1 message, return just the most recent (last in sorted array)
+  if (messageLimit === 1 && messages.length > 0) {
+    return { messages: [messages[messages.length - 1]] };
+  }
+
+  // Return the last N messages (most recent)
+  return { messages: messages.slice(-messageLimit) };
 }
 
+/**
+ * Subscribe to messages for a specific user - fetches all messages
+ * @param {string} userid - User ID
+ * @param {function} onChange - Callback function called when messages change
+ * @returns {function} Unsubscribe function
+ */
 export function subscribeMessages(userid, onChange) {
-  const messagesRef = query(
-    ref(database, `${ADMIN_GENERAL_PATH}/${userid}`),
-    limitToLast(100)
-  );
+  const resolvedUserId = resolveUserId(userid);
+  const contactId = resolveContactId(userid);
+  if (!resolvedUserId || !contactId) {
+    onChange([]);
+    return () => {};
+  }
 
-  const unsubscribe = onValue(messagesRef, (snapshot) => {
-    const messagesObject = snapshot.exists() ? snapshot.val() : {};
-    const messages = sortByDateTimeAsc(
-      Object.entries(messagesObject || {}).map(([id, msg]) =>
-        normalizeMessage(id, msg)
-      )
-    );
+  const primaryPath = `${ADMIN_GENERAL_PATH}/${contactId}`;
+  const fallbackPath = `${USER_MIRROR_BASE}/${resolvedUserId}/admin`;
 
-    onChange(messages);
+  if (isDevMode()) {
+    console.log("[chatAPI] subscribeMessages", { userid: resolvedUserId, contactId, primaryPath, fallbackPath });
+  }
+
+  let primaryMessagesObject = {};
+  let fallbackMessagesObject = {};
+
+  const emit = () => {
+    onChange(mergeMessageObjects(primaryMessagesObject, fallbackMessagesObject));
+  };
+
+  const unsubscribePrimary = onValue(ref(database, primaryPath), (snapshot) => {
+    primaryMessagesObject = snapshot.exists() ? snapshot.val() : {};
+    emit();
+  });
+
+  const unsubscribeFallback = onValue(ref(database, fallbackPath), (snapshot) => {
+    fallbackMessagesObject = snapshot.exists() ? snapshot.val() : {};
+    emit();
+  });
+
+  return () => {
+    unsubscribePrimary();
+    unsubscribeFallback();
+  };
+}
+
+/**
+ * Subscribe to the latest message for a specific user.
+ * Uses a bounded window, then sorts by dateTime to avoid Firebase key-order issues.
+ * @param {string} userid
+ * @param {(message: object|null) => void} onChange
+ * @returns {function} Unsubscribe function
+ */
+export function subscribeLastMessage(userid, onChange) {
+  return subscribeMessages(userid, (messages) => {
+    onChange(messages.length ? messages[messages.length - 1] : null);
+  });
+}
+
+export function subscribeChatSummary(chatTarget, onChange) {
+  const resolvedUserId = resolveUserId(chatTarget);
+  const contactId = resolveContactId(chatTarget);
+
+  if (!resolvedUserId || !contactId) {
+    onChange({ lastMessage: null, unreadCount: 0 });
+    return () => {};
+  }
+
+  const primaryRef = ref(database, `${ADMIN_GENERAL_PATH}/${contactId}`);
+
+  const unsubscribe = onValue(primaryRef, (snapshot) => {
+    if (!snapshot.exists()) {
+      onChange({ lastMessage: null, unreadCount: 0 });
+      return;
+    }
+
+    const messagesObject = snapshot.val() || {};
+
+    let lastMessage = null;
+    let lastTimestamp = 0;
+    let unreadCount = 0;
+
+    Object.entries(messagesObject).forEach(([id, raw]) => {
+      const msg = normalizeMessage(id, raw);
+      if (!msg) return;
+
+      const ts = parseDateTimeMs(msg.dateTime);
+      if (ts >= lastTimestamp) {
+        lastTimestamp = ts;
+        lastMessage = msg;
+      }
+
+      // Use the RAW Firebase payload for unread detection so direction flags
+      // match markMessagesAsSeen and subscribeUnreadCount.
+      const rawType = typeof raw?.type === "number" ? raw.type : msg.type;
+
+      if (rawType === 1 && !isSeenByCurrentAdmin(raw)) {
+        unreadCount++;
+      }
+    });
+
+    onChange({ lastMessage, unreadCount });
   });
 
   return unsubscribe;
 }
 
-export async function sendMessage(userid, text, adminUser = getAdminUser()) {
-  const messageId = push(ref(database, `${ADMIN_GENERAL_PATH}/${userid}`)).key;
 
-  if (!messageId) {
-    throw new Error("Unable to generate message id.");
+
+/**
+ * Send a message to a user
+ * @param {string} userid - User ID
+ * @param {string} text - Message text (must be a string)
+ * @param {object} [adminUser] - Admin user object (optional, will fetch if not provided)
+ * @param {string|null} [replyToMsgId] - Optional message ID this message is replying to
+ * @param {string} [attachmentUrl] - Optional attachment download URL (image/video/document)
+ * @returns {Promise<{message: object}>}
+ */
+export async function sendMessage(chatTarget, text, adminUser = getAdminUser(), replyToMsgId = null, attachmentUrl = "") {
+  const userid = resolveUserId(chatTarget);
+  const contactId = resolveContactId(chatTarget);
+
+  if (!userid || !contactId) {
+    throw new Error("Missing chat target id.");
   }
+
+  const messageText = typeof text === "string" ? text : (text != null ? String(text) : "");
+  const replyTo = replyToMsgId != null && replyToMsgId !== "" ? replyToMsgId : null;
+  const attachment = typeof attachmentUrl === "string" && attachmentUrl.trim() ? attachmentUrl.trim() : "";
+  const token = getToken();
+
+  const response = await fetch(sendChatMessageRoute, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      userid,
+      message: messageText,
+      replyTo,
+      attachmentUrl: attachment,
+      sendername: adminUser?.name || adminUser?.userid || "Admin",
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.message || "Failed to send message.");
+  }
+
+  const messageId = data?.message?.id || data?.id || push(ref(database, `${ADMIN_GENERAL_PATH}/${contactId}`)).key;
 
   const payload = {
     id: messageId,
-    dateTime: new Date().toISOString(),
-    content: { message: text, attachmentUrl: "" },
-    status: 0,
+    dateTime: data?.message?.dateTime || data?.message?.datetime || new Date().toISOString(),
+    content: { message: messageText, attachmentUrl: attachment },
+    status: data?.message?.status ?? 0,
     type: 0,
     contactId: userid,
-    sendername: adminUser?.userid || "Admin",
-    replyTo: null,
+    sendername: data?.message?.sendername || adminUser?.name || adminUser?.userid || "Admin",
+    replyTo,
   };
-
-  const userPayload = {
-    ...payload,
-    type: 1,
-  };
-
-  await Promise.all([
-    set(ref(database, `${ADMIN_GENERAL_PATH}/${userid}/${messageId}`), payload),
-    set(ref(database, `${USER_MIRROR_BASE}/${userid}/admin/${messageId}`), userPayload),
-  ]);
 
   return { message: payload };
 }
 
+/**
+ * Delete a specific message
+ * @param {string} messageId - Message ID
+ * @param {string} userid - User ID
+ * @returns {Promise<{success: boolean}>}
+ */
 export async function deleteSpecificMessage(messageId, userid) {
   await Promise.all([
     remove(ref(database, `${ADMIN_GENERAL_PATH}/${userid}/${messageId}`)),
@@ -194,6 +481,11 @@ export async function deleteSpecificMessage(messageId, userid) {
   return { success: true };
 }
 
+/**
+ * Delete entire chat history for a user
+ * @param {string} userid - User ID
+ * @returns {Promise<{success: boolean}>}
+ */
 export async function deleteChatHistory(userid) {
   await Promise.all([
     remove(ref(database, `${ADMIN_GENERAL_PATH}/${userid}`)),
@@ -203,40 +495,65 @@ export async function deleteChatHistory(userid) {
   return { success: true };
 }
 
-// Mark messages as seen/read for a specific user
-export async function markMessagesAsSeen(userid) {
+/** Current admin id for per-admin seen state */
+function getCurrentAdminId() {
+  const adminUser = getAdminUser();
+  return adminUser?.userid || adminUser?.userId || adminUser?.id || "admin";
+}
+
+/** True if this message is seen by the current admin (per-admin seen) */
+function isSeenByCurrentAdmin(msg) {
+  const adminId = getCurrentAdminId();
+  if (msg.seenByAdmins && typeof msg.seenByAdmins === "object" && msg.seenByAdmins[adminId]) {
+    return true;
+  }
+  // Legacy: message had global seenByAdmin only → treat as seen by all
+  if (msg.seenByAdmin === true && (!msg.seenByAdmins || Object.keys(msg.seenByAdmins || {}).length === 0)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Mark messages as seen/read for the current admin only (per-admin seen)
+ * @param {string} userid - User ID
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function markMessagesAsSeen(chatTarget) {
   try {
-    const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
+    const userid = resolveUserId(chatTarget);
+    const contactId = resolveContactId(chatTarget);
+    if (!userid || !contactId) {
+      return { success: true };
+    }
+
+    const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${contactId}`);
     const snapshot = await get(messagesRef);
-    
+
     if (!snapshot.exists()) {
       return { success: true };
     }
 
     const messagesObject = snapshot.val();
     const updateData = {};
-    const adminUser = getAdminUser();
-    const adminId = adminUser?.userid || "admin";
+    const adminId = getCurrentAdminId();
     const seenTimestamp = new Date().toISOString();
 
-    // Update all unread messages (type === 1, from user) to mark them as seen
+    // Mark only for current admin: set seenByAdmins/<adminId> (and legacy fields for display)
     Object.keys(messagesObject).forEach((messageId) => {
       const msg = messagesObject[messageId];
-      // Only mark messages from user (type === 1) that haven't been seen
-      if (msg.type === 1 && !msg.seenByAdmin) {
-        const messagePath = `${ADMIN_GENERAL_PATH}/${userid}/${messageId}`;
-        updateData[`${messagePath}/seenByAdmin`] = true;
-        updateData[`${messagePath}/seenAt`] = seenTimestamp;
-        updateData[`${messagePath}/seenBy`] = adminId;
-      }
+      if (msg.type !== 1) return;
+      if (isSeenByCurrentAdmin(msg)) return;
+      const messagePath = `${ADMIN_GENERAL_PATH}/${contactId}/${messageId}`;
+      updateData[`${messagePath}/seenByAdmins/${adminId}`] = seenTimestamp;
+      updateData[`${messagePath}/seenAt`] = seenTimestamp;
+      updateData[`${messagePath}/seenBy`] = adminId;
     });
 
     if (Object.keys(updateData).length > 0) {
-      // Use update to batch update all fields at once
       await update(ref(database), updateData);
     }
 
-    // Store last seen timestamp for this user
     const lastSeenRef = ref(database, `chat/admin/lastSeen/${userid}`);
     await set(lastSeenRef, {
       timestamp: seenTimestamp,
@@ -250,12 +567,21 @@ export async function markMessagesAsSeen(userid) {
   }
 }
 
-// Get unread message count for a user
-export async function getUnreadCount(userid) {
+/**
+ * Get unread message count for the current admin only (per-admin)
+ * @param {string} userid - User ID
+ * @returns {Promise<number>}
+ */
+export async function getUnreadCount(chatTarget) {
   try {
-    const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
+    const contactId = resolveContactId(chatTarget);
+    if (!contactId) {
+      return { unreadCount: 0 };
+    }
+
+    const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${contactId}`);
     const snapshot = await get(messagesRef);
-    
+
     if (!snapshot.exists()) {
       return 0;
     }
@@ -264,8 +590,7 @@ export async function getUnreadCount(userid) {
     let unreadCount = 0;
 
     Object.values(messagesObject).forEach((msg) => {
-      // Count messages from user (type === 1) that haven't been seen
-      if (msg.type === 1 && !msg.seenByAdmin) {
+      if (msg.type === 1 && !isSeenByCurrentAdmin(msg)) {
         unreadCount++;
       }
     });
@@ -277,10 +602,21 @@ export async function getUnreadCount(userid) {
   }
 }
 
-// Subscribe to unread count changes for a user
-export function subscribeUnreadCount(userid, onChange) {
-  const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${userid}`);
-  
+/**
+ * Subscribe to unread count for the current admin only (per-admin)
+ * @param {string} userid - User ID
+ * @param {function} onChange - Callback function called when unread count changes
+ * @returns {function} Unsubscribe function
+ */
+export function subscribeUnreadCount(chatTarget, onChange) {
+  const contactId = resolveContactId(chatTarget);
+  if (!contactId) {
+    onChange(0);
+    return () => {};
+  }
+
+  const messagesRef = ref(database, `${ADMIN_GENERAL_PATH}/${contactId}`);
+
   const unsubscribe = onValue(messagesRef, (snapshot) => {
     if (!snapshot.exists()) {
       onChange(0);
@@ -291,7 +627,7 @@ export function subscribeUnreadCount(userid, onChange) {
     let unreadCount = 0;
 
     Object.values(messagesObject).forEach((msg) => {
-      if (msg.type === 1 && !msg.seenByAdmin) {
+      if (msg.type === 1 && !isSeenByCurrentAdmin(msg)) {
         unreadCount++;
       }
     });

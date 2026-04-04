@@ -1,6 +1,8 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/Sidebar";
+import GlobalUnreadBadgeSync from "../components/GlobalUnreadBadgeSync";
+import GlobalResumeReconcile from "../components/GlobalResumeReconcile";
 
 const ProtectedLayout = () => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -20,6 +22,8 @@ const ProtectedLayout = () => {
 
   return (
     <div className="flex bg-[#101418] text-white min-h-screen">
+      <GlobalUnreadBadgeSync />
+      <GlobalResumeReconcile />
       <Sidebar />
       <div className="flex-1 h-screen overflow-y-auto">
         <Outlet />

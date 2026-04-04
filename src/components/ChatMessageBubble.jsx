@@ -1,7 +1,3 @@
-
-
-
-
 // export default function ChatMessageBubble({ msg }) {
 //   const isAdmin = msg.type === 1;
 //   const text = msg?.content?.message || "";
@@ -35,7 +31,7 @@
 //   return (
 //     <div className={`flex ${isAdmin ? "justify-end" : "justify-start"}`}>
 //       <div
-//         className={`px-4 py-2 max-w-[70%] rounded-lg text-sm shadow 
+//         className={`px-4 py-2 max-w-[70%] rounded-lg text-sm shadow
 //           ${isAdmin ? "bg-blue-600 text-white" : "bg-[#1f2937] text-gray-200"}`}
 //       >
 //         {/* 📌 IMAGE PREVIEW */}
@@ -82,7 +78,6 @@
 //     </div>
 //   );
 // }
-
 
 // export default function ChatMessageBubble({
 //   msg,
@@ -184,7 +179,6 @@
 //     </div>
 //   );
 // }
-
 
 // export default function ChatMessageBubble({ msg }) {
 //   const isAdmin = msg.type === 1;
@@ -298,88 +292,404 @@
 //   );
 // }
 
+import { useEffect, useState } from "react";
+import { Check, CheckCheck, Download, ExternalLink, FileText, Copy } from "lucide-react";
+import {
+  extractAttachmentDisplayName,
+  getAttachmentKind,
+  isGenericFileAttachment,
+} from "../utils/chatAttachments";
+import PdfThumbnail from "./PdfThumbnail";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
-export default function ChatMessageBubble({ msg }) {
-  const isAdmin = msg.type === 1;
-  const text = msg?.content?.message || "";
-  const attachment = msg?.content?.attachmentUrl || "";
+export default function ChatMessageBubble({
+  msg,
+  senderName,
+  showSenderName = true,
+  replyToMessage = null,
+  replyTargetId = null,
+  onReplyClick,
+  onImageClick,
+  onDownloadMedia,
+  isLastMessageInChat,
+}) {
+  /* ================= DATA ================= */
+  const isAdmin = msg?.type === 1;
 
-  const dateObj = msg?.dateTime ? new Date(msg.dateTime) : null;
+  const rawMessage = msg?.content?.message;
+  const text =
+    typeof rawMessage === "string"
+      ? rawMessage.trim()
+      : typeof rawMessage === "number"
+        ? String(rawMessage)
+        : rawMessage && typeof rawMessage === "object"
+          ? typeof rawMessage.text === "string"
+            ? rawMessage.text.trim()
+            : typeof rawMessage.message === "string"
+              ? rawMessage.message.trim()
+              : ""
+          : "";
 
-  const time = dateObj
-    ? dateObj.toLocaleTimeString("en-US", {
+  const rawAttachment = msg?.content?.attachmentUrl;
+  const attachment =
+    typeof rawAttachment === "string"
+      ? rawAttachment.trim()
+      : rawAttachment && typeof rawAttachment === "object"
+        ? typeof rawAttachment.url === "string"
+          ? rawAttachment.url.trim()
+          : ""
+        : "";
+  const hasAttachment =
+    Boolean(attachment) &&
+    !["null", "undefined"].includes(attachment.toLowerCase());
+
+  const date = msg?.dateTime ? new Date(msg.dateTime) : null;
+  const time = date
+    ? date.toLocaleTimeString("en-US", {
         hour: "2-digit",
         minute: "2-digit",
       })
     : "";
 
-  const statusIcon =
-    msg.status === 0 ? "✓" :
-    msg.status === 1 ? "✓✓" :
-    msg.status === 2 ? "✓✓" : "";
+  const displayName = senderName ?? (isAdmin ? "You" : "Driver");
 
-  const statusColor =
-    msg.status === 2 ? "text-blue-400" : "text-gray-400";
+  /* ================= STATUS (single = sent, double = delivered & seen) ================= */
+  const status = msg?.status ?? 0;
+  const fromBackend = status === 1 || status === 2;
+  const isLastInChat = isLastMessageInChat !== false;
+  const isDeliveredAndSeen = fromBackend || (isAdmin && !isLastInChat);
+  const statusIcon = isAdmin
+    ? isDeliveredAndSeen
+      ? "double"
+      : "single"
+    : "";
+  const statusColor = "text-white/70";
 
-  // ✅ FIXED FILE TYPE DETECTION
-  const lowerUrl = attachment.toLowerCase();
+  /* ================= ATTACHMENT TYPE ================= */
+  const attachmentMimeType = typeof msg?.content?.attachmentMimeType === "string"
+    ? msg.content.attachmentMimeType
+    : typeof rawAttachment?.mimeType === "string"
+      ? rawAttachment.mimeType
+      : typeof rawAttachment?.type === "string"
+        ? rawAttachment.type
+        : "";
 
-  const isImage =
-    lowerUrl.includes(".jpg") ||
-    lowerUrl.includes(".jpeg") ||
-    lowerUrl.includes(".png") ||
-    lowerUrl.includes(".webp") ||
-    lowerUrl.includes(".gif");
+  // MIME type is primary and extension is fallback for robust attachment detection.
+  const attachmentKind = hasAttachment
+    ? getAttachmentKind({ mimeType: attachmentMimeType, url: attachment })
+    : null;
+  const isImage = attachmentKind === "image";
+  const isVideo = attachmentKind === "video";
+  const isPDF = attachmentKind === "pdf";
+  const isGenericFile = hasAttachment && isGenericFileAttachment({ mimeType: attachmentMimeType, url: attachment });
+  const isHttpUrl = /^https?:\/\//i.test(attachment);
+  const isKnownMediaAttachment = hasAttachment && (isImage || isVideo || isPDF);
+  // PDF attachments must be checked first so the dedicated preview bubble wins over generic file fallback.
+  const showFileAttachmentLink = hasAttachment && !isPDF && isGenericFile && isHttpUrl;
+  // Display filename should be derived safely from metadata/url for readable cards.
+  const attachmentDisplayName = extractAttachmentDisplayName({
+    explicitName: msg?.content?.attachmentName ?? msg?.attachmentName,
+    url: attachment,
+    fallback: isPDF ? "Document.pdf" : "Attachment",
+  });
+  const normalizedText = text.toLowerCase();
+  const normalizedAttachment = attachment.toLowerCase();
+  const textLooksLikeStoragePath =
+    normalizedText.includes("chat/uploads/") ||
+    normalizedText.includes("firebase") ||
+    /\.(pdf|jpg|jpeg|png|gif|webp|mp4|mov|webm)(\?|$)/i.test(text);
+  // PDF chat bubbles should show a clean card, not raw storage paths leaked as message text.
+  const shouldRenderText =
+    Boolean(text) &&
+    !(hasAttachment && (
+      normalizedText === normalizedAttachment ||
+      textLooksLikeStoragePath
+    ));
 
-  const isPDF = lowerUrl.includes(".pdf");
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageLoadFailed, setImageLoadFailed] = useState(false);
 
+  useEffect(() => {
+    setImageLoaded(false);
+    setImageLoadFailed(false);
+  }, [attachment]);
+
+  /* ================= STYLES (WhatsApp-like) ================= */
+  const containerAlign = isAdmin ? "justify-end" : "justify-start";
+  const bubbleAlign = isAdmin ? "items-end" : "items-start";
+  // Sent = blue bubble (admin theme), Received = blue-gray bubble
+  const bubbleStyle = isAdmin
+    ? "bg-[#1f6feb] text-white rounded-br-md"
+    : "bg-[#1c2530] text-[#e9edef] rounded-bl-md";
+  const bubbleRounding = isAdmin
+    ? "rounded-2xl rounded-br-md"
+    : "rounded-2xl rounded-bl-md";
+
+  const replyToPreview =
+    replyToMessage != null
+      ? (typeof replyToMessage.content?.message === "string"
+          ? replyToMessage.content.message.trim()
+          : replyToMessage.content?.message != null
+            ? String(replyToMessage.content.message).trim()
+            : "") ||
+        (replyToMessage.content?.attachmentUrl ? "Attachment" : "") ||
+        "Message"
+      : "Message";
+
+  const showReplyTo = msg?.replyTo || replyToMessage;
+  const showCopyButton =
+    shouldRenderText && !isKnownMediaAttachment && !showFileAttachmentLink;
+  const [copied, setCopied] = useState(false);
+
+  const handlePdfDownload = () => {
+    if (!attachment) return;
+    if (onDownloadMedia) {
+      onDownloadMedia(attachment);
+      return;
+    }
+    window.open(attachment, "_blank", "noopener,noreferrer");
+  };
+  const handleVideoDownload = () => {
+    if (!attachment) return;
+    if (onDownloadMedia) {
+      onDownloadMedia(attachment);
+      return;
+    }
+    window.open(attachment, "_blank", "noopener,noreferrer");
+  };
+
+  const handleCopyMessage = async () => {
+    if (!showCopyButton) return;
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const fallback = document.createElement("textarea");
+        fallback.value = text;
+        fallback.setAttribute("readonly", "");
+        fallback.style.position = "absolute";
+        fallback.style.left = "-9999px";
+        document.body.appendChild(fallback);
+        fallback.select();
+        document.execCommand("copy");
+        document.body.removeChild(fallback);
+      }
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  const copyButton = showCopyButton ? (
+    <button
+      type="button"
+      onClick={handleCopyMessage}
+      className={`inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[#8696a0] transition-colors hover:bg-white/10 hover:text-[#e9edef] ${showSenderName ? "mt-5" : "mt-0.5"}`}
+      aria-label="Copy message"
+      title={copied ? "Copied" : "Copy message"}
+    >
+      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+    </button>
+  ) : null;
+
+  /* ================= RENDER ================= */
   return (
-    <div className={`flex ${isAdmin ? "justify-end" : "justify-start"} mb-2`}>
-      <div
-        className={`px-3 py-2 rounded-lg text-sm shadow max-w-[65%]
-        ${isAdmin ? "bg-blue-600 text-white" : "bg-[#1f2937] text-gray-200"}`}
-      >
-        {/* 🖼️ IMAGE PREVIEW */}
-        {attachment && isImage && (
-          <img
-            src={attachment}
-            alt="chat-img"
-            className="rounded-lg mb-2 max-h-64 object-cover cursor-pointer"
-            onClick={() => window.open(attachment, "_blank")}
-          />
-        )}
-
-        {/* 📄 PDF */}
-        {attachment && isPDF && (
-          <a
-            href={attachment}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 bg-gray-800 p-2 rounded mb-2 hover:bg-gray-700"
+    <div className={`flex ${containerAlign} mb-2`}>
+      <div className={`relative flex flex-col max-w-[65%] ${bubbleAlign}`}>
+        {copyButton && (
+          <div
+            className={`absolute z-10 ${showSenderName ? "top-5" : "top-0.5"} ${isAdmin ? "-left-10" : "-right-10"}`}
           >
-            📄 <span className="text-sm underline">Open PDF</span>
-          </a>
+            {copyButton}
+          </div>
         )}
-
-        {/* 📎 OTHER FILE */}
-        {attachment && !isImage && !isPDF && (
-          <a
-            href={attachment}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-300 underline block mb-2"
+        {/* Sender name */}
+        {showSenderName && (
+          <span
+            className={`text-xs text-[#8696a0] mb-0.5 px-1 ${
+              isAdmin ? "pr-2" : "pl-2"
+            }`}
           >
-            📎 Open Attachment
-          </a>
+            {displayName}
+          </span>
         )}
 
-        {/* 💬 TEXT */}
-        {text && <p className="whitespace-pre-wrap">{text}</p>}
+        {/* Bubble */}
+        <div
+          className={`px-3 py-2 shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] text-sm ${bubbleStyle} ${bubbleRounding}`}
+        >
+          {/* Replying to */}
+          {showReplyTo && (
+            <button
+              type="button"
+              onClick={() => onReplyClick?.(replyTargetId)}
+              className={`mb-2 w-full text-left rounded border-l-2 pl-2 py-1 text-xs ${
+                isAdmin
+                  ? "border-[#1f6feb] bg-white/10 text-white"
+                  : "border-gray-500 bg-black/20 text-gray-300"
+              } truncate`}
+              title={replyToPreview}
+            >
+              <span className="font-medium opacity-90">Replying to: </span>
+              {replyToPreview}
+            </button>
+          )}
 
-        {/* ⏱ TIME + STATUS */}
-        <div className="flex justify-end items-center gap-1 mt-1">
-          <span className="text-[10px] text-gray-300">{time}</span>
-          <span className={`text-[11px] ${statusColor}`}>{statusIcon}</span>
+          {/* 🖼 Image */}
+          {hasAttachment && isImage && (
+            <div className="relative mb-2 w-[280px] max-w-full overflow-hidden rounded-lg bg-black/20">
+              {!imageLoaded && !imageLoadFailed && (
+                <div className="h-64 w-full animate-pulse bg-white/20" />
+              )}
+              {imageLoadFailed ? (
+                <a
+                  href={attachment}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block px-3 py-2 text-sm text-blue-300 underline"
+                >
+                  Open image
+                </a>
+              ) : (
+                <img
+                  src={attachment}
+                  alt="attachment"
+                  className={`w-full rounded-lg object-cover cursor-pointer hover:opacity-95 ${
+                    imageLoaded ? "relative" : "absolute inset-0 h-64 opacity-0"
+                  }`}
+                  onLoad={() => setImageLoaded(true)}
+                  onError={() => setImageLoadFailed(true)}
+                  onClick={() =>
+                    onImageClick
+                      ? onImageClick(attachment)
+                      : window.open(attachment, "_blank")
+                  }
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) =>
+                    e.key === "Enter" &&
+                    (onImageClick
+                      ? onImageClick(attachment)
+                      : window.open(attachment, "_blank"))
+                  }
+                />
+              )}
+            </div>
+          )}
+
+          {/* 📄 PDF */}
+          {hasAttachment && isPDF && (
+            <div className="mb-2 w-[280px] max-w-full overflow-hidden rounded-lg border border-red-400/30 bg-[#101828]">
+              <PdfThumbnail attachmentUrl={attachment} displayName={attachmentDisplayName} />
+
+              <div className="flex items-center gap-3 px-3 py-2.5">
+                <span className="rounded-md bg-red-500/20 p-2 text-red-300">
+                  <FileText className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-gray-100">{attachmentDisplayName}</p>
+                  <p className="text-xs text-gray-400">PDF document</p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <TooltipProvider delayDuration={150}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={handlePdfDownload}
+                          className="rounded-full p-2 text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
+                          aria-label="Download PDF"
+                        >
+                          <Download className="h-4 w-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">Download PDF</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider delayDuration={150}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <a
+                          href={attachment}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-full p-2 text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
+                          aria-label="Open PDF"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">Open PDF</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 🎥 Video */}
+          {hasAttachment && isVideo && (
+            <div className="relative mb-2">
+              <video
+                src={attachment}
+                controls
+                controlsList="nodownload"
+                preload="metadata"
+                className="max-h-72 w-full rounded-lg bg-black"
+              />
+              {/* Video download uses a compact icon action to reduce visual clutter in bubbles. */}
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="absolute right-2 top-2 rounded-full bg-black/55 p-2 text-white transition-colors hover:bg-black/75"
+                      onClick={handleVideoDownload}
+                      aria-label="Download video"
+                    >
+                      <Download className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left">Download video</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          )}
+
+          {/* 📎 Other file */}
+          {showFileAttachmentLink && (
+            <a
+              href={attachment}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mb-2 block text-blue-300 underline"
+              title={attachmentDisplayName}
+            >
+              📎 Open {attachmentDisplayName}
+            </a>
+          )}
+
+          {/* Text */}
+          {shouldRenderText && <p className="whitespace-pre-wrap break-words">{text}</p>}
+
+          {/* Meta */}
+          <div className="mt-1 flex items-center justify-end gap-1">
+            <span
+              className={`text-[10px] ${isAdmin ? "text-white/80" : "text-gray-400"}`}
+            >
+              {time}
+            </span>
+            {statusIcon && (
+              <span className={`inline-flex items-center ${statusColor}`}>
+                {statusIcon === "double" ? (
+                  <CheckCheck className="h-3.5 w-3.5" strokeWidth={2.2} />
+                ) : (
+                  <Check className="h-3.5 w-3.5" strokeWidth={2.2} />
+                )}
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </div>

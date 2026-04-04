@@ -116,7 +116,6 @@ export default function Dashboard() {
       );
     }
   }, [dispatch, lastCountsFetched]);
-  
 
   const unseenTotal = useMemo(() => {
     if (!countsTotal) return 0;

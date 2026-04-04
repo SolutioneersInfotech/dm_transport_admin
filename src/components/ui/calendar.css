@@ -1,0 +1,97 @@
+.rdp-dark {
+  --rdp-accent-color: #1f6feb;
+  --rdp-accent-background-color: #1d232a;
+  --rdp-day-height: 36px;
+  --rdp-day-width: 36px;
+  --rdp-day_button-height: 32px;
+  --rdp-day_button-width: 32px;
+  --rdp-day_button-border-radius: 8px;
+  --rdp-selected-border: 2px solid #1f6feb;
+  --rdp-today-color: #1f6feb;
+  --rdp-weekday-opacity: 0.9;
+  --rdp-weekday-padding: 0.35rem 0;
+  --rdp-months-gap: 1.5rem;
+  color: #e5e7eb;
+}
+
+.rdp-dark.rdp-root {
+  color: inherit;
+}
+
+.rdp-dark .rdp-months {
+  gap: 1.5rem;
+}
+
+.rdp-dark .rdp-month {
+  color: inherit;
+}
+
+.rdp-dark .rdp-caption_label {
+  color: #f3f4f6;
+  font-weight: 600;
+}
+
+.rdp-dark .rdp-nav {
+  color: #cbd5f5;
+}
+
+.rdp-dark .rdp-button_next,
+.rdp-dark .rdp-button_previous {
+  color: #e5e7eb;
+  border: 1px solid #374151;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.rdp-dark .rdp-button_next:hover,
+.rdp-dark .rdp-button_previous:hover {
+  background: #1d232a;
+}
+
+.rdp-dark .rdp-weekday {
+  color: #9ca3af;
+  font-size: 0.75rem;
+}
+
+.rdp-dark .rdp-day_button {
+  color: #e5e7eb;
+}
+
+.rdp-dark .rdp-day_button:hover {
+  background: #1d232a;
+}
+
+.rdp-dark .rdp-outside {
+  color: #6b7280;
+}
+
+.rdp-dark .rdp-disabled:not(.rdp-selected) {
+  color: #4b5563;
+}
+
+.rdp-dark .rdp-range_middle {
+  background-color: #1d232a;
+}
+
+.rdp-dark .rdp-range_start,
+.rdp-dark .rdp-range_end {
+  color: #ffffff;
+}
+
+.rdp-dark .rdp-range_start .rdp-day_button,
+.rdp-dark .rdp-range_end .rdp-day_button {
+  background-color: #1f6feb;
+  color: #ffffff;
+}
+
+.rdp-dark .rdp-selected .rdp-day_button {
+  border: 2px solid #1f6feb;
+}
+
+.rdp-dark .rdp-month_grid {
+  border-collapse: collapse;
+}
+
+.rdp-dark .rdp-weeks {
+  gap: 0.35rem;
+}

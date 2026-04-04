@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Angry,
+  Paperclip,
+  Heart,
+  Laugh,
+  Smile,
+  ThumbsUp,
+} from "lucide-react";
+import {
   addReaction,
   deleteNotesMessage,
   sendNotesMessage,
@@ -10,7 +18,79 @@ import {
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 
-const EMOJI_CHOICES = ["😀", "👍", "❤️", "😂", "😡"];
+const REACTION_CHOICES = [
+  {
+    key: "😊",
+    label: "Smile",
+    Icon: Smile,
+    iconClass: "text-yellow-300",
+    filled: true,
+    strokeClass: "stroke-black",
+  },
+  {
+    key: "👍",
+    label: "Thumbs up",
+    Icon: ThumbsUp,
+    iconClass: "text-blue-300",
+    filled: true,
+    strokeClass: "stroke-blue-300",
+  },
+  {
+    key: "❤️",
+    label: "Heart",
+    Icon: Heart,
+    iconClass: "text-rose-300",
+    filled: true,
+    strokeClass: "stroke-rose-300",
+  },
+  {
+    key: "😂",
+    label: "Laugh",
+    Icon: Laugh,
+    iconClass: "text-amber-300",
+    filled: true,
+    strokeClass: "stroke-black",
+  },
+  {
+    key: "😢",
+    label: "Angry",
+    Icon: Angry,
+    iconClass: "text-red-300",
+    filled: true,
+    strokeClass: "stroke-black",
+  },
+];
+
+const LEGACY_REACTION_KEY_MAP = {
+  smile: "😊",
+  thumbs_up: "👍",
+  heart: "❤️",
+  laugh: "😂",
+  angry: "😢",
+};
+
+function normalizeReactions(rawReactions) {
+  if (!rawReactions) return {};
+
+  const normalized = {};
+
+  Object.entries(rawReactions).forEach(([key, value]) => {
+    if (Array.isArray(value)) {
+      const emojiKey = LEGACY_REACTION_KEY_MAP[key] ?? key;
+      if (!normalized[emojiKey]) normalized[emojiKey] = [];
+      normalized[emojiKey].push(...value);
+      return;
+    }
+
+    if (typeof value === "string") {
+      const emojiKey = LEGACY_REACTION_KEY_MAP[value] ?? value;
+      if (!normalized[emojiKey]) normalized[emojiKey] = [];
+      normalized[emojiKey].push(key);
+    }
+  });
+
+  return normalized;
+}
 const PRIORITY_OPTIONS = [
   { label: "All", value: "all" },
   { label: "High", value: "high" },
@@ -89,11 +169,8 @@ function getInitials(name) {
 }
 
 function getReactionCount(reactions) {
-  if (!reactions) {
-    return 0;
-  }
-
-  return Object.values(reactions).reduce((total, users) => {
+  const normalized = normalizeReactions(reactions);
+  return Object.values(normalized).reduce((total, users) => {
     if (Array.isArray(users)) {
       return total + users.length;
     }
@@ -101,11 +178,24 @@ function getReactionCount(reactions) {
   }, 0);
 }
 
+function renderReactionIcon(reaction, iconSizeClass = "h-6 w-6") {
+  const IconComponent = reaction.Icon;
+
+  return (
+    <IconComponent
+      className={`${iconSizeClass} ${reaction.iconClass} ${reaction.strokeClass || ""} ${
+        reaction.filled ? "fill-current stroke-[1.6]" : "stroke-[2.1]"
+      }`}
+    />
+  );
+}
+
 export default function Notes() {
   const [messages, setMessages] = useState([]);
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [inputValue, setInputValue] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [activeEmojiMenu, setActiveEmojiMenu] = useState(null);
   const [activePriorityMenu, setActivePriorityMenu] = useState(null);
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
@@ -119,9 +209,16 @@ export default function Notes() {
   const adminUser = useMemo(() => getAdminUser(), []);
 
   useEffect(() => {
+    setIsLoading(true);
     const unsubscribe = subscribeNotesMessages({
-      onChange: setMessages,
-      onError: (error) => console.error("Notes subscription error", error),
+      onChange: (nextMessages) => {
+        setMessages(nextMessages);
+        setIsLoading(false);
+      },
+      onError: (error) => {
+        console.error("Notes subscription error", error);
+        setIsLoading(false);
+      },
       priorityFilter,
     });
 
@@ -137,6 +234,58 @@ export default function Notes() {
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
   }, [messages]);
+
+  useEffect(() => {
+    if (!activeEmojiMenu) {
+      return;
+    }
+
+    const handleOutsideClick = (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      if (
+        target.closest('[data-reaction-menu]') ||
+        target.closest('[data-reaction-trigger]')
+      ) {
+        return;
+      }
+
+      setActiveEmojiMenu(null);
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [activeEmojiMenu]);
+
+  useEffect(() => {
+    if (!activePriorityMenu) {
+      return;
+    }
+
+    const handleOutsideClick = (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      if (
+        target.closest("[data-priority-menu]") ||
+        target.closest("[data-priority-trigger]")
+      ) {
+        return;
+      }
+
+      setActivePriorityMenu(null);
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, [activePriorityMenu]);
 
   const groupedMessages = useMemo(() => {
     const groups = [];
@@ -221,6 +370,10 @@ export default function Notes() {
     setIsUploading(true);
     try {
       const downloadURL = await uploadNotesAttachment(file, type);
+      if (!downloadURL) {
+        return;
+      }
+
       await sendNotesMessage({
         type,
         contentOverride: downloadURL,
@@ -234,14 +387,14 @@ export default function Notes() {
     }
   };
 
-  const handleReaction = async (messageId, emoji) => {
+  const handleReaction = async (messageId, reactionKey) => {
     const userId = adminUser?.userid;
     if (!userId) {
       return;
     }
 
     try {
-      await addReaction({ messageId, emoji, userId });
+      await addReaction({ messageId, emoji: reactionKey, userId });
     } catch (error) {
       console.error("Failed to add reaction", error);
     }
@@ -262,7 +415,14 @@ export default function Notes() {
 
   const handlePriorityChange = async (messageId, value) => {
     try {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId ? { ...msg, priority: value } : msg
+        )
+      );
+
       await updateNotesMessagePriority(messageId, value);
+
       setActivePriorityMenu(null);
     } catch (error) {
       console.error("Failed to update priority", error);
@@ -270,7 +430,7 @@ export default function Notes() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#0d1117] text-white">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#0d1117] text-white">
       <div className="border-b border-gray-800 px-3 py-4">
         <div className="mx-auto flex w-full max-w-8xl flex-wrap items-center justify-between gap-4 px-3">
           <div>
@@ -295,13 +455,18 @@ export default function Notes() {
           </div>
         </div>
       </div>
-      <div className="mx-auto flex w-full flex-1 flex-col overflow-hidden px-4 pb-6 pt-3">
+      <div className="mx-auto flex w-full flex-1 min-h-0 flex-col overflow-hidden px-2 py-2 pb-2 pt-2">
         <div
           ref={listRef}
           onScroll={handleScroll}
-          className="notes-scroll flex-1 max-h-[73vh] overflow-y-auto rounded-2xl border border-gray-800 bg-[#0f131a] px-4 py-6"
+          className="notes-scroll flex-1 min-h-0 overflow-y-auto rounded-2xl border border-gray-800 bg-[#0f131a] px-4 py-6"
         >
-          {groupedMessages.length === 0 ? (
+          {isLoading ? (
+            <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-gray-400">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-600 border-t-[#1f6feb]" />
+              <span>Loading notes...</span>
+            </div>
+          ) : groupedMessages.length === 0 ? (
             <div className="flex h-full items-center justify-center text-sm text-gray-500">
               No notes yet.
             </div>
@@ -323,6 +488,8 @@ export default function Notes() {
                       const priorityClass =
                         PRIORITY_COLORS[message.priority] ||
                         PRIORITY_COLORS[0];
+                      const normalizedReactions = normalizeReactions(message.reactions);
+                      const reactionEntries = Object.entries(normalizedReactions);
                       const reactionCount = getReactionCount(message.reactions);
 
                       return (
@@ -404,41 +571,51 @@ export default function Notes() {
                             >
                               <span>{formatTime(message.timestamp)}</span>
                               {reactionCount > 0 && (
-                                <span className="rounded-full bg-[#161b22] px-2 py-0.5 text-[11px] text-gray-200">
-                                  {reactionCount}
-                                </span>
+                                <div className="flex flex-wrap items-center gap-1">
+                                  {reactionEntries.map(([emoji, users]) => (
+                                    <span
+                                      key={emoji}
+                                      className="rounded-full bg-[#161b22] px-2 py-0.5 text-[11px] text-gray-200"
+                                    >
+                                      {emoji} {users.length}
+                                    </span>
+                                  ))}
+                                </div>
                               )}
                               <div className="relative">
                                 <Button
                                   type="button"
-                                  variant="outline"
+                                  variant="ghost"
                                   size="sm"
-                                  onClick={() =>
-                                    setActiveEmojiMenu(
-                                      activeEmojiMenu === message.id
-                                        ? null
-                                        : message.id
-                                    )
-                                  }
-                                  className="rounded-full border border-gray-700 px-2 py-0.5 text-[11px] text-gray-200 h-auto"
+                                  onClick={() => setActiveEmojiMenu(message.id)}
+                                  className="text-xs text-blue-300 hover:text-blue-200 h-auto px-2 py-1"
+                                  aria-label="Add reaction"
+                                  data-reaction-trigger
                                 >
-                                  😊
+                                  React
                                 </Button>
                                 {activeEmojiMenu === message.id && (
-                                  <div className="absolute right-0 z-20 mt-2 flex gap-2 rounded-lg border border-gray-700 bg-[#161b22] p-2">
-                                    {EMOJI_CHOICES.map((emoji) => (
+                                  <div
+                                    data-reaction-menu
+                                    className={`absolute z-20 mt-2 flex gap-2 rounded-lg border border-gray-700 bg-[#161b22] p-2 shadow-lg ${
+                                      isMine ? "right-0" : "left-0 ml-2"
+                                    }`}
+                                  >
+                                    {REACTION_CHOICES.map((reaction) => (
                                       <Button
-                                        key={emoji}
+                                        key={reaction.key}
                                         type="button"
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => {
-                                          handleReaction(message.id, emoji);
+                                          handleReaction(message.id, reaction.key);
                                           setActiveEmojiMenu(null);
                                         }}
-                                        className="text-base h-auto p-1"
+                                        className="h-auto p-1"
+                                        aria-label={reaction.label}
+                                        title={reaction.label}
                                       >
-                                        {emoji}
+                                        {renderReactionIcon(reaction)}
                                       </Button>
                                     ))}
                                   </div>
@@ -468,11 +645,15 @@ export default function Notes() {
                                         )
                                       }
                                       className="rounded-full border border-gray-700 px-2 py-0.5 text-[11px] text-gray-200 h-auto"
+                                      data-priority-trigger
                                     >
                                       ...
                                     </Button>
                                     {activePriorityMenu === message.id && (
-                                      <div className="absolute right-0 z-20 mt-2 w-32 rounded-lg border border-gray-700 bg-[#161b22] py-1 text-xs">
+                                      <div
+                                        className="absolute right-0 z-20 mt-2 w-32 rounded-lg border border-gray-700 bg-[#161b22] py-1 text-xs"
+                                        data-priority-menu
+                                      >
                                         <Button
                                           type="button"
                                           variant="ghost"
@@ -523,7 +704,7 @@ export default function Notes() {
           )}
         </div>
 
-        <div className="mt-4 rounded-2xl border border-gray-800 bg-[#0f131a] px-4 py-4">
+        <div className="mt-2 rounded-2xl border border-gray-800 bg-[#0f131a] px-2 py-2">
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative">
               <Button
@@ -531,9 +712,10 @@ export default function Notes() {
                 variant="outline"
                 size="sm"
                 onClick={() => setAttachmentMenuOpen((prev) => !prev)}
-                className="rounded-full border border-gray-700 px-3 py-2 text-sm text-gray-200"
+                className="rounded-full border border-gray-200 bg-white px-3 py-2 text-gray-900 hover:bg-gray-100"
+                aria-label="Attachment options"
               >
-                + Attachment
+                <Paperclip className="h-4 w-4" />
               </Button>
               {attachmentMenuOpen && (
                 <div className="absolute left-0 bottom-12 z-20 w-40 rounded-lg border border-gray-700 bg-[#161b22] py-2 text-sm">

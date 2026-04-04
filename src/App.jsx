@@ -1,5 +1,6 @@
 import "./App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Toaster } from "sonner";
 import { AuthProvider } from "./context/AuthContext";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -9,6 +10,7 @@ import MaintenanceChat from "./pages/MaintenanceChat";
 import Drivers from "./pages/Drivers";
 import Admins from "./pages/Admins";
 import Notes from "./pages/Notes";
+import Broadcast from "./pages/Broadcast";
 import ProtectedLayout from "./layout/ProtectedLayout";
 import NotFoundPage from "./pages/NotFoundPage";
 
@@ -27,6 +29,7 @@ function App() {
             <Route exact path="/admins" element={<Admins />} />
             <Route exact path="/drivers" element={<Drivers />} />
             <Route exact path="/note" element={<Notes />} />
+            <Route exact path="/broadcast" element={<Broadcast />} />
           </Route>
 
           {/* Public Routes */}
@@ -35,6 +38,7 @@ function App() {
           {/* 404 - Catch all route */}
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        <Toaster position="top-right" richColors theme="dark" />
       </BrowserRouter>
     </AuthProvider>
   );
