@@ -1,3 +1,5 @@
+import { FaBullhorn } from "react-icons/fa";
+import Broadcast from "../pages/Broadcast";
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -550,6 +552,21 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
                 })}
               </PopoverContent>
             </Popover>
+
+            <Button
+              onClick={() => {
+                // Navigate to broadcast page
+                window.location.href = '/broadcast';
+              }}
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-full border border-transparent hover:border-white/10 hover:bg-white/5 text-blue-400"
+              aria-label="Send broadcast"
+              title="Send broadcast message"
+            >
+              <FaBullhorn className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </div>

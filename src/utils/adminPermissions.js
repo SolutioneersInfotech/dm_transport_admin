@@ -8,6 +8,7 @@ export const ADMIN_PERMISSION_KEYS = {
   manageAdmin: "manage_admin",
   chat: "chat",
   deleteMultipleUsersChart: "delete_multiple_users_chart",
+  broadcast: "broadcast",
 };
 
 export const hasAdminPermission = (permissions, permissionKey) => {

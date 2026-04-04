@@ -188,7 +188,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
-import { ChevronDown, Copy, Download, FileText, Image, Mail, Paperclip, Phone, Trash2, Video, X } from "lucide-react";
+import { ChevronDown, Copy, Download, FileText, Image, Mail, Megaphone, Paperclip, Phone, Trash2, Video, X } from "lucide-react";
 import {
   fetchMessages as defaultFetchMessages,
   subscribeMessages as defaultSubscribeMessages,
@@ -210,6 +210,7 @@ import { Input } from "./ui/input";
 import { Checkbox } from "./ui/checkbox";
 import { toast } from "sonner";
 import { ADMIN_PERMISSION_KEYS, hasAdminPermission } from "../utils/adminPermissions";
+import { sendBroadcast } from "../services/broadcastAPI";
 
 /* ================= LAST SEEN FORMATTER ================= */
 function formatLastSeen(lastSeen) {
@@ -283,6 +284,9 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
   const [deleteActionType, setDeleteActionType] = useState(null);
   const [isDeleteInProgress, setIsDeleteInProgress] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const [showBroadcastDialog, setShowBroadcastDialog] = useState(false);
+  const [broadcastMessage, setBroadcastMessage] = useState("");
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
   const buildChatMediaFileName = useCallback((url, sender, dateTime) => {
     const safeSender = String(sender || "unknown_sender")
       .trim()
@@ -753,9 +757,38 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     }
   };
 
-  /* ================= GROUP MESSAGES ================= */
-  const grouped = groupMessagesByDate(messages);
+  /* ================= BROADCAST MESSAGE HANDLER ================= */
+  async function handleSendBroadcast() {
+    if (!broadcastMessage.trim()) {
+      toast.error("Please enter a broadcast message");
+      return;
+    }
 
+    setIsBroadcasting(true);
+    try {
+      // Send broadcast to all users
+      await sendBroadcast("all", broadcastMessage.trim());
+      toast.success("Broadcast message sent successfully!");
+      setBroadcastMessage("");
+      setShowBroadcastDialog(false);
+    } catch (error) {
+      console.error("Error sending broadcast:", error);
+      toast.error("Failed to send broadcast message");
+    } finally {
+      setIsBroadcasting(false);
+    }
+  }
+
+  /* ================= GROUP MESSAGES ================= */
+  const allMessages = [...messages];
+
+allMessages.sort(
+  (a, b) =>
+    new Date(a.dateTime || a.timestamp) -
+    new Date(b.dateTime || b.timestamp)
+);
+
+const grouped = groupMessagesByDate(allMessages);
   const effectiveLastSeen = useMemo(() => {
     const presenceCandidates = [
       // Live presence metadata should win when available.
@@ -765,11 +798,12 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
       driver?.onlineAt,
     ];
 
-    const messageCandidates = [
-      // Chat activity is fresher than profile-level lastSeen in many cases.
-      driver?.last_chat_time,
-      messages.length ? messages[messages.length - 1]?.dateTime : null,
-    ];
+     const messageCandidates = [
+  driver?.last_chat_time,
+  messages.length
+  ? messages[messages.length - 1]?.dateTime
+  : null
+];
 
     const fallbackCandidates = [
       // Previous header used only driver.lastSeen, which can be stale.
@@ -848,7 +882,7 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
           {selectionMode ? (
             <>
               <Button
@@ -990,6 +1024,7 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
                   <div className="flex-1 min-w-0">
                     <ChatMessageBubble
                       msg={msg}
+                      isBroadcast={msg.type === "broadcast"}
                       senderName={senderName}
                       showSenderName={showSenderName}
                       replyToMessage={replyToMessage}
@@ -1199,6 +1234,64 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
                 disabled={isDeleteInProgress}
               >
                 {isDeleteInProgress ? "Deleting..." : "Delete"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= BROADCAST MESSAGE DIALOG ================= */}
+      {showBroadcastDialog && (
+        <div className="fixed inset-0 z-[180] flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label="Broadcast message dialog">
+          <div className="w-full max-w-md rounded-lg border border-[#2c3e52] bg-[#1c2530] p-6 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Megaphone className="h-5 w-5 text-blue-400" />
+                <h3 className="text-lg font-semibold text-white">Broadcast Message</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (isBroadcasting) return;
+                  setShowBroadcastDialog(false);
+                }}
+                className="text-gray-400 hover:text-white"
+                disabled={isBroadcasting}
+                aria-label="Close broadcast dialog"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-300">Send a message to all users at once</p>
+            <textarea
+              value={broadcastMessage}
+              onChange={(e) => setBroadcastMessage(e.target.value)}
+              placeholder="Enter your broadcast message..."
+              className="w-full h-24 px-3 py-2 bg-[#2c3e52] border border-[#3d5a80] rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none"
+              disabled={isBroadcasting}
+            />
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="border-gray-600 text-gray-800 hover:bg-[#2c3e52] hover:text-white"
+                onClick={() => {
+                  setShowBroadcastDialog(false);
+                  setBroadcastMessage("");
+                }}
+                disabled={isBroadcasting}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="bg-blue-600 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={handleSendBroadcast}
+                disabled={isBroadcasting || !broadcastMessage.trim()}
+              >
+                {isBroadcasting ? "Sending..." : "Send Broadcast"}
               </Button>
             </div>
           </div>

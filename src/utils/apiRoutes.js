@@ -229,3 +229,6 @@ export const fetchDriverCountRoute = (options = {}) => {
   const queryString = params.toString();
   return queryString ? `${baseUrl}?${queryString}` : baseUrl;
 };
+
+// Broadcast routes
+export const broadcastRoute = `${baseBackendUrl}/broadcast`;

@@ -10,6 +10,7 @@ import MaintenanceChat from "./pages/MaintenanceChat";
 import Drivers from "./pages/Drivers";
 import Admins from "./pages/Admins";
 import Notes from "./pages/Notes";
+import Broadcast from "./pages/Broadcast";
 import ProtectedLayout from "./layout/ProtectedLayout";
 import NotFoundPage from "./pages/NotFoundPage";
 
@@ -28,6 +29,7 @@ function App() {
             <Route exact path="/admins" element={<Admins />} />
             <Route exact path="/drivers" element={<Drivers />} />
             <Route exact path="/note" element={<Notes />} />
+            <Route exact path="/broadcast" element={<Broadcast />} />
           </Route>
 
           {/* Public Routes */}
