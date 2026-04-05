@@ -51,6 +51,8 @@ const FILTER_MAP = {
   "Delivery Proof": "delivery",
   "Load Image": "load_image",
   "Fuel Receipt": "fuel_recipt",
+  "Scale Ticket": "scale_ticket",
+  "Tracking": "tracking",
   "Stamp Paper": "paper_logs",
   "Driver Expense": "driver_expense_sheet",
   "DM Transport Trip Envelope": "dm_transport_trip_envelope",
