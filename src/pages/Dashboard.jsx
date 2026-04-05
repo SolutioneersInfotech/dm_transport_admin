@@ -50,6 +50,8 @@ const documentTiles = [
   { title: "Delivery Proofs", filterType: "delivery", priority: "Normal" },
   { title: "Load Images", filterType: "load_image", priority: "High" },
   { title: "Fuel Receipts", filterType: "fuel_recipt", priority: "Normal" },
+  { title: "Scale Tickets", filterType: "scale_ticket", priority: "Normal" },
+  { title: "Tracking", filterType: "tracking", priority: "Normal" },
   { title: "Stamp Papers", filterType: "paper_logs", priority: "High" },
   { title: "Driver Expenses", filterType: "driver_expense_sheet", priority: "Normal" },
   {
