@@ -1,12 +1,51 @@
-import { useState, useEffect } from "react";
-import { Send, Megaphone, ChevronDown, ArrowLeft } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  ArrowLeft,
+  Check,
+  ChevronDown,
+  Filter,
+  Loader2,
+  Megaphone,
+  MoreHorizontal,
+  Search,
+  Send,
+  Shield,
+  User,
+  Users,
+  X,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { sendBroadcast, fetchBroadcastHistory } from "../services/broadcastAPI";
-import Loader from "../components/Loader";
-import { toast } from "sonner";
-import { useAppSelector } from "../store/hooks";
-import { Button } from "../components/ui/button";
 import { Checkbox } from "../components/ui/checkbox";
+import { sendBroadcast, fetchBroadcastHistory } from "../services/broadcastAPI";
+import { useAppSelector } from "../store/hooks";
+import { toast } from "sonner";
+
+const MESSAGE_LIMIT = 500;
+
+const recipientOptions = [
+  { value: "admins", label: "Admins", icon: Shield },
+  { value: "drivers", label: "Drivers", icon: User },
+  { value: "all", label: "All Users", icon: Users },
+];
+
+const historyFilters = [
+  { value: "all", label: "All" },
+  { value: "admins", label: "Admins" },
+  { value: "drivers", label: "Drivers" },
+];
+
+function getBroadcastAudienceLabel(recipientType) {
+  switch (recipientType) {
+    case "admins":
+      return "Admin Broadcast";
+    case "drivers":
+      return "Driver Broadcast";
+    case "all":
+      return "All Users Broadcast";
+    default:
+      return "Broadcast";
+  }
+}
 
 export default function Broadcast() {
   const navigate = useNavigate();
@@ -15,126 +54,160 @@ export default function Broadcast() {
   const [loading, setLoading] = useState(false);
   const [broadcasting, setBroadcasting] = useState(false);
   const [broadcastHistory, setBroadcastHistory] = useState([]);
-  const [selectedDrivers, setSelectedDrivers] = useState("all");
-  const [selectedAdmins, setSelectedAdmins] = useState("all");
-  const [showDriverList, setShowDriverList] = useState(false);
-  const [showAdminList, setShowAdminList] = useState(false);
-  const [selectAllDrivers, setSelectAllDrivers] = useState(true);
-  const [selectAllAdmins, setSelectAllAdmins] = useState(true);
+  const [showRecipientList, setShowRecipientList] = useState(false);
   const [driverSelections, setDriverSelections] = useState({});
   const [adminSelections, setAdminSelections] = useState({});
+  const [historyFilter, setHistoryFilter] = useState("all");
+  const [historySearch, setHistorySearch] = useState("");
+  const [isComposeCollapsed, setIsComposeCollapsed] = useState(false);
+  const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
 
-  // Get users and maintenance users from Redux
-  const { users: drivers } = useAppSelector((state) => state.users);
-  const maintenanceUsers = useAppSelector((state) => state?.maintenanceUsers?.users || []);
-
-  const recipientOptions = [
-    { value: "all", label: "All Users" },
-    { value: "drivers", label: "Drivers" },
-    { value: "admins", label: "Admins" },
-  ];
+  const { users: drivers = [] } = useAppSelector((state) => state.users);
+  const maintenanceUsers = useAppSelector(
+    (state) => state?.maintenanceUsers?.users || []
+  );
 
   useEffect(() => {
     loadBroadcastHistory();
   }, []);
 
-  // Initialize selections when drivers/admins load
   useEffect(() => {
-    if (drivers && drivers.length > 0) {
-      const initialSelections = {};
-      drivers.forEach((driver) => {
-        const driverId = driver?.userid ?? driver?.id;
-        initialSelections[driverId] = true;
-      });
-      setDriverSelections(initialSelections);
-    }
+    const selections = {};
+    drivers.forEach((driver) => {
+      const id = driver?.userid ?? driver?.id;
+      if (id) {
+        selections[id] = true;
+      }
+    });
+    setDriverSelections(selections);
   }, [drivers]);
 
   useEffect(() => {
-    if (maintenanceUsers && maintenanceUsers.length > 0) {
-      const initialSelections = {};
-      maintenanceUsers.forEach((admin) => {
-        const adminId = admin?.userid ?? admin?.id;
-        initialSelections[adminId] = true;
-      });
-      setAdminSelections(initialSelections);
-    }
+    const selections = {};
+    maintenanceUsers.forEach((admin) => {
+      const id = admin?.userid ?? admin?.id;
+      if (id) {
+        selections[id] = true;
+      }
+    });
+    setAdminSelections(selections);
   }, [maintenanceUsers]);
+
+  useEffect(() => {
+    setShowRecipientList(false);
+  }, [recipients]);
 
   const loadBroadcastHistory = async () => {
     setLoading(true);
     try {
       const data = await fetchBroadcastHistory();
       setBroadcastHistory(data || []);
-    } catch (error) {
-      console.error("Error loading broadcast history:", error);
+    } catch {
       toast.error("Failed to load broadcast history");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDriverSelection = (driverId) => {
-    setDriverSelections((prev) => ({
-      ...prev,
-      [driverId]: !prev[driverId],
-    }));
-  };
+  const getSelectedDriverIds = () =>
+    Object.keys(driverSelections).filter((id) => driverSelections[id]);
 
-  const handleAdminSelection = (adminId) => {
+  const getSelectedAdminIds = () =>
+    Object.keys(adminSelections).filter((id) => adminSelections[id]);
+
+  const selectedDriverCount = getSelectedDriverIds().length;
+  const selectedAdminCount = getSelectedAdminIds().length;
+  const selectionList = recipients === "drivers" ? drivers : maintenanceUsers;
+  const currentSelections =
+    recipients === "drivers" ? driverSelections : adminSelections;
+
+  const allVisibleSelected =
+    selectionList.length > 0 &&
+    selectionList.every((person) => {
+      const id = person?.userid ?? person?.id;
+      return id ? currentSelections[id] : false;
+    });
+
+  const selectionLabel =
+    recipients === "drivers"
+      ? selectedDriverCount > 0
+        ? `${selectedDriverCount} drivers selected`
+        : "Select Users..."
+      : recipients === "admins"
+        ? selectedAdminCount > 0
+          ? `${selectedAdminCount} admins selected`
+          : "Select Users..."
+        : "All users selected";
+
+  const filteredHistory = broadcastHistory.filter((broadcast) => {
+    const matchesType =
+      historyFilter === "all" || broadcast.recipientType === historyFilter;
+
+    const searchValue = historySearch.trim().toLowerCase();
+    if (!searchValue) {
+      return matchesType;
+    }
+
+    const haystack = [
+      broadcast.message,
+      broadcast.sendername,
+      broadcast.recipientType,
+      ...(broadcast.recipientNames || []),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return matchesType && haystack.includes(searchValue);
+  });
+
+  const handleUserSelection = (userId) => {
+    if (recipients === "drivers") {
+      setDriverSelections((prev) => ({
+        ...prev,
+        [userId]: !prev[userId],
+      }));
+      return;
+    }
+
     setAdminSelections((prev) => ({
       ...prev,
-      [adminId]: !prev[adminId],
+      [userId]: !prev[userId],
     }));
   };
 
-  const toggleAllDrivers = () => {
-    const newState = !selectAllDrivers;
-    setSelectAllDrivers(newState);
-    const selections = {};
-    drivers.forEach((driver) => {
-      const driverId = driver?.userid ?? driver?.id;
-      selections[driverId] = newState;
+  const handleToggleAll = () => {
+    const nextValue = !allVisibleSelected;
+    const nextSelections = {};
+
+    selectionList.forEach((person) => {
+      const id = person?.userid ?? person?.id;
+      if (id) {
+        nextSelections[id] = nextValue;
+      }
     });
-    setDriverSelections(selections);
-  };
 
-  const toggleAllAdmins = () => {
-    const newState = !selectAllAdmins;
-    setSelectAllAdmins(newState);
-    const selections = {};
-    maintenanceUsers.forEach((admin) => {
-      const adminId = admin?.userid ?? admin?.id;
-      selections[adminId] = newState;
-    });
-    setAdminSelections(selections);
-  };
+    if (recipients === "drivers") {
+      setDriverSelections(nextSelections);
+      return;
+    }
 
-  const getSelectedDriverIds = () => {
-    return Object.entries(driverSelections)
-      .filter(([_, isSelected]) => isSelected)
-      .map(([driverId, _]) => driverId);
-  };
-
-  const getSelectedAdminIds = () => {
-    return Object.entries(adminSelections)
-      .filter(([_, isSelected]) => isSelected)
-      .map(([adminId, _]) => adminId);
+    setAdminSelections(nextSelections);
   };
 
   const handleSendBroadcast = async () => {
     if (!message.trim()) {
-      toast.error("Please enter a message");
+      toast.error("Enter message");
       return;
     }
 
-    if (recipients === "drivers" && getSelectedDriverIds().length === 0) {
-      toast.error("Please select at least one driver");
+    if (recipients === "drivers" && selectedDriverCount === 0) {
+      toast.error("Select at least one driver");
       return;
     }
 
-    if (recipients === "admins" && getSelectedAdminIds().length === 0) {
-      toast.error("Please select at least one admin");
+    if (recipients === "admins" && selectedAdminCount === 0) {
+      toast.error("Select at least one admin");
       return;
     }
 
@@ -142,306 +215,395 @@ export default function Broadcast() {
     try {
       await sendBroadcast(
         recipients,
-        message.trim(),
-        drivers || [],
-        maintenanceUsers || [],
+        message,
+        drivers,
+        maintenanceUsers,
         getSelectedDriverIds(),
         getSelectedAdminIds()
       );
 
-      toast.success("Broadcast sent successfully!");
+      toast.success("Broadcast sent successfully");
       setMessage("");
-      
-      // Reload history
-      await loadBroadcastHistory();
-    } catch (error) {
-      console.error("Error sending broadcast:", error);
+      loadBroadcastHistory();
+    } catch {
       toast.error("Failed to send broadcast");
     } finally {
       setBroadcasting(false);
     }
   };
 
-  const selectedDriverCount = getSelectedDriverIds().length;
-  const selectedAdminCount = getSelectedAdminIds().length;
-
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <ArrowLeft className="h-8 w-8 text-white cursor-pointer hover:text-blue-300 transition" onClick={() => navigate(-1)} title="Go back" />
-            <Megaphone className="h-8 w-8 text-blue-400" />
-            <h1 className="text-3xl font-bold">Broadcast Messages</h1>
-          </div>
-          <p className="text-slate-400">Send messages to drivers, admins, or all users</p>
+    <div className="min-h-screen bg-[#120b22] text-white">
+      <div className="w-full px-5 py-6">
+        <div className="mb-5 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="rounded-full p-1 text-white/55 transition hover:bg-white/5 hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <Megaphone className="h-4 w-4 text-[#6e83ff]" />
+          <h1 className="text-[18px] font-semibold tracking-[-0.01em] text-white/92">
+            Broadcast Messages
+          </h1>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Send Broadcast Panel */}
-          <div className="lg:col-span-1">
-            <div className="bg-slate-900 rounded-lg border border-slate-800 p-6">
-              <h2 className="text-lg font-semibold mb-4">Send Broadcast</h2>
+        <section className="rounded-[10px] border border-white/7 bg-[linear-gradient(180deg,rgba(31,24,55,0.98),rgba(24,18,42,0.98))] p-5 shadow-[0_18px_40px_rgba(4,2,16,0.28)]">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-[15px] font-semibold text-white/92">
+              Send Broadcast
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsComposeCollapsed((prev) => !prev)}
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-white/8 bg-[#282047]/72 text-white/60 transition hover:text-white"
+              aria-label={
+                isComposeCollapsed ? "Expand send broadcast panel" : "Collapse send broadcast panel"
+              }
+            >
+              <ChevronDown
+                className={`h-4 w-4 transition-transform ${
+                  isComposeCollapsed ? "" : "rotate-180"
+                }`}
+              />
+            </button>
+          </div>
 
-              {/* Recipients Select */}
-              <div className="mb-6 p-4 bg-slate-800 rounded-lg border border-slate-700">
-                <label className="block text-sm font-medium text-slate-300 mb-3">
-                  Recipients
-                </label>
-                <select
-                  value={recipients}
-                  onChange={(e) => {
-                    setRecipients(e.target.value);
-                    setShowDriverList(false);
-                    setShowAdminList(false);
-                  }}
-                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500 transition"
-                >
-                  {recipientOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+          {!isComposeCollapsed && (
+            <div className="mt-4 rounded-[10px] border border-white/7 bg-white/[0.025] p-4">
+            <label className="mb-2 block text-[13px] font-semibold text-white/78">
+              Recipients
+            </label>
+
+            <div className="rounded-[9px] border border-white/8 bg-[#282047]/82 px-4 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {recipientOptions.map((option) => {
+                    const Icon = option.icon;
+                    const active = recipients === option.value;
+
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setRecipients(option.value)}
+                        className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition ${
+                          active
+                            ? "border-[#7287ff]/70 bg-[#6b7ef6]/20 text-white"
+                            : "border-white/8 bg-white/[0.03] text-white/68 hover:text-white/88"
+                        }`}
+                      >
+                        <Icon className="h-3 w-3" />
+                        <span>{option.label}</span>
+                        {active && <X className="h-3 w-3 text-white/45" />}
+                      </button>
+                    );
+                  })}
+                </div>
+                <ChevronDown className="h-4 w-4 text-white/32" />
               </div>
+            </div>
 
-              {/* Drivers Selection */}
-              {recipients === "drivers" && (
-                <div className="mb-4">
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="block text-sm font-medium text-slate-300">
-                      Select Drivers
-                    </label>
-                    <span className="text-xs text-slate-400">
-                      {selectedDriverCount}/{drivers?.length || 0} selected
-                    </span>
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={() =>
+                  recipients !== "all" &&
+                  setShowRecipientList((prev) => !prev)
+                }
+                className={`flex w-full items-center justify-between rounded-[9px] border border-white/8 px-4 py-3 text-left text-[13px] transition ${
+                  recipients === "all"
+                    ? "cursor-default bg-[#282047]/50 text-white/42"
+                    : "bg-[#282047]/72 text-white/72 hover:text-white"
+                }`}
+              >
+                <span>{recipients === "all" ? "Select Users..." : selectionLabel}</span>
+                <ChevronDown
+                  className={`h-4 w-4 text-white/35 transition-transform ${
+                    showRecipientList ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+
+              {recipients !== "all" && showRecipientList && (
+                <div className="mt-2 rounded-[9px] border border-white/8 bg-[#231b3f] p-3">
+                  <div className="mb-2 px-1 text-[11px] uppercase tracking-[0.22em] text-white/34">
+                    {recipients === "drivers"
+                      ? `${selectedDriverCount} Selected`
+                      : `${selectedAdminCount} Selected`}
                   </div>
-                  <button
-                    onClick={() => setShowDriverList(!showDriverList)}
-                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500 transition flex items-center justify-between"
-                  >
-                    <span>
-                      {selectedDriverCount === drivers?.length
-                        ? "All Drivers"
-                        : `${selectedDriverCount} Driver${selectedDriverCount !== 1 ? "s" : ""} Selected`}
-                    </span>
-                    <ChevronDown
-                      className={`h-4 w-4 transition ${showDriverList ? "rotate-180" : ""}`}
-                    />
-                  </button>
 
-                  {showDriverList && (
-                    <div className="mt-2 bg-slate-800 border border-slate-700 rounded-lg p-3 max-h-40 overflow-y-auto">
-                      <div className="flex items-center gap-2 mb-3 pb-3 border-b border-slate-700">
-                        <Checkbox
-                          checked={selectAllDrivers}
-                          onCheckedChange={toggleAllDrivers}
-                          className="rounded"
-                        />
-                        <label className="text-sm font-medium text-slate-300 cursor-pointer flex-1">
-                          Select All
-                        </label>
-                      </div>
-                      <div className="space-y-2">
-                        {drivers?.map((driver) => {
-                          const driverId = driver?.userid ?? driver?.id;
-                          return (
-                            <div key={driverId} className="flex items-center gap-2">
-                              <Checkbox
-                                checked={driverSelections[driverId] || false}
-                                onCheckedChange={() => handleDriverSelection(driverId)}
-                                className="rounded"
-                              />
-                              <label className="text-sm text-slate-300 cursor-pointer flex-1">
-                                {driver?.name || driver?.driver_name || "Unknown"}
-                              </label>
-                            </div>
-                          );
-                        })}
-                      </div>
+                  <label className="mb-1 flex items-center justify-between rounded-md px-2 py-2 text-[13px] text-white/82 hover:bg-white/[0.04]">
+                    <div className="flex items-center gap-2.5">
+                      <Checkbox
+                        checked={allVisibleSelected}
+                        onCheckedChange={handleToggleAll}
+                        className="border-white/18 bg-white/[0.04] data-[state=checked]:border-[#6b82ff] data-[state=checked]:bg-[#6b82ff] data-[state=checked]:text-white"
+                      />
+                      <span>Select All</span>
                     </div>
-                  )}
+                    <span className="text-[10px] uppercase tracking-[0.18em] text-white/32">
+                      Default
+                    </span>
+                  </label>
+
+                  <div className="max-h-52 space-y-1 overflow-y-auto pr-1">
+                    {selectionList.map((person) => {
+                      const id = person?.userid ?? person?.id;
+                      const name =
+                        person?.name ||
+                        person?.driver_name ||
+                        person?.admin_name ||
+                        person?.username ||
+                        "Unknown";
+
+                      return (
+                        <label
+                          key={id}
+                          className="flex items-center justify-between gap-3 rounded-md px-2 py-2 text-[13px] text-white/74 transition hover:bg-white/[0.04] hover:text-white"
+                        >
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <Checkbox
+                              checked={currentSelections[id] || false}
+                              onCheckedChange={() => handleUserSelection(id)}
+                              className="border-white/18 bg-white/[0.04] data-[state=checked]:border-[#6b82ff] data-[state=checked]:bg-[#6b82ff] data-[state=checked]:text-white"
+                            />
+                            <span className="truncate">{name}</span>
+                          </div>
+                          <span className="text-[11px] text-white/28">{id}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
+            </div>
 
-              {/* Admins Selection */}
-              {recipients === "admins" && (
-                <div className="mb-4">
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="block text-sm font-medium text-slate-300">
-                      Select Admins
-                    </label>
-                    <span className="text-xs text-slate-400">
-                      {selectedAdminCount}/{maintenanceUsers?.length || 0} selected
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => setShowAdminList(!showAdminList)}
-                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500 transition flex items-center justify-between"
-                  >
-                    <span>
-                      {selectedAdminCount === maintenanceUsers?.length
-                        ? "All Admins"
-                        : `${selectedAdminCount} Admin${selectedAdminCount !== 1 ? "s" : ""} Selected`}
-                    </span>
-                    <ChevronDown
-                      className={`h-4 w-4 transition ${showAdminList ? "rotate-180" : ""}`}
-                    />
-                  </button>
-
-                  {showAdminList && (
-                    <div className="mt-2 bg-slate-800 border border-slate-700 rounded-lg p-3 max-h-40 overflow-y-auto">
-                      <div className="flex items-center gap-2 mb-3 pb-3 border-b border-slate-700">
-                        <Checkbox
-                          checked={selectAllAdmins}
-                          onCheckedChange={toggleAllAdmins}
-                          className="rounded"
-                        />
-                        <label className="text-sm font-medium text-slate-300 cursor-pointer flex-1">
-                          Select All
-                        </label>
-                      </div>
-                      <div className="space-y-2">
-                        {maintenanceUsers?.map((admin) => {
-                          const adminId = admin?.userid ?? admin?.id;
-                          return (
-                            <div key={adminId} className="flex items-center gap-2">
-                              <Checkbox
-                                checked={adminSelections[adminId] || false}
-                                onCheckedChange={() => handleAdminSelection(adminId)}
-                                className="rounded"
-                              />
-                              <label className="text-sm text-slate-300 cursor-pointer flex-1">
-                                {admin?.name || admin?.username || "Unknown"}
-                              </label>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Message Textarea */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+            <div className="mt-4">
+              <div className="mb-2 flex items-center justify-between">
+                <label className="text-[13px] font-semibold text-white/78">
                   Message
                 </label>
-                <textarea
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Enter your broadcast message"
-                  rows={6}
-                  disabled={broadcasting}
-                  className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition disabled:opacity-50 break-words whitespace-pre-wrap overflow-hidden"
-                />
-                <p className="text-xs text-slate-400 mt-1">
-                  {message.length} characters
-                </p>
+                <span className="text-[11px] text-white/36">
+                  {message.length}/{MESSAGE_LIMIT}
+                </span>
               </div>
 
-              {/* Send Button */}
-              <button
-                onClick={handleSendBroadcast}
-                disabled={broadcasting || !message.trim()}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition flex items-center justify-center gap-2"
-              >
-                {broadcasting ? (
+              <textarea
+                value={message}
+                onChange={(event) =>
+                  setMessage(event.target.value.slice(0, MESSAGE_LIMIT))
+                }
+                rows={4}
+                placeholder="Enter your broadcast message..."
+                className="w-full resize-none rounded-[9px] border border-white/8 bg-[#282047]/72 px-4 py-3.5 text-[13px] text-white outline-none placeholder:text-white/27 focus:border-[#6b82ff]/75"
+              />
+
+              <div className="mt-1 text-[11px] text-white/34">
+                {message.length}/{MESSAGE_LIMIT}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSendBroadcast}
+              disabled={broadcasting}
+              className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-[8px] bg-[linear-gradient(90deg,#4b67de,#5f8dff)] text-[14px] font-semibold text-white shadow-[0_10px_24px_rgba(77,105,222,0.24)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {broadcasting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Sending Broadcast</span>
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4" />
+                  <span>Send Broadcast</span>
+                </>
+              )}
+            </button>
+            </div>
+          )}
+        </section>
+
+        <section className="mt-4 rounded-[10px] border border-white/7 bg-[linear-gradient(180deg,rgba(31,24,55,0.98),rgba(24,18,42,0.98))] shadow-[0_18px_40px_rgba(4,2,16,0.24)]">
+          <div className="border-b border-white/7 px-5 py-4">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-[15px] font-semibold text-white/92">
+                Broadcast History
+              </h2>
+
+              <div className="flex items-center gap-2">
+                {!isHistoryCollapsed && (
                   <>
-                    <Loader />
-                    Sending...
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-4 w-4" />
-                    Send Broadcast
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/30" />
+                      <input
+                        value={historySearch}
+                        onChange={(event) => setHistorySearch(event.target.value)}
+                        placeholder="Search broadcasts..."
+                        className="h-8 w-[148px] rounded-md border border-white/8 bg-[#282047]/72 pl-8 pr-2 text-[12px] text-white outline-none placeholder:text-white/27"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="flex h-8 w-8 items-center justify-center rounded-md border border-white/8 bg-[#282047]/72 text-white/60"
+                    >
+                      <Filter className="h-3.5 w-3.5" />
+                    </button>
                   </>
                 )}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setIsHistoryCollapsed((prev) => !prev)}
+                  className="flex h-8 w-8 items-center justify-center rounded-md border border-white/8 bg-[#282047]/72 text-white/60 transition hover:text-white"
+                  aria-label={
+                    isHistoryCollapsed
+                      ? "Expand broadcast history panel"
+                      : "Collapse broadcast history panel"
+                  }
+                >
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${
+                      isHistoryCollapsed ? "" : "rotate-180"
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
+
+            {!isHistoryCollapsed && (
+              <div className="mt-2 flex items-center gap-2">
+                {historyFilters.map((filter) => (
+                  <button
+                    key={filter.value}
+                    type="button"
+                    onClick={() => setHistoryFilter(filter.value)}
+                    className={`inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-[12px] transition ${
+                      historyFilter === filter.value
+                        ? "border-[#6f85ff]/70 bg-[#637bff]/20 text-white"
+                        : "border-white/8 bg-white/[0.03] text-white/68"
+                    }`}
+                  >
+                    <span>{filter.label}</span>
+                    {filter.value === "all" && <ChevronDown className="h-3 w-3" />}
+                  </button>
+                ))}
+
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-md border border-white/8 bg-[#282047]/72 text-white/60"
+                >
+                  <Filter className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Broadcast History Panel */}
-          <div className="lg:col-span-2">
-            <div className="bg-slate-900 rounded-lg border border-slate-800 p-6">
-              <h2 className="text-lg font-semibold mb-4">Broadcast History</h2>
-
+          {!isHistoryCollapsed && (
+            <div className="max-h-[420px] space-y-3 overflow-y-auto px-4 py-4">
               {loading ? (
-                <div className="flex justify-center items-center py-12">
-                  <Loader />
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-white/65" />
                 </div>
-              ) : broadcastHistory.length === 0 ? (
-                <div className="text-center py-12">
-                  <Megaphone className="h-12 w-12 text-slate-700 mx-auto mb-3 opacity-50" />
-                  <p className="text-slate-400">No broadcasts sent yet</p>
+              ) : filteredHistory.length === 0 ? (
+                <div className="rounded-[9px] border border-dashed border-white/10 bg-white/[0.02] px-4 py-8 text-center text-[13px] text-white/45">
+                  No broadcasts found.
                 </div>
               ) : (
-                <div className="space-y-3 max-h-96 overflow-y-auto pr-2 broadcast-history-scroll">
-                  {broadcastHistory.map((broadcast, index) => (
-                    <div
-                      key={index}
-                      className="bg-slate-800 border border-slate-700 rounded-lg p-4 hover:bg-slate-750 hover:border-blue-600 hover:shadow-lg transition duration-200 cursor-pointer transform hover:scale-[1.02]"
+                filteredHistory.map((broadcast) => {
+                  const recipientCount = broadcast.recipientNames?.length || 0;
+                  const preview =
+                    broadcast.message?.length > 80
+                      ? `${broadcast.message.slice(0, 80)}...`
+                      : broadcast.message;
+
+                  return (
+                    <article
+                      key={broadcast.id}
+                      className="rounded-[10px] border border-white/7 bg-[linear-gradient(180deg,rgba(36,29,64,0.98),rgba(28,22,49,0.98))] p-3"
                     >
-                      <div className="mb-3">
-                        <div className="flex items-center gap-2 mb-2 flex-wrap">
-                          <p className="font-semibold text-white">
-                            {getRecipientLabel(broadcast.recipientType)}
-                          </p>
-                          <span className="inline-block px-2 py-1 bg-blue-900 bg-opacity-50 text-blue-300 text-xs rounded max-w-xs truncate" title={broadcast.sendername || "Unknown Admin"}>
-                            {broadcast.sendername ? `Sent by: ${broadcast.sendername}` : "Sent by: Unknown Admin"}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-400 mb-2">
-                          {formatDate(broadcast.timestamp)}
-                        </p>
-                        
-                        {/* Recipients Names */}
-                        {broadcast.recipientNames && broadcast.recipientNames.length > 0 && (
-                          <div className="mb-2 p-2 bg-slate-700 rounded border border-slate-600">
-                            <p className="text-xs font-medium text-slate-300 mb-1">Recipients:</p>
-                            <div className="flex flex-wrap gap-1">
-                              {broadcast.recipientNames.map((name, idx) => (
-                                <span
-                                  key={idx}
-                                  className="inline-block px-2 py-1 bg-slate-600 text-slate-100 text-xs rounded"
-                                >
-                                  {name}
-                                </span>
-                              ))}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex gap-2.5">
+                          <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-[#4058cb]/20 text-[#85a0ff]">
+                            <Megaphone className="h-4 w-4" />
+                          </div>
+
+                          <div>
+                            <div className="text-[15px] font-semibold text-white/92">
+                              {getBroadcastAudienceLabel(broadcast.recipientType)}
+                            </div>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-white/40">
+                              <span>{formatDateCompact(broadcast.timestamp)}</span>
+                              <span>|</span>
+                              <span className="rounded bg-white/[0.04] px-1.5 py-0.5">
+                                {broadcast.sendername || "Unknown Admin"}
+                              </span>
                             </div>
                           </div>
-                        )}
+                        </div>
+
+                        <button
+                          type="button"
+                          className="rounded p-1 text-white/38 transition hover:bg-white/[0.04] hover:text-white/75"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </button>
                       </div>
-                      <p className="text-slate-300 text-sm break-words whitespace-pre-wrap overflow-hidden">
-                        {broadcast.message}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-3 text-[12px] text-white/55">
+                        <span className="inline-flex items-center gap-1.5">
+                          <Users className="h-3.5 w-3.5" />
+                          {recipientCount} recipients
+                        </span>
+                        <span className="inline-flex items-center gap-1.5">
+                          <Check className="h-3.5 w-3.5 text-[#74d996]" />
+                          Sent to {recipientCount} users
+                        </span>
+                        <span className="inline-flex items-center gap-1.5">
+                          <Check className="h-3.5 w-3.5 text-[#74d996]" />
+                          Delivered: {recipientCount}
+                        </span>
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/7 pt-3">
+                        <p className="line-clamp-1 text-[12px] text-white/62">
+                          {preview}
+                        </p>
+                        <button
+                          type="button"
+                          className="shrink-0 text-[11px] text-white/44 transition hover:text-white/75"
+                        >
+                          View More &gt;
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })
               )}
             </div>
-          </div>
-        </div>
+          )}
+
+        </section>
       </div>
     </div>
   );
 }
 
-function getRecipientLabel(recipients) {
-  const labels = {
-    all: "All Users",
-    drivers: "Drivers Only",
-    admins: "Admins Only",
-  };
-  return labels[recipients] || recipients;
-}
-
-function formatDate(timestamp) {
+function formatDateCompact(timestamp) {
   try {
     const date = new Date(timestamp);
-    return date.toLocaleString();
+    const time = date.toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    const monthDay = date.toLocaleDateString([], {
+      month: "short",
+      day: "numeric",
+    });
+
+    return `${time} | ${monthDay}`;
   } catch {
     return timestamp;
   }
