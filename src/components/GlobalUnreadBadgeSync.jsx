@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { fetchUsers } from "../store/slices/usersSlice";
 import { fetchMaintenanceUsers } from "../store/slices/maintenanceUsersSlice";
-import { setUnreadCountForUser, removeUserUnreadCounts } from "../store/slices/chatUnreadSlice";
+import { setUnreadCountForUser } from "../store/slices/chatUnreadSlice";
 import { subscribeUnreadCount as subscribeRegularChatUnread } from "../services/chatAPI";
 import { subscribeUnreadCount as subscribeMaintenanceChatUnread } from "../services/maintenanceChatAPI";
 import useAppResumeSync from "../hooks/useAppResumeSync";
@@ -46,6 +46,7 @@ export default function GlobalUnreadBadgeSync() {
 
   const regularUnsubscribeRefs = useRef({});
   const maintenanceUnsubscribeRefs = useRef({});
+  const prevUserCountRef = useRef(0);
 
   const handleResumeReconcile = useCallback(() => {
     // Keep live listeners, but explicitly reconcile list state after browser resume/network restore.
@@ -61,19 +62,54 @@ export default function GlobalUnreadBadgeSync() {
   useAppResumeSync(handleResumeReconcile);
 
   useEffect(() => {
-    // For global unread counts, we want ALL regular-chat users exactly once.
-    // If limit is not -1, it means we have not yet loaded the full list.
-    if (!loading && limit !== -1) {
-      dispatch(fetchUsers({ page: 1, limit: -1 }));
-    }
-
     if (!maintenanceHasLoaded && !maintenanceLoading) {
       dispatch(fetchMaintenanceUsers({ limit: -1 }));
     }
-  }, [dispatch, loading, limit, maintenanceHasLoaded, maintenanceLoading]);
+  }, [dispatch, maintenanceHasLoaded, maintenanceLoading]);
+
+  useEffect(() => {
+    // Defer the "load all regular-chat users" call to idle time to avoid
+    // competing with critical UI navigation (e.g. opening Chat).
+    if (loading || limit === -1) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const run = () => {
+      if (cancelled) return;
+      dispatch(fetchUsers({ page: 1, limit: -1 }));
+    };
+
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      const idleId = window.requestIdleCallback(run);
+      return () => {
+        cancelled = true;
+        window.cancelIdleCallback(idleId);
+      };
+    }
+
+    const timeoutId =
+      typeof window !== "undefined" ? window.setTimeout(run, 0) : setTimeout(run, 0);
+    return () => {
+      cancelled = true;
+      if (typeof window !== "undefined") {
+        window.clearTimeout(timeoutId);
+        return;
+      }
+      clearTimeout(timeoutId);
+    };
+  }, [dispatch, loading, limit]);
 
   useEffect(() => {
     if (!users?.length) return;
+
+    // Only do work when the number of users grows.
+    // This avoids re-scanning the full list on every minor mutation.
+    if (users.length === prevUserCountRef.current) {
+      return;
+    }
+    prevUserCountRef.current = users.length;
 
     users.forEach((user) => {
       const userId = getUserId(user);
@@ -89,17 +125,23 @@ export default function GlobalUnreadBadgeSync() {
       regularUnsubscribeRefs.current[userId] = unsubscribe;
     });
 
+    // Do NOT aggressively clean up here based on users array,
+    // because global unread should be stable across pages.
+    // We only need to clean up when the component unmounts.
+  }, [users, dispatch]);
+
+  useEffect(() => {
     return () => {
-      const currentUserIds = new Set(users.map(getUserId).filter(Boolean));
-      Object.keys(regularUnsubscribeRefs.current).forEach((userId) => {
-        if (!currentUserIds.has(userId)) {
-          regularUnsubscribeRefs.current[userId]?.();
-          delete regularUnsubscribeRefs.current[userId];
-          dispatch(removeUserUnreadCounts(userId));
+      Object.values(regularUnsubscribeRefs.current).forEach((unsubscribe) => {
+        try {
+          unsubscribe && unsubscribe();
+        } catch {
+          // ignore
         }
       });
+      regularUnsubscribeRefs.current = {};
     };
-  }, [users, dispatch]);
+  }, []);
 
   useEffect(() => {
     if (!maintenanceUsers?.length) return;
@@ -128,9 +170,7 @@ export default function GlobalUnreadBadgeSync() {
 
   useEffect(() => {
     return () => {
-      Object.values(regularUnsubscribeRefs.current).forEach((unsubscribe) => unsubscribe?.());
       Object.values(maintenanceUnsubscribeRefs.current).forEach((unsubscribe) => unsubscribe?.());
-      regularUnsubscribeRefs.current = {};
       maintenanceUnsubscribeRefs.current = {};
     };
   }, []);
