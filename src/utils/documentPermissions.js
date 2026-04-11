@@ -3,6 +3,8 @@ export const DOCUMENT_FILTER_OPTIONS = [
   { label: "Delivery Proof", filterValue: "delivery", permissionKey: "delivery" },
   { label: "Load Image", filterValue: "load_image", permissionKey: "load_image" },
   { label: "Fuel Receipt", filterValue: "fuel_recipt", permissionKey: "fuel_recipt" },
+  { label: "Scale Ticket", filterValue: "scale_ticket", permissionKey: "scale_ticket" },
+  { label: "Tracking", filterValue: "tracking", permissionKey: "tracking" },
   { label: "Stamp Paper", filterValue: "paper_logs", permissionKey: "paper_logs" },
   { label: "Driver Expense", filterValue: "driver_expense_sheet", permissionKey: "driver_expense_sheet" },
   { label: "DM Transport Trip Envelope", filterValue: "dm_transport_trip_envelope", permissionKey: "dm_transport_trip_envelope" },
