@@ -1,24 +1,32 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Check,
   ChevronDown,
+  FileText,
   Filter,
+  Image,
   Loader2,
   Megaphone,
   MoreHorizontal,
+  Paperclip,
   Search,
   Send,
   Shield,
   User,
   Users,
+  Video,
   X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Checkbox } from "../components/ui/checkbox";
 import { sendBroadcast, fetchBroadcastHistory } from "../services/broadcastAPI";
+import { uploadBroadcastFile } from "../services/broadcastFileUpload";
+import FilePreviewModal from "../components/FilePreviewModal";
 import { useAppSelector } from "../store/hooks";
+import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
+import { extractAttachmentDisplayName } from "../utils/chatAttachments";
 
 const MESSAGE_LIMIT = 500;
 
@@ -61,11 +69,16 @@ export default function Broadcast() {
   const [historySearch, setHistorySearch] = useState("");
   const [isComposeCollapsed, setIsComposeCollapsed] = useState(false);
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
+  const [selectedAttachment, setSelectedAttachment] = useState(null);
+  const [showAttachmentPreview, setShowAttachmentPreview] = useState(false);
+  const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
+  const fileInputRef = useRef(null);
 
   const { users: drivers = [] } = useAppSelector((state) => state.users);
   const maintenanceUsers = useAppSelector(
     (state) => state?.maintenanceUsers?.users || []
   );
+  const { user: adminUser } = useAuth();
 
   useEffect(() => {
     loadBroadcastHistory();
@@ -96,6 +109,11 @@ export default function Broadcast() {
   useEffect(() => {
     setShowRecipientList(false);
   }, [recipients]);
+
+  useEffect(() => {
+    if (!showAttachmentPreview) return;
+    setShowAttachmentOptions(false);
+  }, [showAttachmentPreview]);
 
   const loadBroadcastHistory = async () => {
     setLoading(true);
@@ -150,6 +168,7 @@ export default function Broadcast() {
 
     const haystack = [
       broadcast.message,
+      broadcast.attachmentName,
       broadcast.sendername,
       broadcast.recipientType,
       ...(broadcast.recipientNames || []),
@@ -195,9 +214,51 @@ export default function Broadcast() {
     setAdminSelections(nextSelections);
   };
 
+  const openAttachmentPicker = (accept) => {
+    if (!fileInputRef.current) return;
+    fileInputRef.current.accept = accept;
+    fileInputRef.current.click();
+    setShowAttachmentOptions(false);
+  };
+
+  const handleAttachmentSelect = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSelectedAttachment(file);
+      setShowAttachmentPreview(true);
+    }
+    event.target.value = "";
+  };
+
+  const handleAttachmentUploaded = (url) => {
+    if (!selectedAttachment) return;
+
+    setSelectedAttachment((prev) =>
+      prev
+        ? {
+            file: prev,
+            url,
+            name: prev.name || "",
+            mimeType: prev.type || "",
+          }
+        : prev
+    );
+    setShowAttachmentPreview(false);
+  };
+
+  const clearAttachment = () => {
+    setSelectedAttachment(null);
+    setShowAttachmentPreview(false);
+    setShowAttachmentOptions(false);
+  };
+
   const handleSendBroadcast = async () => {
-    if (!message.trim()) {
-      toast.error("Enter message");
+    const hasMessage = Boolean(message.trim());
+    const attachmentMeta =
+      selectedAttachment && !(selectedAttachment instanceof File) ? selectedAttachment : null;
+
+    if (!hasMessage && !attachmentMeta?.url) {
+      toast.error("Enter a message or attach a file");
       return;
     }
 
@@ -219,11 +280,17 @@ export default function Broadcast() {
         drivers,
         maintenanceUsers,
         getSelectedDriverIds(),
-        getSelectedAdminIds()
+        getSelectedAdminIds(),
+        {
+          attachmentUrl: attachmentMeta?.url || "",
+          attachmentName: attachmentMeta?.name || "",
+          attachmentMimeType: attachmentMeta?.mimeType || "",
+        }
       );
 
       toast.success("Broadcast sent successfully");
       setMessage("");
+      clearAttachment();
       loadBroadcastHistory();
     } catch {
       toast.error("Failed to send broadcast");
@@ -390,19 +457,109 @@ export default function Broadcast() {
                 </span>
               </div>
 
-              <textarea
-                value={message}
-                onChange={(event) =>
-                  setMessage(event.target.value.slice(0, MESSAGE_LIMIT))
-                }
-                rows={4}
-                placeholder="Enter your broadcast message..."
-                className="w-full resize-none rounded-[9px] border border-white/8 bg-[#282047]/72 px-4 py-3.5 text-[13px] text-white outline-none placeholder:text-white/27 focus:border-[#6b82ff]/75"
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*,application/pdf"
+                onChange={handleAttachmentSelect}
+                className="hidden"
+                aria-label="Attach file to broadcast"
               />
+              <div className="relative">
+                <textarea
+                  value={message}
+                  onChange={(event) =>
+                    setMessage(event.target.value.slice(0, MESSAGE_LIMIT))
+                  }
+                  rows={4}
+                  placeholder="Enter your broadcast message..."
+                  className="min-h-[112px] w-full resize-none rounded-[9px] border border-white/8 bg-[#282047]/72 px-4 py-3.5 pr-16 text-[13px] text-white outline-none placeholder:text-white/27 focus:border-[#6b82ff]/75"
+                />
+                <div className="absolute bottom-3 right-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAttachmentOptions((prev) => !prev)}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/8 bg-black/10 text-white/72 backdrop-blur-sm transition hover:bg-black/20 hover:text-white"
+                    aria-label="Attach file to broadcast"
+                    aria-expanded={showAttachmentOptions}
+                    aria-haspopup="true"
+                  >
+                    <Paperclip className="h-4.5 w-4.5" />
+                  </button>
+                  {showAttachmentOptions && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setShowAttachmentOptions(false)}
+                        aria-hidden="true"
+                      />
+                      <div
+                        className="absolute right-0 top-full z-50 mt-2 w-48 rounded-xl border border-white/10 bg-[#18142b] py-2 shadow-[0_18px_40px_rgba(0,0,0,0.38)]"
+                        role="menu"
+                        aria-label="Choose attachment type"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => openAttachmentPicker("image/*")}
+                          className="flex w-full items-center gap-3 px-4 py-3 text-left text-white/86 transition hover:bg-white/[0.05]"
+                          role="menuitem"
+                        >
+                          <Image className="h-4.5 w-4.5 text-[#8ab4f8]" />
+                          <span className="text-sm">Photo</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openAttachmentPicker("video/*")}
+                          className="flex w-full items-center gap-3 px-4 py-3 text-left text-white/86 transition hover:bg-white/[0.05]"
+                          role="menuitem"
+                        >
+                          <Video className="h-4.5 w-4.5 text-[#b5a3ff]" />
+                          <span className="text-sm">Video</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openAttachmentPicker("application/pdf")}
+                          className="flex w-full items-center gap-3 px-4 py-3 text-left text-white/86 transition hover:bg-white/[0.05]"
+                          role="menuitem"
+                        >
+                          <FileText className="h-4.5 w-4.5 text-[#fca5a5]" />
+                          <span className="text-sm">PDF</span>
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
 
               <div className="mt-1 text-[11px] text-white/34">
                 {message.length}/{MESSAGE_LIMIT}
               </div>
+
+              {selectedAttachment?.url && (
+                <div className="mt-3 flex items-center justify-between gap-3 rounded-[11px] border border-white/8 bg-[#282047]/72 px-4 py-3 text-[13px] text-white/80">
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/55">
+                      <Paperclip className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-medium text-white/88">
+                        {selectedAttachment.name || "Attachment ready"}
+                      </p>
+                      <p className="text-[11px] text-white/42">
+                        Ready to send with this broadcast
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearAttachment}
+                    className="rounded p-1 text-white/45 transition hover:bg-white/[0.05] hover:text-white"
+                    aria-label="Remove attachment"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
             </div>
 
             <button
@@ -567,6 +724,36 @@ export default function Broadcast() {
                         </span>
                       </div>
 
+                      {broadcast.attachmentUrl && (
+                        <div className="mt-3 flex items-center justify-between gap-3 rounded-[10px] border border-white/7 bg-white/[0.03] px-3 py-2.5 text-[12px] text-white/72">
+                          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white/[0.05] text-white/45">
+                              <Paperclip className="h-3.5 w-3.5" />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="truncate text-[12px] font-medium text-white/84">
+                                {extractAttachmentDisplayName({
+                                  explicitName: broadcast.attachmentName,
+                                  url: broadcast.attachmentUrl,
+                                  fallback: "Attachment",
+                                })}
+                              </p>
+                              <p className="text-[10px] uppercase tracking-[0.14em] text-white/32">
+                                Attachment
+                              </p>
+                            </div>
+                          </div>
+                          <a
+                            href={broadcast.attachmentUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="shrink-0 rounded-md border border-white/10 px-2.5 py-1.5 text-[11px] font-medium text-white/72 transition hover:bg-white/[0.04] hover:text-white"
+                          >
+                            Open
+                          </a>
+                        </div>
+                      )}
+
                       <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/7 pt-3">
                         <p className="line-clamp-1 text-[12px] text-white/62">
                           {preview}
@@ -587,6 +774,19 @@ export default function Broadcast() {
 
         </section>
       </div>
+      {showAttachmentPreview && selectedAttachment instanceof File && (
+        <FilePreviewModal
+          file={selectedAttachment}
+          adminId={adminUser?.userid || adminUser?.userId || adminUser?.id || "admin"}
+          uploadContext={recipients}
+          uploadFile={(file, adminId, recipientType, onProgress, onError, onComplete) =>
+            uploadBroadcastFile(file, adminId, recipientType, onProgress, onError, onComplete)
+          }
+          title="Attach to broadcast"
+          onClose={clearAttachment}
+          onSent={handleAttachmentUploaded}
+        />
+      )}
     </div>
   );
 }
@@ -608,3 +808,5 @@ function formatDateCompact(timestamp) {
     return timestamp;
   }
 }
+
+

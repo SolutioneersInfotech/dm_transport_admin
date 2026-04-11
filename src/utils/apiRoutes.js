@@ -58,16 +58,9 @@ export const fetchDocumentsRoute = ({ startDateTimeUtc, endDateTimeUtc } = {}, o
   const params = new URLSearchParams();
 
   // Required parameters
-<<<<<<< HEAD
   if (startDateTimeUtc && endDateTimeUtc) {
     params.append("startDateTimeUtc", startDateTimeUtc);
     params.append("endDateTimeUtc", endDateTimeUtc);
-=======
-  if (startDate && endDate) {
-    params.append("start_date", startDate);
-    params.append("end_date", endDate);
-    params.append("tz_offset", String(new Date().getTimezoneOffset()));
->>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
   }
 
   // Pagination
@@ -161,16 +154,9 @@ export const fetchDocumentCountRoute = ({ startDateTimeUtc, endDateTimeUtc } = {
   const params = new URLSearchParams();
 
   // Required parameters
-<<<<<<< HEAD
   if (startDateTimeUtc && endDateTimeUtc) {
     params.append("startDateTimeUtc", startDateTimeUtc);
     params.append("endDateTimeUtc", endDateTimeUtc);
-=======
-  if (startDate && endDate) {
-    params.append("start_date", startDate);
-    params.append("end_date", endDate);
-    params.append("tz_offset", String(new Date().getTimezoneOffset()));
->>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
   }
 
   // Status filters

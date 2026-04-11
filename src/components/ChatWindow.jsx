@@ -211,6 +211,7 @@ import { Checkbox } from "./ui/checkbox";
 import { toast } from "sonner";
 import { ADMIN_PERMISSION_KEYS, hasAdminPermission } from "../utils/adminPermissions";
 import { sendBroadcast } from "../services/broadcastAPI";
+import { uploadBroadcastFile } from "../services/broadcastFileUpload";
 
 /* ================= LAST SEEN FORMATTER ================= */
 function formatLastSeen(lastSeen) {
@@ -255,6 +256,37 @@ function resolveReplyTargetId(message) {
   return typeof nestedId === "string" && nestedId.trim() ? nestedId : null;
 }
 
+function parseMessageDateTime(value) {
+  if (!value) return 0;
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function buildOptimisticMessageId() {
+  return `temp-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function sortMessagesByDate(messages) {
+  return [...messages].sort((left, right) => {
+    return parseMessageDateTime(left?.dateTime) - parseMessageDateTime(right?.dateTime);
+  });
+}
+
+function isMessageConfirmed(optimisticMessage, confirmedMessage) {
+  const optimisticText = String(optimisticMessage?.content?.message ?? "").trim();
+  const confirmedText = String(confirmedMessage?.content?.message ?? "").trim();
+  const optimisticAttachment = String(optimisticMessage?.content?.attachmentUrl ?? "").trim();
+  const confirmedAttachment = String(confirmedMessage?.content?.attachmentUrl ?? "").trim();
+  const optimisticSender = String(optimisticMessage?.sendername ?? "").trim();
+  const confirmedSender = String(confirmedMessage?.sendername ?? "").trim();
+
+  return (
+    optimisticText === confirmedText &&
+    optimisticAttachment === confirmedAttachment &&
+    optimisticSender === confirmedSender
+  );
+}
+
 export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
   const { user } = useAuth();
   const dispatch = useAppDispatch();
@@ -268,6 +300,7 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     [user?.permissions]
   );
   const [messages, setMessages] = useState([]);
+  const [optimisticMessages, setOptimisticMessages] = useState([]);
   const [selected, setSelected] = useState([]);
   const [selectionMode, setSelectionMode] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
@@ -287,6 +320,10 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
   const [showBroadcastDialog, setShowBroadcastDialog] = useState(false);
   const [broadcastMessage, setBroadcastMessage] = useState("");
   const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [selectedBroadcastFile, setSelectedBroadcastFile] = useState(null);
+  const [showBroadcastFilePreview, setShowBroadcastFilePreview] = useState(false);
+  const [showBroadcastAttachmentOptions, setShowBroadcastAttachmentOptions] = useState(false);
+  const broadcastFileInputRef = useRef(null);
   const buildChatMediaFileName = useCallback((url, sender, dateTime) => {
     const safeSender = String(sender || "unknown_sender")
       .trim()
@@ -437,7 +474,27 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     shouldScrollToBottomRef.current = true;
 
     const unsubscribe = subscribeMessages(messageSubscriptionTarget, (nextMessages) => {
-      setMessages(nextMessages || []);
+      const confirmedMessages = nextMessages || [];
+      setOptimisticMessages((prev) =>
+        prev.filter(
+          (optimisticMessage) =>
+            !confirmedMessages.some((confirmedMessage) =>
+              isMessageConfirmed(optimisticMessage, confirmedMessage)
+            )
+        )
+      );
+      setMessages((prev) => {
+        const pendingFromPreviousView = prev.filter((message) =>
+          String(message?.msgId || "").startsWith("temp-")
+        );
+        const stillPending = pendingFromPreviousView.filter(
+          (optimisticMessage) =>
+            !confirmedMessages.some((confirmedMessage) =>
+              isMessageConfirmed(optimisticMessage, confirmedMessage)
+            )
+        );
+        return sortMessagesByDate([...confirmedMessages, ...stillPending]);
+      });
       setLoading(false);
       
       // Mark messages as seen after loading
@@ -463,7 +520,19 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     fetchMessages(messageSubscriptionTarget, 200)
       .then((response) => {
         if (isCancelled) return;
-        setMessages(response?.messages || []);
+        const confirmedMessages = response?.messages || [];
+        setMessages((prev) => {
+          const pendingFromPreviousView = prev.filter((message) =>
+            String(message?.msgId || "").startsWith("temp-")
+          );
+          const stillPending = pendingFromPreviousView.filter(
+            (optimisticMessage) =>
+              !confirmedMessages.some((confirmedMessage) =>
+                isMessageConfirmed(optimisticMessage, confirmedMessage)
+              )
+          );
+          return sortMessagesByDate([...confirmedMessages, ...stillPending]);
+        });
       })
       .catch((error) => {
         console.error("Failed to refetch messages on focus:", error);
@@ -638,6 +707,11 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
   function handleFileSelect(e) {
     const file = e.target.files?.[0];
     if (file) {
+      console.log("📎 File selected for chat preview:", {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+      });
       setSelectedFile(file);
       setShowFilePreview(true);
     }
@@ -645,15 +719,34 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
   }
 
   function handleAttachmentSent(url) {
+    const attachmentName = selectedFile?.name || "";
+    const attachmentMimeType = selectedFile?.type || "";
+    
+    console.log("✅ Attachment uploaded successfully:", {
+      url,
+      name: attachmentName,
+      mimeType: attachmentMimeType,
+      fileSize: selectedFile?.size,
+    });
+
     const tempMsg = {
-      msgId: Math.random().toString(),
+      msgId: buildOptimisticMessageId(),
       type: 1,
-      content: { message: "", attachmentUrl: url },
+      content: {
+        message: "",
+        attachmentUrl: url,
+        attachmentName,
+        attachmentMimeType,
+      },
       dateTime: new Date().toISOString(),
       status: 0,
       sendername: user?.name || user?.userid || "Admin",
     };
-    setMessages((prev) => [...prev, tempMsg]);
+    
+    console.log("📤 Creating temporary message with attachment:", tempMsg);
+    
+    setOptimisticMessages((prev) => [...prev, tempMsg]);
+    setMessages((prev) => sortMessagesByDate([...prev, tempMsg]));
     setSelectedFile(null);
     setShowFilePreview(false);
     setReplyTo(null);
@@ -661,24 +754,71 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     scrollToBottom("smooth");
     const now = new Date().toISOString();
     dispatch(updateLastMessageAction({ userid: driverId, lastMessage: "Attachment", lastChatTime: now }));
-    sendMessage(driver, "", undefined, replyTo?.msgId ?? null, url).catch((err) => {
-      console.error("Failed to send attachment message:", err);
+    sendMessage(driver, "", undefined, replyTo?.msgId ?? null, url, {
+      attachmentName,
+      attachmentMimeType,
+    }).catch((err) => {
+      console.error("❌ Failed to send attachment message:", err);
     });
+  }
+
+  function openBroadcastFilePicker(accept) {
+    if (!broadcastFileInputRef.current) return;
+    broadcastFileInputRef.current.accept = accept;
+    broadcastFileInputRef.current.click();
+    setShowBroadcastAttachmentOptions(false);
+  }
+
+  function handleBroadcastFileSelect(e) {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedBroadcastFile(file);
+      setShowBroadcastFilePreview(true);
+    }
+    e.target.value = "";
+  }
+
+  function handleBroadcastAttachmentSent(url) {
+    console.log("📡 Broadcast attachment uploaded:", { url });
+    
+    if (!(selectedBroadcastFile instanceof File)) {
+      console.warn("⚠️ Broadcast: selectedBroadcastFile is not a File object", selectedBroadcastFile);
+      return;
+    }
+
+    const broadcastFileObj = {
+      file: selectedBroadcastFile,
+      url,
+      name: selectedBroadcastFile.name || "",
+      mimeType: selectedBroadcastFile.type || "",
+    };
+    
+    console.log("✅ Setting broadcast file preview with URL:", broadcastFileObj);
+    setSelectedBroadcastFile(broadcastFileObj);
+    setShowBroadcastFilePreview(false);
+    setShowBroadcastAttachmentOptions(false);
   }
 
   /* ================= SEND MESSAGE ================= */
   async function handleSend() {
+    if (selectedFile instanceof File) {
+      setShowFilePreview(true);
+      return;
+    }
+
     if (!text.trim()) return;
 
     const tempMsg = {
-      msgId: Math.random().toString(),
+      msgId: buildOptimisticMessageId(),
       type: 1, // ADMIN
       content: { message: text, attachmentUrl: "" },
       dateTime: new Date().toISOString(),
       status: 0,
+      sendername: user?.name || user?.userid || "Admin",
     };
 
-    setMessages((prev) => [...prev, tempMsg]);
+    setOptimisticMessages((prev) => [...prev, tempMsg]);
+    setMessages((prev) => sortMessagesByDate([...prev, tempMsg]));
     setText("");
 
     const now = new Date().toISOString();
@@ -759,17 +899,28 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
 
   /* ================= BROADCAST MESSAGE HANDLER ================= */
   async function handleSendBroadcast() {
-    if (!broadcastMessage.trim()) {
-      toast.error("Please enter a broadcast message");
+    const attachmentMeta =
+      selectedBroadcastFile && !(selectedBroadcastFile instanceof File)
+        ? selectedBroadcastFile
+        : null;
+
+    if (!broadcastMessage.trim() && !attachmentMeta?.url) {
+      toast.error("Please enter a broadcast message or attach a file");
       return;
     }
 
     setIsBroadcasting(true);
     try {
       // Send broadcast to all users
-      await sendBroadcast("all", broadcastMessage.trim());
+      await sendBroadcast("all", broadcastMessage.trim(), [], [], [], [], {
+        attachmentUrl: attachmentMeta?.url || "",
+        attachmentName: attachmentMeta?.name || "",
+        attachmentMimeType: attachmentMeta?.mimeType || "",
+      });
       toast.success("Broadcast message sent successfully!");
       setBroadcastMessage("");
+      setSelectedBroadcastFile(null);
+      setShowBroadcastAttachmentOptions(false);
       setShowBroadcastDialog(false);
     } catch (error) {
       console.error("Error sending broadcast:", error);
@@ -1112,12 +1263,12 @@ const grouped = groupMessagesByDate(allMessages);
           className="hidden"
           aria-label="Attach file"
         />
-        <div className="relative">
+        <div className="relative flex-1">
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="rounded-full text-[#8696a0] hover:bg-[#2c3e52] hover:text-[#e9edef]"
+            className="absolute left-2 top-1/2 z-10 h-9 w-9 -translate-y-1/2 rounded-full text-[#8696a0] hover:bg-[#3a4d63] hover:text-[#e9edef]"
             onClick={() => setShowAttachmentOptions((prev) => !prev)}
             aria-label="Attach file"
             aria-expanded={showAttachmentOptions}
@@ -1167,16 +1318,16 @@ const grouped = groupMessagesByDate(allMessages);
               </div>
             </>
           )}
-        </div>
 
-        <Input
-          className="flex-1 rounded-full bg-[#2c3e52] border-0 text-[#e9edef] placeholder:text-[#8696a0] py-5 px-4 focus-visible:ring-[#1f6feb]"
-          placeholder="Type a message"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSend()}
-          ref={inputRef}
-        />
+          <Input
+            className="w-full rounded-full border-0 bg-[#2c3e52] py-5 pl-14 pr-4 text-[#e9edef] placeholder:text-[#8696a0] focus-visible:ring-[#1f6feb]"
+            placeholder="Type a message"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSend()}
+            ref={inputRef}
+          />
+        </div>
 
         <Button
           onClick={handleSend}
@@ -1189,6 +1340,51 @@ const grouped = groupMessagesByDate(allMessages);
           </svg>
         </Button>
       </div>
+      )}
+      {selectedFile instanceof File && (
+        <div className="px-3 pb-3 border-t-0 bg-[#1c2530] sticky bottom-0">
+          <div className="mx-[52px] mt-2 flex items-center justify-between gap-3 rounded-lg border border-[#2c3e52] bg-[#243544] px-3 py-2 text-sm text-gray-200">
+            <button
+              type="button"
+              onClick={() => setShowFilePreview(true)}
+              className="flex min-w-0 flex-1 items-center gap-3 text-left"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white/5 text-gray-400">
+                <Paperclip className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-gray-100">
+                  {selectedFile.name || "Attachment ready"}
+                </p>
+                <p className="text-[11px] text-gray-400">
+                  Ready to preview and send
+                </p>
+              </div>
+            </button>
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-gray-300 hover:bg-[#2c3e52] hover:text-white"
+                onClick={() => setShowFilePreview(true)}
+              >
+                Preview
+              </Button>
+              <button
+                type="button"
+                className="rounded p-1 text-gray-400 hover:text-white"
+                onClick={() => {
+                  setSelectedFile(null);
+                  setShowFilePreview(false);
+                }}
+                aria-label="Remove attachment"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {isDeleteConfirmOpen && (
@@ -1254,6 +1450,8 @@ const grouped = groupMessagesByDate(allMessages);
                 onClick={() => {
                   if (isBroadcasting) return;
                   setShowBroadcastDialog(false);
+                  setSelectedBroadcastFile(null);
+                  setShowBroadcastAttachmentOptions(false);
                 }}
                 className="text-gray-400 hover:text-white"
                 disabled={isBroadcasting}
@@ -1263,13 +1461,106 @@ const grouped = groupMessagesByDate(allMessages);
               </button>
             </div>
             <p className="text-sm text-gray-300">Send a message to all users at once</p>
-            <textarea
-              value={broadcastMessage}
-              onChange={(e) => setBroadcastMessage(e.target.value)}
-              placeholder="Enter your broadcast message..."
-              className="w-full h-24 px-3 py-2 bg-[#2c3e52] border border-[#3d5a80] rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none"
-              disabled={isBroadcasting}
+            <input
+              ref={broadcastFileInputRef}
+              type="file"
+              accept="image/*,video/*,application/pdf"
+              onChange={handleBroadcastFileSelect}
+              className="hidden"
+              aria-label="Attach file to broadcast"
             />
+            <div className="flex items-end gap-3">
+              <textarea
+                value={broadcastMessage}
+                onChange={(e) => setBroadcastMessage(e.target.value)}
+                placeholder="Enter your broadcast message..."
+                className="h-24 flex-1 rounded-lg border border-[#3d5a80] bg-[#2c3e52] px-3 py-2 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none"
+                disabled={isBroadcasting}
+              />
+              <div className="relative">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-11 w-11 shrink-0 rounded-full text-[#8696a0] hover:bg-[#2c3e52] hover:text-[#e9edef]"
+                  onClick={() => setShowBroadcastAttachmentOptions((prev) => !prev)}
+                  disabled={isBroadcasting}
+                  aria-label="Attach file to broadcast"
+                  aria-expanded={showBroadcastAttachmentOptions}
+                  aria-haspopup="true"
+                >
+                  <Paperclip className="h-5 w-5" strokeWidth={1.8} />
+                </Button>
+                {showBroadcastAttachmentOptions && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setShowBroadcastAttachmentOptions(false)}
+                      aria-hidden="true"
+                    />
+                    <div
+                      className="absolute right-0 top-full z-50 mt-2 w-48 rounded-xl border border-[#2c3e52] bg-[#1c2530] py-2 shadow-xl"
+                      role="menu"
+                      aria-label="Choose attachment type"
+                    >
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-3 px-4 py-3 text-left text-[#e9edef] hover:bg-[#2c3e52]"
+                        onClick={() => openBroadcastFilePicker("image/*")}
+                        role="menuitem"
+                      >
+                        <Image className="h-5 w-5 text-[#8ab4f8]" aria-hidden="true" />
+                        <span className="text-sm">Photo</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-3 px-4 py-3 text-left text-[#e9edef] hover:bg-[#2c3e52]"
+                        onClick={() => openBroadcastFilePicker("video/*")}
+                        role="menuitem"
+                      >
+                        <Video className="h-5 w-5 text-[#b5a3ff]" aria-hidden="true" />
+                        <span className="text-sm">Video</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-3 px-4 py-3 text-left text-[#e9edef] hover:bg-[#2c3e52]"
+                        onClick={() => openBroadcastFilePicker("application/pdf")}
+                        role="menuitem"
+                      >
+                        <FileText className="h-5 w-5 text-[#fca5a5]" aria-hidden="true" />
+                        <span className="text-sm">PDF</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+            {selectedBroadcastFile && !(selectedBroadcastFile instanceof File) && (
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-[#3d5a80] bg-[#243544] px-3 py-2 text-sm text-gray-200">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white/5 text-gray-400">
+                    <Paperclip className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-gray-100">
+                      {selectedBroadcastFile.name || "Attachment ready"}
+                    </p>
+                    <p className="text-[11px] text-gray-400">
+                      Ready to send with broadcast
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="rounded p-1 text-gray-400 hover:text-white"
+                  onClick={() => setSelectedBroadcastFile(null)}
+                  disabled={isBroadcasting}
+                  aria-label="Remove broadcast attachment"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
             <div className="flex items-center justify-end gap-2">
               <Button
                 type="button"
@@ -1279,6 +1570,8 @@ const grouped = groupMessagesByDate(allMessages);
                 onClick={() => {
                   setShowBroadcastDialog(false);
                   setBroadcastMessage("");
+                  setSelectedBroadcastFile(null);
+                  setShowBroadcastAttachmentOptions(false);
                 }}
                 disabled={isBroadcasting}
               >
@@ -1289,7 +1582,11 @@ const grouped = groupMessagesByDate(allMessages);
                 size="sm"
                 className="bg-blue-600 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={handleSendBroadcast}
-                disabled={isBroadcasting || !broadcastMessage.trim()}
+                disabled={
+                  isBroadcasting ||
+                  (!broadcastMessage.trim() &&
+                    !(selectedBroadcastFile && !(selectedBroadcastFile instanceof File)))
+                }
               >
                 {isBroadcasting ? "Sending..." : "Send Broadcast"}
               </Button>
@@ -1305,9 +1602,26 @@ const grouped = groupMessagesByDate(allMessages);
           driverId={driverId}
           onClose={() => {
             setShowFilePreview(false);
-            setSelectedFile(null);
           }}
           onSent={handleAttachmentSent}
+        />
+      )}
+
+      {showBroadcastFilePreview && selectedBroadcastFile instanceof File && (
+        <FilePreviewModal
+          file={selectedBroadcastFile}
+          adminId={adminId}
+          uploadContext="all"
+          uploadFile={(file, nextAdminId, recipientType, onProgress, onError, onComplete) =>
+            uploadBroadcastFile(file, nextAdminId, recipientType, onProgress, onError, onComplete)
+          }
+          title="Attach to broadcast"
+          onClose={() => {
+            setShowBroadcastFilePreview(false);
+            setShowBroadcastAttachmentOptions(false);
+            // DO NOT clear selectedBroadcastFile here - it will be set by handleBroadcastAttachmentSent after successful upload
+          }}
+          onSent={handleBroadcastAttachmentSent}
         />
       )}
 

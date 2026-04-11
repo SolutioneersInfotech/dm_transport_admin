@@ -392,6 +392,21 @@ export default function ChatMessageBubble({
     url: attachment,
     fallback: isPDF ? "Document.pdf" : "Attachment",
   });
+  
+  // Debug logging for attachments
+  if (hasAttachment && !window.__attachmentDebugLogged) {
+    window.__attachmentDebugLogged = true;
+    console.log("🎨 Rendering attachment:", {
+      attachment,
+      mimeType: attachmentMimeType,
+      kind: attachmentKind,
+      isImage,
+      isVideo,
+      isPDF,
+      displayName: attachmentDisplayName,
+      messageId: msg?.msgId,
+    });
+  }
   const normalizedText = text.toLowerCase();
   const normalizedAttachment = attachment.toLowerCase();
   const textLooksLikeStoragePath =

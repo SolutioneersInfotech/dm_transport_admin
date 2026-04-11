@@ -1,0 +1,74 @@
+[debug] [2026-04-11T06:23:27.406Z] ----------------------------------------------------------------------
+[debug] [2026-04-11T06:23:27.418Z] Command:       C:\nodejs\node.exe C:\Users\ABHISHEK\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only storage
+[debug] [2026-04-11T06:23:27.419Z] CLI Version:   15.11.0
+[debug] [2026-04-11T06:23:27.419Z] Platform:      win32
+[debug] [2026-04-11T06:23:27.420Z] Node Version:  v20.20.1
+[debug] [2026-04-11T06:23:27.420Z] Time:          Sat Apr 11 2026 11:53:27 GMT+0530 (India Standard Time)
+[debug] [2026-04-11T06:23:27.421Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-11T06:24:28.355Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-11T06:24:28.359Z] > authorizing via signed-in user (abhishekk121004@gmail.com)
+[debug] [2026-04-11T06:24:28.359Z] [iam] checking project dmtransport-1 for permissions ["firebase.projects.get","firebaserules.releases.create","firebaserules.releases.update","firebaserules.rulesets.create"]
+[debug] [2026-04-11T06:24:28.363Z] Checked if tokens are valid: true, expires at: 1775890803550
+[debug] [2026-04-11T06:24:28.363Z] Checked if tokens are valid: true, expires at: 1775890803550
+[debug] [2026-04-11T06:24:28.365Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/dmtransport-1:testIamPermissions [none]
+[debug] [2026-04-11T06:24:28.365Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/dmtransport-1:testIamPermissions  x-goog-user-project=dmtransport-1
+[debug] [2026-04-11T06:24:28.365Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/dmtransport-1:testIamPermissions {"permissions":["firebase.projects.get","firebaserules.releases.create","firebaserules.releases.update","firebaserules.rulesets.create"]}
+[debug] [2026-04-11T06:24:30.433Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/dmtransport-1:testIamPermissions 200
+[debug] [2026-04-11T06:24:30.434Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/dmtransport-1:testIamPermissions {"permissions":["firebase.projects.get","firebaserules.releases.create","firebaserules.releases.update","firebaserules.rulesets.create"]}
+[info] 
+[info] === Deploying to 'dmtransport-1'...
+[info] 
+[info] i  deploying storage 
+[info] i  storage: ensuring required API firebasestorage.googleapis.com is enabled... 
+[debug] [2026-04-11T06:24:30.441Z] Checked if tokens are valid: true, expires at: 1775890803550
+[debug] [2026-04-11T06:24:30.442Z] Checked if tokens are valid: true, expires at: 1775890803550
+[debug] [2026-04-11T06:24:30.442Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/dmtransport-1/services/firebasestorage.googleapis.com [none]
+[debug] [2026-04-11T06:24:30.442Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/dmtransport-1/services/firebasestorage.googleapis.com  x-goog-user-project=dmtransport-1
+[debug] [2026-04-11T06:24:32.595Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/dmtransport-1/services/firebasestorage.googleapis.com 200
+[debug] [2026-04-11T06:24:32.595Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/dmtransport-1/services/firebasestorage.googleapis.com [omitted]
+[info] +  storage: required API firebasestorage.googleapis.com is enabled 
+[debug] [2026-04-11T06:24:32.607Z] Checked if tokens are valid: true, expires at: 1775890803550
+[debug] [2026-04-11T06:24:32.607Z] Checked if tokens are valid: true, expires at: 1775890803550
+[debug] [2026-04-11T06:24:32.608Z] >>> [apiv2][query] GET https://firebasestorage.googleapis.com/v1alpha/projects/dmtransport-1/defaultBucket [none]
+[debug] [2026-04-11T06:24:34.397Z] <<< [apiv2][status] GET https://firebasestorage.googleapis.com/v1alpha/projects/dmtransport-1/defaultBucket 200
+[debug] [2026-04-11T06:24:34.398Z] <<< [apiv2][body] GET https://firebasestorage.googleapis.com/v1alpha/projects/dmtransport-1/defaultBucket {"name":"projects/dmtransport-1/defaultBucket","location":"NORTHAMERICA-NORTHEAST1","bucket":{"name":"projects/dmtransport-1/buckets/dmtransport-1.appspot.com"},"storageClass":"STANDARD"}
+[info] i  firebase.storage: checking storage.rules for compilation errors... 
+[debug] [2026-04-11T06:24:34.404Z] Checked if tokens are valid: true, expires at: 1775890803550
+[debug] [2026-04-11T06:24:34.405Z] Checked if tokens are valid: true, expires at: 1775890803550
+[debug] [2026-04-11T06:24:34.405Z] >>> [apiv2][query] POST https://firebaserules.googleapis.com/v1/projects/dmtransport-1:test [none]
+[debug] [2026-04-11T06:24:34.405Z] >>> [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/dmtransport-1:test [omitted]
+[debug] [2026-04-11T06:24:42.107Z] <<< [apiv2][status] POST https://firebaserules.googleapis.com/v1/projects/dmtransport-1:test 200
+[debug] [2026-04-11T06:24:42.107Z] <<< [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/dmtransport-1:test {}
+[info] +  firebase.storage: rules file storage.rules compiled successfully 
+[debug] [2026-04-11T06:24:42.109Z] Checked if tokens are valid: true, expires at: 1775890803550
+[debug] [2026-04-11T06:24:42.110Z] Checked if tokens are valid: true, expires at: 1775890803550
+[debug] [2026-04-11T06:24:42.121Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/dmtransport-1/releases pageSize=10&pageToken=
+[debug] [2026-04-11T06:24:42.807Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/dmtransport-1/releases 200
+[debug] [2026-04-11T06:24:42.807Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/dmtransport-1/releases {"releases":[{"name":"projects/dmtransport-1/releases/cloud.firestore","rulesetName":"projects/dmtransport-1/rulesets/4759cef5-5e7e-4cd3-a160-7567c41f43ad","createTime":"2023-09-03T08:17:27.595344Z","updateTime":"2025-01-21T18:14:47.176648Z"},{"name":"projects/dmtransport-1/releases/firebase.storage/dmt-bucket-asia-south","rulesetName":"projects/dmtransport-1/rulesets/b60e0644-b5da-4888-9b7d-3c58f294da99","createTime":"2023-09-09T15:56:32.651133Z","updateTime":"2023-09-09T16:05:57.855265Z"},{"name":"projects/dmtransport-1/releases/firebase.storage/dmtransport-1.appspot.com","rulesetName":"projects/dmtransport-1/rulesets/03272b5d-c958-4905-b33c-adef8da016a5","createTime":"2023-09-04T15:31:12.507997Z","updateTime":"2026-02-08T15:51:31.153217Z"}]}
+[debug] [2026-04-11T06:24:42.846Z] Checked if tokens are valid: true, expires at: 1775890803550
+[debug] [2026-04-11T06:24:42.846Z] Checked if tokens are valid: true, expires at: 1775890803550
+[debug] [2026-04-11T06:24:42.846Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/dmtransport-1/rulesets/b60e0644-b5da-4888-9b7d-3c58f294da99 [none]
+[debug] [2026-04-11T06:24:44.455Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/dmtransport-1/rulesets/b60e0644-b5da-4888-9b7d-3c58f294da99 200
+[debug] [2026-04-11T06:24:44.455Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/dmtransport-1/rulesets/b60e0644-b5da-4888-9b7d-3c58f294da99 [omitted]
+[info] i  storage: uploading rules storage.rules... 
+[debug] [2026-04-11T06:24:44.458Z] Checked if tokens are valid: true, expires at: 1775890803550
+[debug] [2026-04-11T06:24:44.458Z] Checked if tokens are valid: true, expires at: 1775890803550
+[debug] [2026-04-11T06:24:44.458Z] >>> [apiv2][query] POST https://firebaserules.googleapis.com/v1/projects/dmtransport-1/rulesets [none]
+[debug] [2026-04-11T06:24:44.458Z] >>> [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/dmtransport-1/rulesets [omitted]
+[debug] [2026-04-11T06:24:46.006Z] <<< [apiv2][status] POST https://firebaserules.googleapis.com/v1/projects/dmtransport-1/rulesets 200
+[debug] [2026-04-11T06:24:46.007Z] <<< [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/dmtransport-1/rulesets {"name":"projects/dmtransport-1/rulesets/0ac310b5-de72-4383-9460-72fe55363593","source":{"files":[{"content":"rules_version = '2';\r\nservice firebase.storage {\r\n  match /b/{bucket}/o {\r\n    function isAdmin() {\r\n      return request.auth != null &&\r\n        (request.auth.token.role == \"admin\" ||\r\n         request.auth.uid.matches('^admin_.*'));\r\n    }\r\n\r\n    match /chat/uploads/{uploaderUid}/{driverId}/{fileName} {\n      allow write: if isAdmin();\n      allow read: if request.auth != null;\n    }\n\n    match /broadcast/uploads/{uploaderUid}/{scope}/{fileName} {\n      allow write: if isAdmin();\n      allow read: if request.auth != null;\n    }\n\n    match /drivers/{phone}/{fileName} {\n      allow write: if isAdmin();\n      allow read: if request.auth != null;\n    }\n\r\n    match /{allPaths=**} {\r\n      allow read, write: if false;\r\n    }\r\n  }\r\n}\r\n","name":"storage.rules"}]},"createTime":"2026-04-11T06:24:45.840239Z","metadata":{"services":["firebase.storage"]}}
+[debug] [2026-04-11T06:24:46.007Z] [rules] created ruleset projects/dmtransport-1/rulesets/0ac310b5-de72-4383-9460-72fe55363593
+[debug] [2026-04-11T06:24:46.007Z] [rules] releasing firebase.storage/dmtransport-1.appspot.com with ruleset projects/dmtransport-1/rulesets/0ac310b5-de72-4383-9460-72fe55363593
+[debug] [2026-04-11T06:24:46.008Z] Checked if tokens are valid: true, expires at: 1775890803550
+[debug] [2026-04-11T06:24:46.008Z] Checked if tokens are valid: true, expires at: 1775890803550
+[debug] [2026-04-11T06:24:46.008Z] >>> [apiv2][query] PATCH https://firebaserules.googleapis.com/v1/projects/dmtransport-1/releases/firebase.storage/dmtransport-1.appspot.com [none]
+[debug] [2026-04-11T06:24:46.008Z] >>> [apiv2][body] PATCH https://firebaserules.googleapis.com/v1/projects/dmtransport-1/releases/firebase.storage/dmtransport-1.appspot.com {"release":{"name":"projects/dmtransport-1/releases/firebase.storage/dmtransport-1.appspot.com","rulesetName":"projects/dmtransport-1/rulesets/0ac310b5-de72-4383-9460-72fe55363593"}}
+[debug] [2026-04-11T06:24:47.563Z] <<< [apiv2][status] PATCH https://firebaserules.googleapis.com/v1/projects/dmtransport-1/releases/firebase.storage/dmtransport-1.appspot.com 200
+[debug] [2026-04-11T06:24:47.564Z] <<< [apiv2][body] PATCH https://firebaserules.googleapis.com/v1/projects/dmtransport-1/releases/firebase.storage/dmtransport-1.appspot.com {"name":"projects/dmtransport-1/releases/firebase.storage/dmtransport-1.appspot.com","rulesetName":"projects/dmtransport-1/rulesets/0ac310b5-de72-4383-9460-72fe55363593","createTime":"2023-09-04T15:31:12.507997Z","updateTime":"2026-04-11T06:24:47.397331Z"}
+[debug] [2026-04-11T06:24:47.564Z] [rules] updated release projects/dmtransport-1/releases/firebase.storage/dmtransport-1.appspot.com
+[info] +  storage: released rules storage.rules to firebase.storage 
+[info] 
+[info] +  Deploy complete! 
+[info] 
+[info] Project Console: https://console.firebase.google.com/project/dmtransport-1/overview
