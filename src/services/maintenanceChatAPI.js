@@ -148,7 +148,6 @@ export async function fetchUsersForChat() {
   return { users };
 }
 
-<<<<<<< HEAD
 /**
  * Fetch messages for a specific user with pagination
  * @param {string} userid - User ID
@@ -167,51 +166,6 @@ export async function fetchMessages(userid, messageLimit = 10) {
   
   const messagesRef = ref(database, `${ADMIN_MAINTENANCE_PATH}/${resolvedUserId}`);
   
-=======
-export async function fetchChatThreads({ page = 1, limit = 20, search = undefined, type = chatType } = {}) {
-  const token = getToken();
-  const url = fetchChatThreadsRoute({ page, limit, search, type });
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to fetch chat threads.");
-  }
-
-  return response.json();
-}
-
-export async function markThreadRead(driverId, { lastReadAt = Date.now(), type = chatType } = {}) {
-  const token = getToken();
-  const response = await fetch(markChatThreadReadRoute(driverId), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      lastReadAt,
-      type,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to mark thread as read.");
-  }
-
-  return response.json();
-}
-
-export async function fetchMessages(userid) {
-  const messagesRef = query(
-    ref(database, `${ADMIN_MAINTENANCE_PATH}/${userid}`),
-    limitToLast(100)
-  );
->>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
   const snapshot = await get(messagesRef);
   const messagesObject = snapshot.exists() ? snapshot.val() : {};
 

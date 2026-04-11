@@ -8,25 +8,16 @@ import {
   update,
 } from "firebase/database";
 import { database } from "../firebase/firebaseApp";
-<<<<<<< HEAD
 import { sendChatMessageRoute } from "../utils/apiRoutes";
-=======
-import { fetchChatThreadsRoute, markChatThreadReadRoute } from "../utils/apiRoutes";
->>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
 
 const ADMIN_GENERAL_PATH = "chat/users/admin/general";
 const USER_MIRROR_BASE = "chat/users";
 const FETCH_USERS_URL =
-<<<<<<< HEAD
   "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin/fetchusers";
 
 function isDevMode() {
   return typeof import.meta !== "undefined" && Boolean(import.meta?.env?.DEV);
 }
-=======
-  "http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin/fetchUsers";
-export const chatType = "general";
->>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
 
 function getToken() {
   return localStorage.getItem("adminToken");
@@ -53,6 +44,9 @@ function normalizeReplySnapshot(replyTo) {
       content: {
         message: replyTo?.content?.message ?? replyTo?.message ?? "",
         attachmentUrl: replyTo?.content?.attachmentUrl ?? replyTo?.attachmentUrl ?? "",
+        attachmentName: replyTo?.content?.attachmentName ?? replyTo?.attachmentName ?? "",
+        attachmentMimeType:
+          replyTo?.content?.attachmentMimeType ?? replyTo?.attachmentMimeType ?? "",
       },
       dateTime: replyTo?.dateTime ?? replyTo?.datetime ?? null,
     },
@@ -79,6 +73,9 @@ function normalizeMessage(messageId, msg) {
     content: {
       message: msg?.content?.message ?? msg?.message ?? "",
       attachmentUrl: msg?.content?.attachmentUrl ?? msg?.attachmentUrl ?? "",
+      attachmentName: msg?.content?.attachmentName ?? msg?.attachmentName ?? "",
+      attachmentMimeType:
+        msg?.content?.attachmentMimeType ?? msg?.attachmentMimeType ?? "",
     },
     status: msg?.status ?? 0,
     type: typeof type === "number" ? type : 0,
@@ -214,7 +211,6 @@ export async function fetchUsersForChat() {
   return { users };
 }
 
-<<<<<<< HEAD
 /**
  * Fetch messages for a specific user with pagination
  * @param {string} userid - User ID
@@ -227,53 +223,6 @@ export async function fetchMessages(chatTarget, messageLimit = 10) {
   if (!userid || !contactId) {
     return { messages: [] };
   }
-=======
-export async function fetchChatThreads({ page = 1, limit = 20, search = undefined, type = chatType } = {}) {
-  const token = getToken();
-  const url = fetchChatThreadsRoute({ page, limit, search, type });
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to fetch chat threads.");
-  }
-
-  return response.json();
-}
-
-export async function markThreadRead(driverId, { lastReadAt = Date.now(), type = chatType } = {}) {
-  const token = getToken();
-  const response = await fetch(markChatThreadReadRoute(driverId), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      lastReadAt,
-      type,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to mark thread as read.");
-  }
-
-  return response.json();
-}
-
-export async function fetchMessages(userid) {
-  const messagesRef = query(
-    ref(database, `${ADMIN_GENERAL_PATH}/${userid}`),
-    limitToLast(100)
-  );
-  const snapshot = await get(messagesRef);
-  const messagesObject = snapshot.exists() ? snapshot.val() : {};
->>>>>>> de2f1340d53e477c1e8e1f0a41d65986a5e2cc7f
 
   const primaryPath = `${ADMIN_GENERAL_PATH}/${contactId}`;
   const fallbackPath = `${USER_MIRROR_BASE}/${userid}/admin`;
@@ -326,6 +275,23 @@ export function subscribeMessages(userid, onChange) {
   let fallbackMessagesObject = {};
 
   const emit = () => {
+    if (isDevMode()) {
+      const mergedMessages = mergeMessageObjects(primaryMessagesObject, fallbackMessagesObject);
+      const latestMessage = mergedMessages.length
+        ? mergedMessages[mergedMessages.length - 1]
+        : null;
+      console.log("[chatAPI] merged latest message", {
+        count: mergedMessages.length,
+        latestAttachmentUrl: latestMessage?.content?.attachmentUrl ?? "",
+        latestAttachmentName: latestMessage?.content?.attachmentName ?? "",
+        latestAttachmentMimeType: latestMessage?.content?.attachmentMimeType ?? "",
+        latestRawPrimaryKeys: Object.keys(primaryMessagesObject || {}).slice(-3),
+        latestRawFallbackKeys: Object.keys(fallbackMessagesObject || {}).slice(-3),
+      });
+      onChange(mergedMessages);
+      return;
+    }
+
     onChange(mergeMessageObjects(primaryMessagesObject, fallbackMessagesObject));
   };
 
@@ -415,9 +381,17 @@ export function subscribeChatSummary(chatTarget, onChange) {
  * @param {object} [adminUser] - Admin user object (optional, will fetch if not provided)
  * @param {string|null} [replyToMsgId] - Optional message ID this message is replying to
  * @param {string} [attachmentUrl] - Optional attachment download URL (image/video/document)
+ * @param {{attachmentName?: string, attachmentMimeType?: string}} [attachmentOptions] - Optional attachment metadata
  * @returns {Promise<{message: object}>}
  */
-export async function sendMessage(chatTarget, text, adminUser = getAdminUser(), replyToMsgId = null, attachmentUrl = "") {
+export async function sendMessage(
+  chatTarget,
+  text,
+  adminUser = getAdminUser(),
+  replyToMsgId = null,
+  attachmentUrl = "",
+  attachmentOptions = {}
+) {
   const userid = resolveUserId(chatTarget);
   const contactId = resolveContactId(chatTarget);
 
@@ -428,6 +402,14 @@ export async function sendMessage(chatTarget, text, adminUser = getAdminUser(), 
   const messageText = typeof text === "string" ? text : (text != null ? String(text) : "");
   const replyTo = replyToMsgId != null && replyToMsgId !== "" ? replyToMsgId : null;
   const attachment = typeof attachmentUrl === "string" && attachmentUrl.trim() ? attachmentUrl.trim() : "";
+  const attachmentName =
+    typeof attachmentOptions?.attachmentName === "string" && attachmentOptions.attachmentName.trim()
+      ? attachmentOptions.attachmentName.trim()
+      : "";
+  const attachmentMimeType =
+    typeof attachmentOptions?.attachmentMimeType === "string" && attachmentOptions.attachmentMimeType.trim()
+      ? attachmentOptions.attachmentMimeType.trim()
+      : "";
   const token = getToken();
 
   const response = await fetch(sendChatMessageRoute, {
@@ -441,6 +423,8 @@ export async function sendMessage(chatTarget, text, adminUser = getAdminUser(), 
       message: messageText,
       replyTo,
       attachmentUrl: attachment,
+      attachmentName,
+      attachmentMimeType,
       sendername: adminUser?.name || adminUser?.userid || "Admin",
     }),
   });
@@ -455,7 +439,12 @@ export async function sendMessage(chatTarget, text, adminUser = getAdminUser(), 
   const payload = {
     id: messageId,
     dateTime: data?.message?.dateTime || data?.message?.datetime || new Date().toISOString(),
-    content: { message: messageText, attachmentUrl: attachment },
+    content: {
+      message: messageText,
+      attachmentUrl: attachment,
+      attachmentName,
+      attachmentMimeType,
+    },
     status: data?.message?.status ?? 0,
     type: 0,
     contactId: userid,
@@ -636,4 +625,52 @@ export function subscribeUnreadCount(chatTarget, onChange) {
   });
 
   return unsubscribe;
+}
+
+// ✅ ADD THIS FUNCTION
+export async function fetchChatThreads({ page = 1, limit = 20, search, type } = {}) {
+  try {
+    const token = getToken();
+
+    // Build query params
+    const params = new URLSearchParams({
+      page,
+      limit,
+      type,
+    });
+
+    if (search) {
+      params.append("search", search);
+    }
+
+    const response = await fetch(
+      `http://127.0.0.1:5001/dmtransport-1/northamerica-northeast1/api/admin/fetchusers?${params.toString()}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch chat threads");
+    }
+
+    const data = await response.json();
+
+    return {
+      threads: data?.users || [],
+      page,
+      limit,
+      hasMore: (data?.users || []).length >= limit,
+      totalDocuments: data?.totalDocuments || 0,
+      totalPages: data?.totalPages || 0,
+      search,
+      type,
+    };
+  } catch (error) {
+    console.error("fetchChatThreads error:", error);
+    throw error;
+  }
 }

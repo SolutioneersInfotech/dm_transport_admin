@@ -32,15 +32,29 @@ export async function sendBroadcast(
   drivers = [],
   admins = [],
   selectedDriverIds = [],
-  selectedAdminIds = []
+  selectedAdminIds = [],
+  attachmentOptions = {}
 ) {
   try {
     const adminUser = getAdminUser();
     console.log(adminUser);
     const adminName = adminUser?.userid || "Admin";
+    const messageText = typeof message === "string" ? message.trim() : String(message ?? "").trim();
+    const attachmentUrl =
+      typeof attachmentOptions?.attachmentUrl === "string" && attachmentOptions.attachmentUrl.trim()
+        ? attachmentOptions.attachmentUrl.trim()
+        : "";
+    const attachmentName =
+      typeof attachmentOptions?.attachmentName === "string" && attachmentOptions.attachmentName.trim()
+        ? attachmentOptions.attachmentName.trim()
+        : "";
+    const attachmentMimeType =
+      typeof attachmentOptions?.attachmentMimeType === "string" && attachmentOptions.attachmentMimeType.trim()
+        ? attachmentOptions.attachmentMimeType.trim()
+        : "";
 
-    if (!message || message.trim() === "") {
-      throw new Error("Message cannot be empty");
+    if (!messageText && !attachmentUrl) {
+      throw new Error("Broadcast must include a message or attachment");
     }
 
     const validTypes = ["all", "drivers", "admins"];
@@ -85,8 +99,11 @@ export async function sendBroadcast(
 
     const payload = {
       userids,
-      message: message.trim(),
+      message: messageText,
       sendername: adminName,
+      attachmentUrl,
+      attachmentName,
+      attachmentMimeType,
     };
 
     const response = await fetch(broadcastRoute, {
@@ -111,10 +128,13 @@ export async function sendBroadcast(
     
     const broadcastRecord = {
       userids,
-      message: message.trim(),
+      message: messageText,
       sendername: adminName,
       recipientType: type,
       recipientNames,
+      attachmentUrl,
+      attachmentName,
+      attachmentMimeType,
       timestamp: new Date().toISOString(),
       broadcastId: newHistoryRef.key,
     };

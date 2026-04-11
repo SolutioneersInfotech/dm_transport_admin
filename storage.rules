@@ -12,6 +12,11 @@ service firebase.storage {
       allow read: if request.auth != null;
     }
 
+    match /broadcast/uploads/{uploaderUid}/{scope}/{fileName} {
+      allow write: if isAdmin();
+      allow read: if request.auth != null;
+    }
+
     match /drivers/{phone}/{fileName} {
       allow write: if isAdmin();
       allow read: if request.auth != null;
