@@ -1,6 +1,10 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { fetchMaintenanceUsersRoute } from "../../utils/apiRoutes";
 
+const FETCH_MAINTENANCE_DEDUPE_WINDOW_MS = 3000;
+const inFlightMaintenanceRequestKeys = new Set();
+const lastMaintenanceRequestAtByKey = new Map();
+
 const defaultState = {
   users: [],
   loading: false,
@@ -11,6 +15,8 @@ const defaultState = {
 export const fetchMaintenanceUsers = createAsyncThunk(
   "maintenanceUsers/fetchMaintenanceUsers",
   async ({ limit = -1, search = undefined } = {}, { rejectWithValue }) => {
+    const requestKey = `maintenance:${limit}:${search ?? ""}`;
+    inFlightMaintenanceRequestKeys.add(requestKey);
     try {
       const token = localStorage.getItem("adminToken");
       const url = fetchMaintenanceUsersRoute(limit, search);
@@ -34,7 +40,31 @@ export const fetchMaintenanceUsers = createAsyncThunk(
       };
     } catch (error) {
       return rejectWithValue(error.message || "Failed to fetch maintenance users");
+    } finally {
+      inFlightMaintenanceRequestKeys.delete(requestKey);
+      lastMaintenanceRequestAtByKey.set(requestKey, Date.now());
     }
+  },
+  {
+    condition: ({ limit = -1, search = undefined } = {}, { getState }) => {
+      const requestKey = `maintenance:${limit}:${search ?? ""}`;
+      if (inFlightMaintenanceRequestKeys.has(requestKey)) {
+        return false;
+      }
+
+      const now = Date.now();
+      const lastRequestAt = lastMaintenanceRequestAtByKey.get(requestKey) ?? 0;
+      if (now - lastRequestAt < FETCH_MAINTENANCE_DEDUPE_WINDOW_MS) {
+        return false;
+      }
+
+      const state = getState()?.maintenanceUsers;
+      if (state?.loading) {
+        return false;
+      }
+
+      return true;
+    },
   }
 );
 

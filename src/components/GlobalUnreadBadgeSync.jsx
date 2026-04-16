@@ -1,11 +1,8 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
-import { fetchUsers } from "../store/slices/usersSlice";
-import { fetchMaintenanceUsers } from "../store/slices/maintenanceUsersSlice";
 import { setUnreadCountForUser, removeUserUnreadCounts } from "../store/slices/chatUnreadSlice";
 import { subscribeUnreadCount as subscribeRegularChatUnread } from "../services/chatAPI";
 import { subscribeUnreadCount as subscribeMaintenanceChatUnread } from "../services/maintenanceChatAPI";
-import useAppResumeSync from "../hooks/useAppResumeSync";
 
 function getUserId(user) {
   return (
@@ -37,40 +34,11 @@ function buildChatTargetFromUser(user) {
 
 export default function GlobalUnreadBadgeSync() {
   const dispatch = useAppDispatch();
-  const { users, loading, limit } = useAppSelector((state) => state.users);
-  const {
-    users: maintenanceUsers,
-    hasLoaded: maintenanceHasLoaded,
-    loading: maintenanceLoading,
-  } = useAppSelector((state) => state.maintenanceUsers);
+  const { users } = useAppSelector((state) => state.users);
+  const { users: maintenanceUsers } = useAppSelector((state) => state.maintenanceUsers);
 
   const regularUnsubscribeRefs = useRef({});
   const maintenanceUnsubscribeRefs = useRef({});
-
-  const handleResumeReconcile = useCallback(() => {
-    // Keep live listeners, but explicitly reconcile list state after browser resume/network restore.
-    if (!loading) {
-      dispatch(fetchUsers({ page: 1, limit: -1 }));
-    }
-
-    if (!maintenanceLoading) {
-      dispatch(fetchMaintenanceUsers({ limit: -1 }));
-    }
-  }, [dispatch, loading, maintenanceLoading]);
-
-  useAppResumeSync(handleResumeReconcile);
-
-  useEffect(() => {
-    // For global unread counts, we want ALL regular-chat users exactly once.
-    // If limit is not -1, it means we have not yet loaded the full list.
-    if (!loading && limit !== -1) {
-      dispatch(fetchUsers({ page: 1, limit: -1 }));
-    }
-
-    if (!maintenanceHasLoaded && !maintenanceLoading) {
-      dispatch(fetchMaintenanceUsers({ limit: -1 }));
-    }
-  }, [dispatch, loading, limit, maintenanceHasLoaded, maintenanceLoading]);
 
   useEffect(() => {
     if (!users?.length) return;
