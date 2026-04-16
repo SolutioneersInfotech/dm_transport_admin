@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import {
   Search,
   ChevronRight,
@@ -175,6 +175,38 @@ export default function Admins() {
     [user?.permissions]
   );
 
+  const syncAdminsState = useCallback((normalizedAdmins) => {
+    setAdmins(normalizedAdmins);
+    setSelectedAdmin(normalizedAdmins[0]?.name || "");
+    setAdminPermissions(
+      normalizedAdmins.reduce((acc, admin) => {
+        const rawPerms = admin.raw?.permissions;
+        acc[admin.name] = buildPermissionsFromRaw(rawPerms);
+        return acc;
+      }, {})
+    );
+    setSavedAdminPermissions(
+      normalizedAdmins.reduce((acc, admin) => {
+        const rawPerms = admin.raw?.permissions;
+        acc[admin.name] = buildPermissionsFromRaw(rawPerms);
+        return acc;
+      }, {})
+    );
+  }, []);
+
+  const refreshAdminsList = useCallback(async ({ useLoadingState = true } = {}) => {
+    if (useLoadingState) setIsLoading(true);
+
+    const response = await fetchAdmins();
+    const normalized = normalizeAdmins(response);
+    syncAdminsState(normalized);
+    localStorage.setItem(
+      ADMIN_CACHE_KEY,
+      JSON.stringify({ timestamp: Date.now(), data: response })
+    );
+    setError("");
+  }, [syncAdminsState]);
+
   useEffect(() => {
     let isMounted = true;
     async function loadAdmins() {
@@ -186,22 +218,7 @@ export default function Admins() {
           const cachedAdmins = normalizeAdmins(parsed.data);
           if (cachedAdmins.length > 0) {
             hasHydratedFromCache = true;
-            setAdmins(cachedAdmins);
-            setSelectedAdmin(cachedAdmins[0]?.name || "");
-            setAdminPermissions(
-              cachedAdmins.reduce((acc, admin) => {
-                const rawPerms = admin.raw?.permissions;
-                acc[admin.name] = buildPermissionsFromRaw(rawPerms);
-                return acc;
-              }, {})
-            );
-            setSavedAdminPermissions(
-              cachedAdmins.reduce((acc, admin) => {
-                const rawPerms = admin.raw?.permissions;
-                acc[admin.name] = buildPermissionsFromRaw(rawPerms);
-                return acc;
-              }, {})
-            );
+            syncAdminsState(cachedAdmins);
             setIsLoading(false);
           }
         }
@@ -213,22 +230,7 @@ export default function Admins() {
         const response = await fetchAdmins();
         if (!isMounted) return;
         const normalized = normalizeAdmins(response);
-        setAdmins(normalized);
-        setSelectedAdmin(normalized[0]?.name || "");
-        setAdminPermissions(
-          normalized.reduce((acc, admin) => {
-            const rawPerms = admin.raw?.permissions;
-            acc[admin.name] = buildPermissionsFromRaw(rawPerms);
-            return acc;
-          }, {})
-        );
-        setSavedAdminPermissions(
-          normalized.reduce((acc, admin) => {
-            const rawPerms = admin.raw?.permissions;
-            acc[admin.name] = buildPermissionsFromRaw(rawPerms);
-            return acc;
-          }, {})
-        );
+        syncAdminsState(normalized);
         localStorage.setItem(
           ADMIN_CACHE_KEY,
           JSON.stringify({ timestamp: Date.now(), data: response })
@@ -252,7 +254,7 @@ export default function Admins() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [syncAdminsState]);
 
   const filteredAdmins = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -401,18 +403,7 @@ export default function Admins() {
       setIsDeletingAdmin(true);
       setDeleteAdminError("");
       await deleteAdmin(userid);
-      setAdmins((prev) => prev.filter((admin) => admin.name !== selectedAdmin));
-      setAdminPermissions((prev) => {
-        const next = { ...prev };
-        delete next[selectedAdmin];
-        return next;
-      });
-      setSavedAdminPermissions((prev) => {
-        const next = { ...prev };
-        delete next[selectedAdmin];
-        return next;
-      });
-      setSelectedAdmin("");
+      await refreshAdminsList({ useLoadingState: false });
       setIsDeleteModalOpen(false);
     } catch (err) {
       setDeleteAdminError(err?.message || "Unable to delete admin right now.");
