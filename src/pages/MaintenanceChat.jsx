@@ -1,25 +1,11 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import ChatList from "../components/ChatList";
 import ChatWindow from "../components/ChatWindow";
 import * as maintenanceChatAPI from "../services/maintenanceChatAPI";
-import { useAppDispatch } from "../store/hooks";
-import { fetchMaintenanceUsers } from "../store/slices/maintenanceUsersSlice";
-import useAppResumeSync from "../hooks/useAppResumeSync";
 
 const MaintenanceChat = () => {
   const [selectedDriver, setSelectedDriver] = useState(null);
-  const [refreshSignal, setRefreshSignal] = useState(0);
-  const dispatch = useAppDispatch();
-
-  const handleResume = useCallback(() => {
-    dispatch(fetchMaintenanceUsers({ limit: -1 }));
-
-    if (selectedDriver) {
-      setRefreshSignal((prev) => prev + 1);
-    }
-  }, [dispatch, selectedDriver]);
-
-  useAppResumeSync(handleResume);
+  const refreshSignal = 0;
 
   return (
     <div className="flex w-full h-full bg-[#0d1117] text-white overflow-hidden">

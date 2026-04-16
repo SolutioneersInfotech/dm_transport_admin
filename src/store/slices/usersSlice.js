@@ -2,6 +2,10 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { fetchUsersRoute } from "../../utils/apiRoutes";
 
 const USERS_CACHE_KEY = "chat_users_cache_v1";
+const FETCH_USERS_DEDUPE_WINDOW_MS = 3000;
+const FETCH_MORE_USERS_DEDUPE_WINDOW_MS = 1500;
+const inFlightRequestKeys = new Set();
+const lastRequestAtByKey = new Map();
 
 const defaultState = {
   users: [],
@@ -111,6 +115,8 @@ const mergeChatMetadata = (incomingUser, existingUser) => {
 export const fetchUsers = createAsyncThunk(
   "users/fetchUsers",
   async ({ page = 1, limit = 25, search = undefined } = {}, { rejectWithValue }) => {
+    const requestKey = `users:${page}:${limit}:${search ?? ""}`;
+    inFlightRequestKeys.add(requestKey);
     try {
       const token = localStorage.getItem("adminToken");
       const url = fetchUsersRoute(page, limit, search);
@@ -143,7 +149,31 @@ export const fetchUsers = createAsyncThunk(
       };
     } catch (error) {
       return rejectWithValue(error.message || "Failed to fetch users");
+    } finally {
+      inFlightRequestKeys.delete(requestKey);
+      lastRequestAtByKey.set(requestKey, Date.now());
     }
+  },
+  {
+    condition: ({ page = 1, limit = 25, search = undefined } = {}, { getState }) => {
+      const requestKey = `users:${page}:${limit}:${search ?? ""}`;
+      if (inFlightRequestKeys.has(requestKey)) {
+        return false;
+      }
+
+      const now = Date.now();
+      const lastRequestAt = lastRequestAtByKey.get(requestKey) ?? 0;
+      if (now - lastRequestAt < FETCH_USERS_DEDUPE_WINDOW_MS) {
+        return false;
+      }
+
+      const state = getState()?.users;
+      if (state?.loading) {
+        return false;
+      }
+
+      return true;
+    },
   }
 );
 
@@ -151,6 +181,8 @@ export const fetchUsers = createAsyncThunk(
 export const fetchMoreUsers = createAsyncThunk(
   "users/fetchMoreUsers",
   async ({ page, limit = 10, search = undefined }, { rejectWithValue }) => {
+    const requestKey = `users:more:${page}:${limit}:${search ?? ""}`;
+    inFlightRequestKeys.add(requestKey);
     try {
       const token = localStorage.getItem("adminToken");
       const url = fetchUsersRoute(page, limit, search);
@@ -182,7 +214,33 @@ export const fetchMoreUsers = createAsyncThunk(
       };
     } catch (error) {
       return rejectWithValue(error.message || "Failed to fetch more users");
+    } finally {
+      inFlightRequestKeys.delete(requestKey);
+      lastRequestAtByKey.set(requestKey, Date.now());
     }
+  },
+  {
+    condition: ({ page, limit = 10, search = undefined }, { getState }) => {
+      if (!Number.isFinite(page) || page < 1) return false;
+
+      const requestKey = `users:more:${page}:${limit}:${search ?? ""}`;
+      if (inFlightRequestKeys.has(requestKey)) {
+        return false;
+      }
+
+      const now = Date.now();
+      const lastRequestAt = lastRequestAtByKey.get(requestKey) ?? 0;
+      if (now - lastRequestAt < FETCH_MORE_USERS_DEDUPE_WINDOW_MS) {
+        return false;
+      }
+
+      const state = getState()?.users;
+      if (state?.loadingMore || state?.loading) {
+        return false;
+      }
+
+      return true;
+    },
   }
 );
 
