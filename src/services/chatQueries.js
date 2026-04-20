@@ -20,26 +20,37 @@ function resolveChatTargetKey(chatTarget) {
 }
 
 export function useChatListQuery(options = {}) {
+  const restOptions = { ...options };
+  delete restOptions.staleTime;
+  delete restOptions.refetchOnWindowFocus;
+  delete restOptions.refetchOnReconnect;
+
   return useQuery({
     queryKey: ["chat-list"],
     queryFn: fetchUsersForChat,
+    ...restOptions,
     staleTime: 0,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
-    ...options,
   });
 }
 
 export function useChatMessagesQuery(chatTarget, options = {}) {
   const chatTargetKey = resolveChatTargetKey(chatTarget);
+  const optionsEnabled = options.enabled;
+  const restOptions = { ...options };
+  delete restOptions.enabled;
+  delete restOptions.staleTime;
+  delete restOptions.refetchOnWindowFocus;
+  delete restOptions.refetchOnReconnect;
 
   return useQuery({
     queryKey: ["chat-messages", chatTargetKey],
     queryFn: () => fetchMessages(chatTarget, 200),
-    enabled: Boolean(chatTargetKey),
+    ...restOptions,
+    enabled: Boolean(chatTargetKey) && (optionsEnabled ?? true),
     staleTime: 0,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
-    ...options,
   });
 }
