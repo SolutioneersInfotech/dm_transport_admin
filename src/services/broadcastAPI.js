@@ -1,5 +1,5 @@
-import { broadcastRoute } from "../utils/apiRoutes";
-import { get, ref, push, set } from "firebase/database";
+import { baseBackendUrl, broadcastRoute } from "../utils/apiRoutes";
+import { get, ref, push, set, remove } from "firebase/database";
 import { database } from "../firebase/firebaseApp";
 
 const BROADCAST_HISTORY_PATH = "broadcastHistory";
@@ -104,6 +104,7 @@ export async function sendBroadcast(
       attachmentUrl,
       attachmentName,
       attachmentMimeType,
+      type: "broadcast",
     };
 
     const response = await fetch(broadcastRoute, {
@@ -135,6 +136,7 @@ export async function sendBroadcast(
       attachmentUrl,
       attachmentName,
       attachmentMimeType,
+      type: "broadcast",
       timestamp: new Date().toISOString(),
       broadcastId: newHistoryRef.key,
     };
@@ -201,6 +203,67 @@ export function subscribeToBroadcastHistory(callback) {
     return () => {};
   } catch (error) {
     console.error("Error subscribing to broadcast history:", error);
+    throw error;
+  }
+}
+
+/**
+ * Delete a broadcast history record
+ * @param {string} broadcastId - The broadcast ID to delete
+ * @returns {Promise<{success: boolean}>}
+ */
+// export async function deleteBroadcast(broadcastId) {
+//   try {
+//     if (!broadcastId) {
+//       throw new Error("Broadcast ID is required");
+//     }
+
+//     // Delete from Firebase history
+//     await remove(ref(database, `${BROADCAST_HISTORY_PATH}/${broadcastId}`));
+
+//     return { success: true };
+//   } catch (error) {
+//     console.error("Error deleting broadcast:", error);
+//     throw error;
+//   }
+// }
+
+export async function deleteBroadcast(broadcastId) {
+  try {
+    if (!broadcastId) {
+      throw new Error("Broadcast ID is required");
+    }
+
+    const token = getToken();
+
+    if (!token) {
+      throw new Error("User not authenticated");
+    }
+
+    const response = await fetch(
+      `${baseBackendUrl}/deletebroadcastmessage/${broadcastId}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    const data = await response.json();
+    console.log("Backend delete response:", data);
+
+    if (!response.ok) {
+      throw new Error(data?.message || "Failed to delete broadcast");
+    }
+
+    // Delete from Firebase history
+    await remove(ref(database, `${BROADCAST_HISTORY_PATH}/${broadcastId}`));
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error deleting broadcast:", error);
     throw error;
   }
 }

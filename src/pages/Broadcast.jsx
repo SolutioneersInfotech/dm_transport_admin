@@ -13,6 +13,7 @@ import {
   Search,
   Send,
   Shield,
+  Trash2,
   User,
   Users,
   Video,
@@ -20,7 +21,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Checkbox } from "../components/ui/checkbox";
-import { sendBroadcast, fetchBroadcastHistory } from "../services/broadcastAPI";
+import { sendBroadcast, fetchBroadcastHistory, deleteBroadcast } from "../services/broadcastAPI";
 import { uploadBroadcastFile } from "../services/broadcastFileUpload";
 import FilePreviewModal from "../components/FilePreviewModal";
 import { useAppSelector } from "../store/hooks";
@@ -296,6 +297,21 @@ export default function Broadcast() {
       toast.error("Failed to send broadcast");
     } finally {
       setBroadcasting(false);
+    }
+  };
+
+  const handleDeleteBroadcast = async (broadcastId) => {
+    if (!window.confirm("Delete this broadcast from history?")) {
+      return;
+    }
+
+    try {
+      await deleteBroadcast(broadcastId);
+      toast.success("Broadcast deleted");
+      loadBroadcastHistory();
+    } catch (error) {
+      console.error("Failed to delete broadcast:", error);
+      toast.error("Failed to delete broadcast");
     }
   };
 
@@ -703,9 +719,12 @@ export default function Broadcast() {
 
                         <button
                           type="button"
-                          className="rounded p-1 text-white/38 transition hover:bg-white/[0.04] hover:text-white/75"
+                          onClick={() => handleDeleteBroadcast(broadcast.id)}
+                          className="rounded p-1 text-red-400 transition hover:bg-red-500/10 hover:text-red-300"
+                          title="Delete broadcast"
+                          aria-label="Delete broadcast"
                         >
-                          <MoreHorizontal className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
 
@@ -783,7 +802,7 @@ export default function Broadcast() {
             uploadBroadcastFile(file, adminId, recipientType, onProgress, onError, onComplete)
           }
           title="Attach to broadcast"
-          onClose={clearAttachment}
+          onClose={() => setShowAttachmentPreview(false)}
           onSent={handleAttachmentUploaded}
         />
       )}
