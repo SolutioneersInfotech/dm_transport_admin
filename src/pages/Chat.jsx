@@ -4,9 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import ChatList from "../components/ChatList";
 import ChatWindow from "../components/ChatWindow";
 import * as chatAPI from "../services/chatAPI";
-import { useAppDispatch, useAppSelector } from "../store/hooks";
-import { fetchUsers } from "../store/slices/usersSlice";
-import useAppResumeSync from "../hooks/useAppResumeSync";
+import { useAppSelector } from "../store/hooks";
 
 const Chat = () => {
   const CHAT_LIST_MIN_WIDTH = 260;
@@ -16,7 +14,7 @@ const Chat = () => {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedDriver, setSelectedDriver] = useState(null);
-  const [refreshSignal, setRefreshSignal] = useState(0);
+  const refreshSignal = 0;
   const [isDesktopLayout, setIsDesktopLayout] = useState(false);
   const [chatListWidth, setChatListWidth] = useState(CHAT_LIST_DEFAULT_WIDTH);
   const [isResizing, setIsResizing] = useState(false);
@@ -24,9 +22,7 @@ const Chat = () => {
   const dragStartWidthRef = useRef(CHAT_LIST_DEFAULT_WIDTH);
   const currentWidthRef = useRef(CHAT_LIST_DEFAULT_WIDTH);
   const { users } = useAppSelector((state) => state.users);
-  const activeChatId = selectedDriver ? getUserId(selectedDriver) : null;
 
-  const dispatch = useAppDispatch();
 
   // Helper function to get user ID from various possible fields
   function getUserId(user) {
@@ -97,17 +93,6 @@ const Chat = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, users]);
-
-  const handleResume = useCallback(() => {
-    // Chat list is rendered from Redux usersSlice, so React Query refetch alone cannot update visible ordering.
-    dispatch(fetchUsers({ page: 1, limit: -1 }));
-
-    if (activeChatId) {
-      setRefreshSignal((prev) => prev + 1);
-    }
-  }, [dispatch, activeChatId]);
-
-  useAppResumeSync(handleResume);
 
   const clampChatListWidth = useCallback((width, viewportWidth = window.innerWidth) => {
     // Clamp width to preserve chat list usability while keeping room for the chat window.

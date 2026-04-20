@@ -876,6 +876,21 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     }
   }
 
+  const handleDeleteMessage = useCallback(
+    async (messageId) => {
+      if (!messageId || !driverId) return;
+      try {
+        await deleteSpecificMessage(messageId, driverId);
+        setMessages((prev) => prev.filter((m) => m.msgId !== messageId));
+        toast.success("Message deleted");
+      } catch (error) {
+        console.error("Failed to delete message:", error);
+        toast.error("Failed to delete message");
+      }
+    },
+    [driverId, deleteSpecificMessage]
+  );
+
   const deleteConfirmTitle = deleteActionType === "selected" ? "Delete Selected Messages" : "Delete All Messages";
   const deleteConfirmDescription =
     deleteActionType === "selected"
@@ -910,6 +925,25 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     }
 
     setIsBroadcasting(true);
+    
+    // Create optimistic broadcast message
+    const optimisticBroadcastMsg = {
+      msgId: buildOptimisticMessageId(),
+      type: "broadcast",
+      content: {
+        message: broadcastMessage.trim(),
+        attachmentUrl: attachmentMeta?.url || "",
+        attachmentName: attachmentMeta?.name || "",
+        attachmentMimeType: attachmentMeta?.mimeType || "",
+      },
+      dateTime: new Date().toISOString(),
+      sendername: adminId,
+      status: 0,
+    };
+    
+    // Add to optimistic messages immediately
+    setOptimisticMessages((prev) => [...prev, optimisticBroadcastMsg]);
+    
     try {
       // Send broadcast to all users
       await sendBroadcast("all", broadcastMessage.trim(), [], [], [], [], {
@@ -925,13 +959,15 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     } catch (error) {
       console.error("Error sending broadcast:", error);
       toast.error("Failed to send broadcast message");
+      // Remove optimistic message on error
+      setOptimisticMessages((prev) => prev.filter((m) => m.msgId !== optimisticBroadcastMsg.msgId));
     } finally {
       setIsBroadcasting(false);
     }
   }
 
   /* ================= GROUP MESSAGES ================= */
-  const allMessages = [...messages];
+  const allMessages = [...messages, ...optimisticMessages];
 
 allMessages.sort(
   (a, b) =>
@@ -1199,6 +1235,7 @@ const grouped = groupMessagesByDate(allMessages);
                       onDownloadMedia={(url) =>
                         downloadChatMedia(url, senderName, msg?.dateTime)
                       }
+                      onDelete={handleDeleteMessage}
                     />
 
                   </div>

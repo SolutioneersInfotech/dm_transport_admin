@@ -57,6 +57,35 @@ function normalizeMessage(messageId, msg) {
   const rawDate = msg?.dateTime || msg?.datetime || "";
   const parsedTime = parseDateTimeMs(rawDate);
   const dateTime = parsedTime > 0 ? new Date(parsedTime).toISOString() : String(rawDate || "");
+  
+  // Check if message is a broadcast (string type) - preserve it
+  if (msg?.type === "broadcast") {
+    return {
+      msgId: messageId,
+      id: messageId,
+      dateTime,
+      content: {
+        message: msg?.content?.message ?? msg?.message ?? "",
+        attachmentUrl: msg?.content?.attachmentUrl ?? msg?.attachmentUrl ?? "",
+        attachmentName: msg?.content?.attachmentName ?? msg?.attachmentName ?? "",
+        attachmentMimeType:
+          msg?.content?.attachmentMimeType ?? msg?.attachmentMimeType ?? "",
+      },
+      status: msg?.status ?? 0,
+      type: "broadcast",
+      contactId: msg?.contactId ?? msg?.userid ?? null,
+      sendername: msg?.sendername ?? "Unknown",
+      replyTo: msg?.replyTo ?? null,
+      replyToId: msg?.replyToId ?? null,
+      replyToSnapshot: msg?.replyToSnapshot ?? null,
+      seenByAdmin: msg?.seenByAdmin ?? false,
+      seenByAdmins: msg?.seenByAdmins ?? null,
+      seenAt: msg?.seenAt ?? null,
+      seenBy: msg?.seenBy ?? null,
+    };
+  }
+  
+  // Handle numeric types (0 = user, 1 = admin)
   const type =
     msg?.type === 0 ? 1 :
     msg?.type === 1 ? 0 :

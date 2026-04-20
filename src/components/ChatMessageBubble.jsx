@@ -293,7 +293,7 @@
 // }
 
 import { useEffect, useState } from "react";
-import { Check, CheckCheck, Download, ExternalLink, FileText, Copy } from "lucide-react";
+import { Check, CheckCheck, Download, ExternalLink, FileText, Copy, Trash2, Megaphone } from "lucide-react";
 import {
   extractAttachmentDisplayName,
   getAttachmentKind,
@@ -312,6 +312,8 @@ export default function ChatMessageBubble({
   onImageClick,
   onDownloadMedia,
   isLastMessageInChat,
+  onDelete,
+  isBroadcast = false,
 }) {
   /* ================= DATA ================= */
   const isAdmin = msg?.type === 1;
@@ -496,6 +498,13 @@ export default function ChatMessageBubble({
     }
   };
 
+  const handleDeleteMessage = () => {
+    if (!onDelete) return;
+    if (window.confirm("Delete this message?")) {
+      onDelete(msg?.msgId || msg?.id);
+    }
+  };
+
   const copyButton = showCopyButton ? (
     <button
       type="button"
@@ -508,32 +517,62 @@ export default function ChatMessageBubble({
     </button>
   ) : null;
 
+  const deleteButton = onDelete && isAdmin ? (
+    <button
+      type="button"
+      onClick={handleDeleteMessage}
+      className={`inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-red-400 transition-colors hover:bg-red-500/20 hover:text-red-300 ${showSenderName ? "mt-5" : "mt-0.5"}`}
+      aria-label="Delete message"
+      title="Delete message"
+    >
+      <Trash2 className="h-4 w-4" />
+    </button>
+  ) : null;
+
   /* ================= RENDER ================= */
   return (
     <div className={`flex ${containerAlign} mb-2`}>
       <div className={`relative flex flex-col max-w-[65%] ${bubbleAlign}`}>
-        {copyButton && (
+        {(copyButton || deleteButton) && (
           <div
-            className={`absolute z-10 ${showSenderName ? "top-5" : "top-0.5"} ${isAdmin ? "-left-10" : "-right-10"}`}
+            className={`absolute z-10 flex gap-2 ${showSenderName ? "top-5" : "top-0.5"} ${isAdmin ? "-left-20" : "-right-20"}`}
           >
             {copyButton}
+            {deleteButton}
           </div>
         )}
         {/* Sender name */}
         {showSenderName && (
-          <span
-            className={`text-xs text-[#8696a0] mb-0.5 px-1 ${
-              isAdmin ? "pr-2" : "pl-2"
-            }`}
-          >
-            {displayName}
-          </span>
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <span
+              className={`text-xs text-[#8696a0] px-1 ${
+                isAdmin ? "pr-2" : "pl-2"
+              }`}
+            >
+              {displayName}
+            </span>
+            {isBroadcast && (
+              <span
+                className="inline-flex items-center justify-center rounded-full bg-[#6e83ff]/20 p-1 text-[#85a0ff]"
+                title="Broadcast message"
+              >
+                <Megaphone className="h-3.5 w-3.5" />
+              </span>
+            )}
+          </div>
         )}
 
         {/* Bubble */}
         <div
           className={`px-3 py-2 shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] text-sm ${bubbleStyle} ${bubbleRounding}`}
         >
+          {/* Broadcast indicator (when sender name is not shown) */}
+          {isBroadcast && !showSenderName && (
+            <div className="mb-2 inline-flex items-center justify-center rounded-full bg-white/[0.08] p-1 text-[#85a0ff]">
+              <Megaphone className="h-3.5 w-3.5" />
+            </div>
+          )}
+
           {/* Replying to */}
           {showReplyTo && (
             <button

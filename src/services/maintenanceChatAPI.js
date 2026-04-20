@@ -75,6 +75,32 @@ function normalizeMessage(messageId, msg) {
   const dateTime = Number.isNaN(date.getTime())
     ? new Date().toISOString()
     : date.toISOString();
+  
+  // Check if message is a broadcast (string type) - preserve it
+  if (msg?.type === "broadcast") {
+    return {
+      msgId: messageId,
+      id: messageId,
+      dateTime,
+      content: {
+        message: msg?.content?.message ?? msg?.message ?? "",
+        attachmentUrl: msg?.content?.attachmentUrl ?? msg?.attachmentUrl ?? "",
+      },
+      status: msg?.status ?? 0,
+      type: "broadcast",
+      contactId: msg?.contactId ?? msg?.userid ?? null,
+      sendername: msg?.sendername ?? "Unknown",
+      replyTo: msg?.replyTo ?? null,
+      replyToId: msg?.replyToId ?? null,
+      replyToSnapshot: msg?.replyToSnapshot ?? null,
+      seenByAdmin: msg?.seenByAdmin ?? false,
+      seenByAdmins: msg?.seenByAdmins ?? null,
+      seenAt: msg?.seenAt ?? null,
+      seenBy: msg?.seenBy ?? null,
+    };
+  }
+  
+  // Handle numeric types (0 = user, 1 = admin)
   const type =
     msg?.type === 0 ? 1 :
     msg?.type === 1 ? 0 :
