@@ -321,33 +321,31 @@ const usersSlice = createSlice({
 
         let nextUsers = mergedIncomingUsers;
 
-        if (isFirstPage && !searchChanged && previousUsers.length > mergedIncomingUsers.length) {
-          const preservedUsers = previousUsers.map((user) => ({ ...user }));
+        if (isFirstPage && !searchChanged) {
+          const knownPageSize =
+            Number.isFinite(action.payload.limit) && action.payload.limit > 0
+              ? action.payload.limit
+              : mergedIncomingUsers.length;
+          const preservedTailUsers = previousUsers.slice(knownPageSize);
 
-          mergedIncomingUsers.forEach((incomingUser) => {
-            const existingIndex = preservedUsers.findIndex((user) =>
+          nextUsers = [...mergedIncomingUsers];
+
+          preservedTailUsers.forEach((user) => {
+            const alreadyIncluded = nextUsers.some((existingUser) =>
               matchUserId(
-                user,
-                incomingUser.userid ??
-                  incomingUser.userId ??
-                  incomingUser.contactId ??
-                  incomingUser.id ??
-                  incomingUser.phone
+                existingUser,
+                user.userid ??
+                  user.userId ??
+                  user.contactId ??
+                  user.id ??
+                  user.phone
               )
             );
 
-            if (existingIndex >= 0) {
-              preservedUsers[existingIndex] = {
-                ...preservedUsers[existingIndex],
-                ...incomingUser,
-              };
-              return;
+            if (!alreadyIncluded) {
+              nextUsers.push(user);
             }
-
-            preservedUsers.push(incomingUser);
           });
-
-          nextUsers = preservedUsers;
         }
 
         state.users = dedupeUsers(nextUsers);

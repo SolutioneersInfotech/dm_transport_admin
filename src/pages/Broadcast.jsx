@@ -77,7 +77,8 @@ export default function Broadcast() {
 
   const [broadcastDrivers, setBroadcastDrivers] = useState([]);
   const [broadcastAdmins, setBroadcastAdmins] = useState([]);
-  const [recipientsLoading, setRecipientsLoading] = useState(true);
+  const [driversLoading, setDriversLoading] = useState(true);
+  const [adminsLoading, setAdminsLoading] = useState(true);
   const [recipientsError, setRecipientsError] = useState("");
   const { user: adminUser } = useAuth();
 
@@ -89,25 +90,45 @@ export default function Broadcast() {
     let active = true;
 
     const loadRecipients = async () => {
-      setRecipientsLoading(true);
+      setDriversLoading(true);
+      setAdminsLoading(true);
       setRecipientsError("");
 
-      try {
-        const [drivers, admins] = await Promise.all([
-          fetchBroadcastDrivers(),
-          fetchBroadcastAdmins(),
-        ]);
+      const [driversResult, adminsResult] = await Promise.allSettled([
+        fetchBroadcastDrivers(),
+        fetchBroadcastAdmins(),
+      ]);
 
-        if (!active) return;
-        setBroadcastDrivers(Array.isArray(drivers) ? drivers : []);
-        setBroadcastAdmins(Array.isArray(admins) ? admins : []);
-      } catch (error) {
-        if (!active) return;
-        setRecipientsError(error?.message || "Failed to load recipients");
-        toast.error("Failed to load broadcast recipients");
-      } finally {
-        if (active) setRecipientsLoading(false);
+      if (!active) return;
+
+      if (driversResult.status === "fulfilled") {
+        setBroadcastDrivers(Array.isArray(driversResult.value) ? driversResult.value : []);
+      } else {
+        setBroadcastDrivers([]);
       }
+
+      if (adminsResult.status === "fulfilled") {
+        setBroadcastAdmins(Array.isArray(adminsResult.value) ? adminsResult.value : []);
+      } else {
+        setBroadcastAdmins([]);
+      }
+
+      const errors = [];
+      if (driversResult.status === "rejected") {
+        errors.push(driversResult.reason?.message || "Failed to load drivers");
+      }
+      if (adminsResult.status === "rejected") {
+        errors.push(adminsResult.reason?.message || "Failed to load admins");
+      }
+
+      if (errors.length > 0) {
+        const nextError = errors.join(" | ");
+        setRecipientsError(nextError);
+        toast.error(nextError);
+      }
+
+      setDriversLoading(false);
+      setAdminsLoading(false);
     };
 
     loadRecipients();
@@ -194,12 +215,15 @@ export default function Broadcast() {
           : "Select Users..."
         : `All users selected (${broadcastDrivers.length + broadcastAdmins.length})`;
 
+  const recipientsLoading = driversLoading || adminsLoading;
+  const isDriversSelectionLoading = recipients === "drivers" && driversLoading;
+  const isAdminsSelectionLoading = recipients === "admins" && adminsLoading;
   const isRecipientsLoadingForSelection =
-    recipients !== "all" && recipientsLoading;
+    isDriversSelectionLoading || isAdminsSelectionLoading;
   const disableSendBroadcast =
     broadcasting ||
-    (recipients === "drivers" && recipientsLoading) ||
-    (recipients === "admins" && recipientsLoading) ||
+    (recipients === "drivers" && driversLoading) ||
+    (recipients === "admins" && adminsLoading) ||
     (recipients === "all" && recipientsLoading);
 
   const filteredHistory = broadcastHistory.filter((broadcast) => {
@@ -307,13 +331,13 @@ export default function Broadcast() {
       return;
     }
 
-    if (recipients === "drivers" && recipientsLoading) {
-      toast.error("Recipients are still loading");
+    if (recipients === "drivers" && driversLoading) {
+      toast.error("Driver recipients are still loading");
       return;
     }
 
-    if (recipients === "admins" && recipientsLoading) {
-      toast.error("Recipients are still loading");
+    if (recipients === "admins" && adminsLoading) {
+      toast.error("Admin recipients are still loading");
       return;
     }
 
