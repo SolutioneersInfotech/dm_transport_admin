@@ -24,10 +24,10 @@ import { Checkbox } from "../components/ui/checkbox";
 import { sendBroadcast, fetchBroadcastHistory, deleteBroadcast } from "../services/broadcastAPI";
 import { uploadBroadcastFile } from "../services/broadcastFileUpload";
 import FilePreviewModal from "../components/FilePreviewModal";
-import { useAppSelector } from "../store/hooks";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
 import { extractAttachmentDisplayName } from "../utils/chatAttachments";
+import { fetchBroadcastAdmins, fetchBroadcastDrivers } from "../services/broadcastRecipientsAPI";
 
 const MESSAGE_LIMIT = 500;
 
@@ -75,10 +75,10 @@ export default function Broadcast() {
   const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
   const fileInputRef = useRef(null);
 
-  const { users: drivers = [] } = useAppSelector((state) => state.users);
-  const maintenanceUsers = useAppSelector(
-    (state) => state?.maintenanceUsers?.users || []
-  );
+  const [broadcastDrivers, setBroadcastDrivers] = useState([]);
+  const [broadcastAdmins, setBroadcastAdmins] = useState([]);
+  const [recipientsLoading, setRecipientsLoading] = useState(true);
+  const [recipientsError, setRecipientsError] = useState("");
   const { user: adminUser } = useAuth();
 
   useEffect(() => {
@@ -86,26 +86,62 @@ export default function Broadcast() {
   }, []);
 
   useEffect(() => {
-    const selections = {};
-    drivers.forEach((driver) => {
-      const id = driver?.userid ?? driver?.id;
-      if (id) {
-        selections[id] = true;
+    let active = true;
+
+    const loadRecipients = async () => {
+      setRecipientsLoading(true);
+      setRecipientsError("");
+
+      try {
+        const [drivers, admins] = await Promise.all([
+          fetchBroadcastDrivers(),
+          fetchBroadcastAdmins(),
+        ]);
+
+        if (!active) return;
+        setBroadcastDrivers(Array.isArray(drivers) ? drivers : []);
+        setBroadcastAdmins(Array.isArray(admins) ? admins : []);
+      } catch (error) {
+        if (!active) return;
+        setRecipientsError(error?.message || "Failed to load recipients");
+        toast.error("Failed to load broadcast recipients");
+      } finally {
+        if (active) setRecipientsLoading(false);
       }
-    });
-    setDriverSelections(selections);
-  }, [drivers]);
+    };
+
+    loadRecipients();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
-    const selections = {};
-    maintenanceUsers.forEach((admin) => {
-      const id = admin?.userid ?? admin?.id;
-      if (id) {
-        selections[id] = true;
-      }
+    setDriverSelections((prev) => {
+      const next = {};
+      broadcastDrivers.forEach((driver) => {
+        const id = driver?.userid ?? driver?.id;
+        if (id) {
+          next[id] = prev[id] ?? true;
+        }
+      });
+      return next;
     });
-    setAdminSelections(selections);
-  }, [maintenanceUsers]);
+  }, [broadcastDrivers]);
+
+  useEffect(() => {
+    setAdminSelections((prev) => {
+      const next = {};
+      broadcastAdmins.forEach((admin) => {
+        const id = admin?.userid ?? admin?.id;
+        if (id) {
+          next[id] = prev[id] ?? true;
+        }
+      });
+      return next;
+    });
+  }, [broadcastAdmins]);
 
   useEffect(() => {
     setShowRecipientList(false);
@@ -136,7 +172,7 @@ export default function Broadcast() {
 
   const selectedDriverCount = getSelectedDriverIds().length;
   const selectedAdminCount = getSelectedAdminIds().length;
-  const selectionList = recipients === "drivers" ? drivers : maintenanceUsers;
+  const selectionList = recipients === "drivers" ? broadcastDrivers : broadcastAdmins;
   const currentSelections =
     recipients === "drivers" ? driverSelections : adminSelections;
 
@@ -156,7 +192,15 @@ export default function Broadcast() {
         ? selectedAdminCount > 0
           ? `${selectedAdminCount} admins selected`
           : "Select Users..."
-        : "All users selected";
+        : `All users selected (${broadcastDrivers.length + broadcastAdmins.length})`;
+
+  const isRecipientsLoadingForSelection =
+    recipients !== "all" && recipientsLoading;
+  const disableSendBroadcast =
+    broadcasting ||
+    (recipients === "drivers" && recipientsLoading) ||
+    (recipients === "admins" && recipientsLoading) ||
+    (recipients === "all" && recipientsLoading);
 
   const filteredHistory = broadcastHistory.filter((broadcast) => {
     const matchesType =
@@ -263,6 +307,21 @@ export default function Broadcast() {
       return;
     }
 
+    if (recipients === "drivers" && recipientsLoading) {
+      toast.error("Recipients are still loading");
+      return;
+    }
+
+    if (recipients === "admins" && recipientsLoading) {
+      toast.error("Recipients are still loading");
+      return;
+    }
+
+    if (recipients === "all" && recipientsLoading) {
+      toast.error("Recipients are still loading");
+      return;
+    }
+
     if (recipients === "drivers" && selectedDriverCount === 0) {
       toast.error("Select at least one driver");
       return;
@@ -278,8 +337,8 @@ export default function Broadcast() {
       await sendBroadcast(
         recipients,
         message,
-        drivers,
-        maintenanceUsers,
+        broadcastDrivers,
+        broadcastAdmins,
         getSelectedDriverIds(),
         getSelectedAdminIds(),
         {
@@ -389,14 +448,26 @@ export default function Broadcast() {
             </div>
 
             <div className="mt-2">
+              {recipientsLoading && (
+                <div className="mb-2 flex items-center gap-2 rounded-md border border-white/8 bg-white/[0.03] px-3 py-2 text-[12px] text-white/62">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Loading recipients…</span>
+                </div>
+              )}
+              {recipientsError && (
+                <div className="mb-2 rounded-md border border-red-300/20 bg-red-500/10 px-3 py-2 text-[12px] text-red-200">
+                  {recipientsError}
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() =>
                   recipients !== "all" &&
                   setShowRecipientList((prev) => !prev)
                 }
+                disabled={isRecipientsLoadingForSelection}
                 className={`flex w-full items-center justify-between rounded-[9px] border border-white/8 px-4 py-3 text-left text-[13px] transition ${
-                  recipients === "all"
+                  recipients === "all" || isRecipientsLoadingForSelection
                     ? "cursor-default bg-[#282047]/50 text-white/42"
                     : "bg-[#282047]/72 text-white/72 hover:text-white"
                 }`}
@@ -409,12 +480,12 @@ export default function Broadcast() {
                 />
               </button>
 
-              {recipients !== "all" && showRecipientList && (
+              {recipients !== "all" && showRecipientList && !isRecipientsLoadingForSelection && (
                 <div className="mt-2 rounded-[9px] border border-white/8 bg-[#231b3f] p-3">
                   <div className="mb-2 px-1 text-[11px] uppercase tracking-[0.22em] text-white/34">
                     {recipients === "drivers"
-                      ? `${selectedDriverCount} Selected`
-                      : `${selectedAdminCount} Selected`}
+                      ? `${selectedDriverCount}/${broadcastDrivers.length} Selected`
+                      : `${selectedAdminCount}/${broadcastAdmins.length} Selected`}
                   </div>
 
                   <label className="mb-1 flex items-center justify-between rounded-md px-2 py-2 text-[13px] text-white/82 hover:bg-white/[0.04]">
@@ -581,7 +652,7 @@ export default function Broadcast() {
             <button
               type="button"
               onClick={handleSendBroadcast}
-              disabled={broadcasting}
+              disabled={disableSendBroadcast}
               className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-[8px] bg-[linear-gradient(90deg,#4b67de,#5f8dff)] text-[14px] font-semibold text-white shadow-[0_10px_24px_rgba(77,105,222,0.24)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {broadcasting ? (

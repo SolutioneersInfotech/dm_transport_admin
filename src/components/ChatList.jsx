@@ -100,42 +100,6 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     }
   }, [dispatch, isMaintenanceChat, hasLoaded, loading, pageSize]);
 
-  // Auto-load remaining regular-chat pages in the background so that
-  // ordering becomes globally correct without requiring manual scroll.
-  useEffect(() => {
-    // Only apply this behavior to regular chat.
-    if (isMaintenanceChat) return;
-
-    // Wait until the first page has loaded.
-    if (!hasLoaded || loading) return;
-
-    // If there are no more pages or we're already loading more, do nothing.
-    if (!hasMore || loadingMore) return;
-
-    // Schedule a single background page load.
-    const timeoutId = setTimeout(() => {
-      const nextPage = page + 1;
-      dispatch(fetchMoreUsers({ page: nextPage, limit: pageSize })).catch(
-        (error) => {
-          console.error("Background fetchMoreUsers failed:", error);
-        }
-      );
-    }, 50);
-
-    return () => {
-      clearTimeout(timeoutId);
-    };
-  }, [
-    dispatch,
-    isMaintenanceChat,
-    hasLoaded,
-    loading,
-    hasMore,
-    loadingMore,
-    page,
-    pageSize,
-  ]);
-
   // Infinite scroll observer - prevent duplicate calls
   const isLoadingRef = useRef(false);
   

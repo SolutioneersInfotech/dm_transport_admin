@@ -77,6 +77,20 @@ const normalizeComparableId = (value) => {
   return normalized || null;
 };
 
+const getUserIdentityKey = (user) => {
+  const candidate =
+    user?.userid ??
+    user?.userId ??
+    user?.contactId ??
+    user?.contactid ??
+    user?.uid ??
+    user?.id ??
+    user?.phone ??
+    null;
+
+  return normalizeComparableId(candidate);
+};
+
 const matchUserId = (user, targetUserId) => {
   const expected = normalizeComparableId(targetUserId);
   if (!expected) return false;
@@ -84,6 +98,21 @@ const matchUserId = (user, targetUserId) => {
   return [user.userid, user.userId, user.contactId, user.contactid, user.uid, user.id, user.phone]
     .map(normalizeComparableId)
     .some((candidate) => candidate === expected);
+};
+
+const dedupeUsers = (users = []) => {
+  const uniqueUsers = [];
+  const seen = new Set();
+
+  users.forEach((user) => {
+    const key = getUserIdentityKey(user);
+    if (!key) return;
+    if (seen.has(key)) return;
+    seen.add(key);
+    uniqueUsers.push(user);
+  });
+
+  return uniqueUsers;
 };
 
 const mergeChatMetadata = (incomingUser, existingUser) => {
@@ -278,11 +307,50 @@ const usersSlice = createSlice({
       })
       .addCase(fetchUsers.fulfilled, (state, action) => {
         const previousUsers = state.users || [];
+        const incomingUsers = action.payload.users || [];
+        const incomingSearch = action.payload.search;
+        const isFirstPage = (action.payload.page || 1) === 1;
+        const searchChanged = state.lastSearch !== incomingSearch;
 
-        state.users = (action.payload.users || []).map((u) => {
-          const existingUser = previousUsers.find((prevUser) => matchUserId(prevUser, u.userid ?? u.userId ?? u.contactId ?? u.id ?? u.phone));
+        const mergedIncomingUsers = incomingUsers.map((u) => {
+          const existingUser = previousUsers.find((prevUser) =>
+            matchUserId(prevUser, u.userid ?? u.userId ?? u.contactId ?? u.id ?? u.phone)
+          );
           return mergeChatMetadata(u, existingUser);
         });
+
+        let nextUsers = mergedIncomingUsers;
+
+        if (isFirstPage && !searchChanged && previousUsers.length > mergedIncomingUsers.length) {
+          const preservedUsers = previousUsers.map((user) => ({ ...user }));
+
+          mergedIncomingUsers.forEach((incomingUser) => {
+            const existingIndex = preservedUsers.findIndex((user) =>
+              matchUserId(
+                user,
+                incomingUser.userid ??
+                  incomingUser.userId ??
+                  incomingUser.contactId ??
+                  incomingUser.id ??
+                  incomingUser.phone
+              )
+            );
+
+            if (existingIndex >= 0) {
+              preservedUsers[existingIndex] = {
+                ...preservedUsers[existingIndex],
+                ...incomingUser,
+              };
+              return;
+            }
+
+            preservedUsers.push(incomingUser);
+          });
+
+          nextUsers = preservedUsers;
+        }
+
+        state.users = dedupeUsers(nextUsers);
         state.hasMore = action.payload.hasMore;
         state.page = action.payload.page;
         state.limit = action.payload.limit;
@@ -333,7 +401,7 @@ const usersSlice = createSlice({
           nextUsers.push(incomingUser);
         });
 
-        state.users = nextUsers;
+        state.users = dedupeUsers(nextUsers);
         state.hasMore = action.payload.hasMore;
         state.page = action.payload.page;
         state.limit = action.payload.limit;
