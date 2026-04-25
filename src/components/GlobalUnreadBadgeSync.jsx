@@ -1,8 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { setUnreadCountForUser, removeUserUnreadCounts } from "../store/slices/chatUnreadSlice";
 import { subscribeUnreadCount as subscribeRegularChatUnread } from "../services/chatAPI";
 import { subscribeUnreadCount as subscribeMaintenanceChatUnread } from "../services/maintenanceChatAPI";
+
+const MAX_GLOBAL_UNREAD_SUBSCRIPTIONS = 75;
 
 function getUserId(user) {
   return (
@@ -39,11 +41,17 @@ export default function GlobalUnreadBadgeSync() {
 
   const regularUnsubscribeRefs = useRef({});
   const maintenanceUnsubscribeRefs = useRef({});
+  // Limit client-side realtime unread listeners; a true global unread counter should come
+  // from a backend aggregate endpoint rather than N Firebase subscriptions on the client.
+  const regularSubscriptionUsers = useMemo(
+    () => users.slice(0, MAX_GLOBAL_UNREAD_SUBSCRIPTIONS),
+    [users]
+  );
 
   useEffect(() => {
-    if (!users?.length) return;
+    if (!regularSubscriptionUsers?.length) return;
 
-    users.forEach((user) => {
+    regularSubscriptionUsers.forEach((user) => {
       const userId = getUserId(user);
       if (!userId || regularUnsubscribeRefs.current[userId]) return;
 
@@ -58,7 +66,7 @@ export default function GlobalUnreadBadgeSync() {
     });
 
     return () => {
-      const currentUserIds = new Set(users.map(getUserId).filter(Boolean));
+      const currentUserIds = new Set(regularSubscriptionUsers.map(getUserId).filter(Boolean));
       Object.keys(regularUnsubscribeRefs.current).forEach((userId) => {
         if (!currentUserIds.has(userId)) {
           regularUnsubscribeRefs.current[userId]?.();
@@ -67,7 +75,7 @@ export default function GlobalUnreadBadgeSync() {
         }
       });
     };
-  }, [users, dispatch]);
+  }, [regularSubscriptionUsers, dispatch]);
 
   useEffect(() => {
     if (!maintenanceUsers?.length) return;

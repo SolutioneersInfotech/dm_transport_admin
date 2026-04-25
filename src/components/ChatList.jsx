@@ -29,6 +29,24 @@ const statusColorClass = {
   unseen: "text-amber-400",
 };
 
+const ENABLE_BACKGROUND_DRIVER_PREFETCH = true;
+const BACKGROUND_DRIVER_PREFETCH_DELAY_MS = 600;
+const MAX_CHAT_LIST_REALTIME_SUBSCRIPTIONS = 50;
+
+function dedupeUsersById(users, getId) {
+  const seen = new Set();
+  const deduped = [];
+
+  users.forEach((user) => {
+    const id = getId(user);
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    deduped.push(user);
+  });
+
+  return deduped;
+}
+
 const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const dispatch = useAppDispatch();
   const location = useLocation();
@@ -59,9 +77,14 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const [isStatusPopoverOpen, setIsStatusPopoverOpen] = useState(false);
   const observerTarget = useRef(null);
   const [unreadCounts, setUnreadCounts] = useState({});
+  const [isDocumentVisible, setIsDocumentVisible] = useState(
+    typeof document === "undefined" ? true : !document.hidden
+  );
   const unsubscribeUnreadRefs = useRef({});
   const unsubscribeLastMessageRefs = useRef({});
   const unsubscribeSummaryRefs = useRef({});
+  const idleCallbackRef = useRef(null);
+  const prefetchTimeoutRef = useRef(null);
 
   const subscribeUnreadCount = chatApi?.subscribeUnreadCount;
   const subscribeLastMessage =
@@ -86,6 +109,20 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     return normalizedId || null;
   }
 
+  const selectedDriverId = getDriverId(selectedDriver);
+  const hasActiveFilters =
+    Boolean(search?.trim()) ||
+    categoryFilter.length > 0 ||
+    statusFilter !== "all";
+  const subscriptionUsers = useMemo(() => {
+    if (!users?.length) return [];
+    if (isMaintenanceChat) return users;
+
+    const topUsers = users.slice(0, MAX_CHAT_LIST_REALTIME_SUBSCRIPTIONS);
+    const selectedUser = users.find((u) => getDriverId(u) === selectedDriverId);
+    return dedupeUsersById(selectedUser ? [...topUsers, selectedUser] : topUsers, getDriverId);
+  }, [users, isMaintenanceChat, selectedDriverId]);
+
   // Initial fetch: maintenance chat uses fetchMaintenanceUsers (GET /admin/fetchmaintenanceusers), regular chat uses fetchUsers.
   useEffect(() => {
     if (isMaintenanceChat) {
@@ -99,6 +136,80 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       }
     }
   }, [dispatch, isMaintenanceChat, hasLoaded, loading, pageSize]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+
+    const handleVisibilityChange = () => {
+      setIsDocumentVisible(!document.hidden);
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
+  // Background prefetch: load remaining regular-chat pages slowly when idle.
+  useEffect(() => {
+    if (!ENABLE_BACKGROUND_DRIVER_PREFETCH) return undefined;
+    if (isMaintenanceChat) return undefined;
+    if (!hasLoaded || loading || loadingMore || !hasMore) return undefined;
+    if (!isDocumentVisible || hasActiveFilters) return undefined;
+
+    const scheduleFetch = () => {
+      const runFetch = () => {
+        if (document.hidden) return;
+        if (loading || loadingMore || !hasMore) return;
+
+        const nextPage = page + 1;
+        dispatch(fetchMoreUsers({ page: nextPage, limit: pageSize })).catch((error) => {
+          console.error("Background prefetch failed:", error);
+        });
+      };
+
+      if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
+        idleCallbackRef.current = window.requestIdleCallback(
+          () => {
+            prefetchTimeoutRef.current = window.setTimeout(
+              runFetch,
+              BACKGROUND_DRIVER_PREFETCH_DELAY_MS
+            );
+          },
+          { timeout: BACKGROUND_DRIVER_PREFETCH_DELAY_MS * 2 }
+        );
+      } else {
+        prefetchTimeoutRef.current = window.setTimeout(
+          runFetch,
+          BACKGROUND_DRIVER_PREFETCH_DELAY_MS
+        );
+      }
+    };
+
+    scheduleFetch();
+
+    return () => {
+      if (typeof window !== "undefined" && typeof window.cancelIdleCallback === "function" && idleCallbackRef.current != null) {
+        window.cancelIdleCallback(idleCallbackRef.current);
+      }
+      if (prefetchTimeoutRef.current != null) {
+        window.clearTimeout(prefetchTimeoutRef.current);
+      }
+      idleCallbackRef.current = null;
+      prefetchTimeoutRef.current = null;
+    };
+  }, [
+    dispatch,
+    hasActiveFilters,
+    hasLoaded,
+    hasMore,
+    isDocumentVisible,
+    isMaintenanceChat,
+    loading,
+    loadingMore,
+    page,
+    pageSize,
+  ]);
 
   // Infinite scroll observer - prevent duplicate calls
   const isLoadingRef = useRef(false);
@@ -145,9 +256,9 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
 
   useEffect(() => {
     // If chatApi doesn't provide subscribeChatSummary, skip this effect.
-    if (!subscribeChatSummary || !users?.length) return;
+    if (!subscribeChatSummary || !subscriptionUsers?.length) return;
 
-    users.forEach((u) => {
+    subscriptionUsers.forEach((u) => {
       const userId = getDriverId(u);
       if (!userId) return;
 
@@ -193,7 +304,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
 
     return () => {
       const currentUserIds = new Set(
-        users.map((u) => getDriverId(u)).filter(Boolean)
+        subscriptionUsers.map((u) => getDriverId(u)).filter(Boolean)
       );
 
       Object.keys(unsubscribeSummaryRefs.current).forEach((userId) => {
@@ -212,15 +323,15 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         }
       });
     };
-  }, [users, subscribeChatSummary, dispatch, updateLastMessageAction]);
+  }, [subscriptionUsers, subscribeChatSummary, dispatch, updateLastMessageAction]);
 
   // Subscribe to latest-message updates so ordering refreshes for both driver and admin sends
   useEffect(() => {
     // If we have subscribeChatSummary, we skip this path.
     if (subscribeChatSummary) return;
-    if (!subscribeLastMessage || !users?.length) return;
+    if (!subscribeLastMessage || !subscriptionUsers?.length) return;
 
-    users.forEach((u) => {
+    subscriptionUsers.forEach((u) => {
       const userId = getDriverId(u);
       if (!userId) return;
       if (unsubscribeLastMessageRefs.current[userId]) return;
@@ -259,7 +370,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
 
     return () => {
       const currentUserIds = new Set(
-        users.map((u) => getDriverId(u)).filter(Boolean)
+        subscriptionUsers.map((u) => getDriverId(u)).filter(Boolean)
       );
       Object.keys(subscriptionsRef).forEach((userId) => {
         if (!currentUserIds.has(userId)) {
@@ -271,7 +382,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         }
       });
     };
-  }, [users, subscribeLastMessage, dispatch, updateLastMessageAction, subscribeChatSummary]);
+  }, [subscriptionUsers, subscribeLastMessage, dispatch, updateLastMessageAction, subscribeChatSummary]);
 
   const showInitialLoader = loading && !hasLoaded && users.length === 0;
 
@@ -279,10 +390,10 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   useEffect(() => {
     // If we have subscribeChatSummary, it already provides unreadCount.
     if (subscribeChatSummary) return;
-    if (!subscribeUnreadCount || !users?.length) return;
+    if (!subscribeUnreadCount || !subscriptionUsers?.length) return;
 
     // Subscribe to unread counts for each user
-    users.forEach((u) => {
+    subscriptionUsers.forEach((u) => {
       const userId = getDriverId(u);
       if (!userId) return;
 
@@ -304,7 +415,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     const subscriptionsRef = unsubscribeUnreadRefs.current;
 
     return () => {
-      const currentUserIds = new Set(users.map((u) => getDriverId(u)).filter(Boolean));
+      const currentUserIds = new Set(subscriptionUsers.map((u) => getDriverId(u)).filter(Boolean));
 
       Object.keys(subscriptionsRef).forEach((userId) => {
         if (!currentUserIds.has(userId)) {
@@ -322,7 +433,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         }
       });
     };
-  }, [users, subscribeUnreadCount, subscribeChatSummary]);
+  }, [subscriptionUsers, subscribeUnreadCount, subscribeChatSummary]);
 
   // Transform users from Redux to drivers format
   // Redux already preserves all users, so we use it directly
@@ -398,7 +509,12 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
         lastSeen: u.lastSeen || null,
         last_message: u.last_message || "",
         last_chat_time: u.last_chat_time || null,
-        unreadCount: unreadCounts[userId] || 0,
+        unreadCount:
+          unreadCounts[userId] ??
+          u.unreadCount ??
+          u.unread_count ??
+          u.unseenCount ??
+          0,
         category: u.category || null,
       };
     })
@@ -454,8 +570,6 @@ const handleSelectDriver = (driver) => {
   if (!driver) return;
   onSelectDriver(driver);
 };
-  
-  const selectedDriverId = getDriverId(selectedDriver);
 
   useEffect(() => {
     if (!isMaintenanceChat) return;

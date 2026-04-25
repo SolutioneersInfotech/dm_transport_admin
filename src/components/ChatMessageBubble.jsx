@@ -313,6 +313,7 @@ export default function ChatMessageBubble({
   onDownloadMedia,
   isLastMessageInChat,
   onDelete,
+  showInlineDeleteAction = false,
   isBroadcast = false,
 }) {
   /* ================= DATA ================= */
@@ -517,7 +518,7 @@ export default function ChatMessageBubble({
     </button>
   ) : null;
 
-  const deleteButton = onDelete && isAdmin ? (
+  const deleteButton = showInlineDeleteAction && onDelete && isAdmin ? (
     <button
       type="button"
       onClick={handleDeleteMessage}
@@ -531,11 +532,11 @@ export default function ChatMessageBubble({
 
   /* ================= RENDER ================= */
   return (
-    <div className={`flex ${containerAlign} mb-2`}>
+    <div className={`group flex ${containerAlign} mb-2`}>
       <div className={`relative flex flex-col max-w-[65%] ${bubbleAlign}`}>
         {(copyButton || deleteButton) && (
           <div
-            className={`absolute z-10 flex gap-2 ${showSenderName ? "top-5" : "top-0.5"} ${isAdmin ? "-left-20" : "-right-20"}`}
+            className={`absolute z-10 flex gap-2 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100 ${showSenderName ? "top-5" : "top-0.5"} ${isAdmin ? "-left-20" : "-right-20"}`}
           >
             {copyButton}
             {deleteButton}
