@@ -160,12 +160,17 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
     const scheduleFetch = () => {
       const runFetch = () => {
         if (document.hidden) return;
-        if (loading || loadingMore || !hasMore) return;
+        if (loading || loadingMore || !hasMore || isLoadingRef.current) return;
 
         const nextPage = page + 1;
-        dispatch(fetchMoreUsers({ page: nextPage, limit: pageSize })).catch((error) => {
-          console.error("Background prefetch failed:", error);
-        });
+        isLoadingRef.current = true;
+        dispatch(fetchMoreUsers({ page: nextPage, limit: pageSize }))
+          .catch((error) => {
+            console.error("Background prefetch failed:", error);
+          })
+          .finally(() => {
+            isLoadingRef.current = false;
+          });
       };
 
       if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
