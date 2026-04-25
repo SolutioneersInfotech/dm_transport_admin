@@ -29,8 +29,7 @@ const statusColorClass = {
   unseen: "text-amber-400",
 };
 
-const ENABLE_BACKGROUND_DRIVER_PREFETCH = true;
-const BACKGROUND_DRIVER_PREFETCH_DELAY_MS = 600;
+const CHAT_FULL_ROSTER_LIMIT = -1;
 const MAX_CHAT_LIST_REALTIME_SUBSCRIPTIONS = 50;
 
 function dedupeUsersById(users, getId) {
@@ -62,6 +61,8 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const hasMore = isMaintenanceChat ? false : usersState.hasMore;
   const page = usersState.page;
   const limit = usersState.limit;
+  const totalDocuments = usersState.totalDocuments;
+  const totalPages = usersState.totalPages;
   // Ensure we never use an invalid or cached -1 limit for pagination.
   // Fallback to a sane default page size (e.g. 25) when limit is <= 0 or falsy.
   const DEFAULT_PAGE_SIZE = 25;
@@ -77,14 +78,9 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const [isStatusPopoverOpen, setIsStatusPopoverOpen] = useState(false);
   const observerTarget = useRef(null);
   const [unreadCounts, setUnreadCounts] = useState({});
-  const [isDocumentVisible, setIsDocumentVisible] = useState(
-    typeof document === "undefined" ? true : !document.hidden
-  );
   const unsubscribeUnreadRefs = useRef({});
   const unsubscribeLastMessageRefs = useRef({});
   const unsubscribeSummaryRefs = useRef({});
-  const idleCallbackRef = useRef(null);
-  const prefetchTimeoutRef = useRef(null);
 
   const subscribeUnreadCount = chatApi?.subscribeUnreadCount;
   const subscribeLastMessage =
@@ -110,10 +106,6 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   }
 
   const selectedDriverId = getDriverId(selectedDriver);
-  const hasActiveFilters =
-    Boolean(search?.trim()) ||
-    categoryFilter.length > 0 ||
-    statusFilter !== "all";
   const subscriptionUsers = useMemo(() => {
     if (!users?.length) return [];
     if (isMaintenanceChat) return users;
@@ -131,90 +123,22 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
       }
     } else {
       if (!hasLoaded && !loading) {
-        // Fetch a single, paginated first page using the safe pageSize.
-        dispatch(fetchUsers({ page: 1, limit: pageSize }));
+        dispatch(fetchUsers({ page: 1, limit: CHAT_FULL_ROSTER_LIMIT }));
       }
     }
   }, [dispatch, isMaintenanceChat, hasLoaded, loading, pageSize]);
 
   useEffect(() => {
-    if (typeof document === "undefined") return undefined;
-
-    const handleVisibilityChange = () => {
-      setIsDocumentVisible(!document.hidden);
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, []);
-
-  // Background prefetch: load remaining regular-chat pages slowly when idle.
-  useEffect(() => {
-    if (!ENABLE_BACKGROUND_DRIVER_PREFETCH) return undefined;
-    if (isMaintenanceChat) return undefined;
-    if (!hasLoaded || loading || loadingMore || !hasMore) return undefined;
-    if (!isDocumentVisible || hasActiveFilters) return undefined;
-
-    const scheduleFetch = () => {
-      const runFetch = () => {
-        if (document.hidden) return;
-        if (loading || loadingMore || !hasMore || isLoadingRef.current) return;
-
-        const nextPage = page + 1;
-        isLoadingRef.current = true;
-        dispatch(fetchMoreUsers({ page: nextPage, limit: pageSize }))
-          .catch((error) => {
-            console.error("Background prefetch failed:", error);
-          })
-          .finally(() => {
-            isLoadingRef.current = false;
-          });
-      };
-
-      if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
-        idleCallbackRef.current = window.requestIdleCallback(
-          () => {
-            prefetchTimeoutRef.current = window.setTimeout(
-              runFetch,
-              BACKGROUND_DRIVER_PREFETCH_DELAY_MS
-            );
-          },
-          { timeout: BACKGROUND_DRIVER_PREFETCH_DELAY_MS * 2 }
-        );
-      } else {
-        prefetchTimeoutRef.current = window.setTimeout(
-          runFetch,
-          BACKGROUND_DRIVER_PREFETCH_DELAY_MS
-        );
-      }
-    };
-
-    scheduleFetch();
-
-    return () => {
-      if (typeof window !== "undefined" && typeof window.cancelIdleCallback === "function" && idleCallbackRef.current != null) {
-        window.cancelIdleCallback(idleCallbackRef.current);
-      }
-      if (prefetchTimeoutRef.current != null) {
-        window.clearTimeout(prefetchTimeoutRef.current);
-      }
-      idleCallbackRef.current = null;
-      prefetchTimeoutRef.current = null;
-    };
-  }, [
-    dispatch,
-    hasActiveFilters,
-    hasLoaded,
-    hasMore,
-    isDocumentVisible,
-    isMaintenanceChat,
-    loading,
-    loadingMore,
-    page,
-    pageSize,
-  ]);
+    if (!import.meta.env.DEV || isMaintenanceChat) return;
+    console.debug("[ChatList] loaded users", {
+      count: users.length,
+      hasMore,
+      page,
+      limit,
+      totalDocuments,
+      totalPages,
+    });
+  }, [users.length, hasMore, page, limit, totalDocuments, totalPages, isMaintenanceChat]);
 
   // Infinite scroll observer - prevent duplicate calls
   const isLoadingRef = useRef(false);

@@ -34,6 +34,16 @@ function buildChatTargetFromUser(user) {
   };
 }
 
+function getBackendUnreadCount(user) {
+  return Number(
+    user?.unreadCount ??
+      user?.unread_count ??
+      user?.unseenCount ??
+      user?.unseen_count ??
+      0
+  ) || 0;
+}
+
 export default function GlobalUnreadBadgeSync() {
   const dispatch = useAppDispatch();
   const { users } = useAppSelector((state) => state.users);
@@ -41,12 +51,30 @@ export default function GlobalUnreadBadgeSync() {
 
   const regularUnsubscribeRefs = useRef({});
   const maintenanceUnsubscribeRefs = useRef({});
+  const previousRegularUserIdsRef = useRef(new Set());
   // Limit client-side realtime unread listeners; a true global unread counter should come
   // from a backend aggregate endpoint rather than N Firebase subscriptions on the client.
   const regularSubscriptionUsers = useMemo(
     () => users.slice(0, MAX_GLOBAL_UNREAD_SUBSCRIPTIONS),
     [users]
   );
+
+  useEffect(() => {
+    if (!users?.length) return;
+
+    users.forEach((user) => {
+      const userId = getUserId(user);
+      if (!userId) return;
+
+      dispatch(
+        setUnreadCountForUser({
+          userId,
+          chatType: "regular",
+          count: getBackendUnreadCount(user),
+        })
+      );
+    });
+  }, [users, dispatch]);
 
   useEffect(() => {
     if (!regularSubscriptionUsers?.length) return;
@@ -71,11 +99,29 @@ export default function GlobalUnreadBadgeSync() {
         if (!currentUserIds.has(userId)) {
           regularUnsubscribeRefs.current[userId]?.();
           delete regularUnsubscribeRefs.current[userId];
-          dispatch(removeUserUnreadCounts(userId));
         }
       });
     };
   }, [regularSubscriptionUsers, dispatch]);
+
+  useEffect(() => {
+    const currentUserIds = new Set(users.map(getUserId).filter(Boolean));
+
+    previousRegularUserIdsRef.current.forEach((userId) => {
+      if (!currentUserIds.has(userId)) {
+        dispatch(removeUserUnreadCounts(userId));
+      }
+    });
+
+    previousRegularUserIdsRef.current = currentUserIds;
+
+    Object.keys(regularUnsubscribeRefs.current).forEach((userId) => {
+      if (!currentUserIds.has(userId)) {
+        regularUnsubscribeRefs.current[userId]?.();
+        delete regularUnsubscribeRefs.current[userId];
+      }
+    });
+  }, [users, dispatch]);
 
   useEffect(() => {
     if (!maintenanceUsers?.length) return;

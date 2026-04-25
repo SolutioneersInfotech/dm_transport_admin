@@ -1,7 +1,7 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { fetchUsersRoute } from "../../utils/apiRoutes";
 
-const USERS_CACHE_KEY = "chat_users_cache_v1";
+const USERS_CACHE_KEY = "chat_users_cache_v2";
 const FETCH_USERS_DEDUPE_WINDOW_MS = 3000;
 const FETCH_MORE_USERS_DEDUPE_WINDOW_MS = 1500;
 const inFlightRequestKeys = new Set();
@@ -311,6 +311,9 @@ const usersSlice = createSlice({
         const incomingSearch = action.payload.search;
         const isFirstPage = (action.payload.page || 1) === 1;
         const searchChanged = state.lastSearch !== incomingSearch;
+        const requestedLimit = action.meta?.arg?.limit;
+        const isFullRosterFetch =
+          requestedLimit === -1 || action.payload.limit === -1;
 
         const mergedIncomingUsers = incomingUsers.map((u) => {
           const existingUser = previousUsers.find((prevUser) =>
@@ -321,7 +324,9 @@ const usersSlice = createSlice({
 
         let nextUsers = mergedIncomingUsers;
 
-        if (isFirstPage && !searchChanged) {
+        if (isFullRosterFetch) {
+          nextUsers = mergedIncomingUsers;
+        } else if (isFirstPage && !searchChanged) {
           const knownPageSize =
             Number.isFinite(action.payload.limit) && action.payload.limit > 0
               ? action.payload.limit
@@ -349,7 +354,10 @@ const usersSlice = createSlice({
         }
 
         state.users = dedupeUsers(nextUsers);
-        state.hasMore = action.payload.hasMore;
+        state.hasMore =
+          isFullRosterFetch && !action.payload.hasMore && !action.payload.totalPages
+            ? false
+            : action.payload.hasMore;
         state.page = action.payload.page;
         state.limit = action.payload.limit;
         state.totalDocuments = action.payload.totalDocuments;
@@ -359,6 +367,17 @@ const usersSlice = createSlice({
         state.error = null;
         state.lastFetched = Date.now();
         state.hasLoaded = true;
+        if (import.meta.env.DEV) {
+          console.debug("[usersSlice] fetchUsers.fulfilled", {
+            requestedLimit,
+            payloadLimit: action.payload.limit,
+            users: state.users.length,
+            hasMore: state.hasMore,
+            page: state.page,
+            totalDocuments: state.totalDocuments,
+            totalPages: state.totalPages,
+          });
+        }
         writeUsersCache(state);
       })
       .addCase(fetchUsers.rejected, (state, action) => {
