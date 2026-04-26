@@ -73,6 +73,8 @@ export default function Broadcast() {
   const [selectedAttachment, setSelectedAttachment] = useState(null);
   const [showAttachmentPreview, setShowAttachmentPreview] = useState(false);
   const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
+  const [pendingDeleteBroadcast, setPendingDeleteBroadcast] = useState(null);
+  const [isDeletingBroadcast, setIsDeletingBroadcast] = useState(false);
   const fileInputRef = useRef(null);
 
   const { users: drivers = [] } = useAppSelector((state) => state.users);
@@ -300,18 +302,23 @@ export default function Broadcast() {
     }
   };
 
-  const handleDeleteBroadcast = async (broadcastId) => {
-    if (!window.confirm("Delete this broadcast from history?")) {
-      return;
-    }
+  const handleDeleteBroadcast = (broadcast) => {
+    setPendingDeleteBroadcast(broadcast);
+  };
 
+  const confirmDeleteBroadcast = async () => {
+    if (!pendingDeleteBroadcast?.id) return;
+
+    setIsDeletingBroadcast(true);
     try {
-      await deleteBroadcast(broadcastId);
-      toast.success("Broadcast deleted");
+      await deleteBroadcast(pendingDeleteBroadcast.id);
       loadBroadcastHistory();
+      setPendingDeleteBroadcast(null);
     } catch (error) {
       console.error("Failed to delete broadcast:", error);
       toast.error("Failed to delete broadcast");
+    } finally {
+      setIsDeletingBroadcast(false);
     }
   };
 
@@ -719,7 +726,7 @@ export default function Broadcast() {
 
                         <button
                           type="button"
-                          onClick={() => handleDeleteBroadcast(broadcast.id)}
+                          onClick={() => handleDeleteBroadcast(broadcast)}
                           className="rounded p-1 text-red-400 transition hover:bg-red-500/10 hover:text-red-300"
                           title="Delete broadcast"
                           aria-label="Delete broadcast"
@@ -793,6 +800,71 @@ export default function Broadcast() {
 
         </section>
       </div>
+      {pendingDeleteBroadcast && (
+        <div
+          className="fixed inset-0 z-[190] flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Delete broadcast confirmation"
+        >
+          <div className="w-full max-w-md rounded-[16px] border border-white/10 bg-slate-950 p-5 shadow-[0_24px_60px_rgba(2,6,23,0.55)]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-[17px] font-semibold text-white">
+                  Delete broadcast?
+                </h3>
+                <p className="mt-1 text-[13px] text-white/55">
+                  This will permanently delete the broadcast message?
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isDeletingBroadcast && setPendingDeleteBroadcast(null)}
+                disabled={isDeletingBroadcast}
+                className="rounded p-1 text-white/45 transition hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Close delete confirmation"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-[12px] border border-white/8 bg-white/[0.03] px-4 py-3">
+              <div className="text-[12px] uppercase tracking-[0.14em] text-white/32">
+                Message preview
+              </div>
+              <p className="mt-2 line-clamp-3 text-[13px] text-white/78">
+                {pendingDeleteBroadcast.message?.trim() || "No message text"}
+              </p>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteBroadcast(null)}
+                disabled={isDeletingBroadcast}
+                className="rounded-[10px] border border-white/10 px-4 py-2 text-[13px] font-medium text-white/72 transition hover:bg-white/[0.04] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteBroadcast}
+                disabled={isDeletingBroadcast}
+                className="flex min-w-[118px] items-center justify-center gap-2 rounded-[10px] bg-red-500 px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {isDeletingBroadcast ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <span>Delete</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showAttachmentPreview && selectedAttachment instanceof File && (
         <FilePreviewModal
           file={selectedAttachment}
