@@ -316,7 +316,7 @@ export default function Broadcast() {
   };
 
   return (
-    <div className="min-h-screen bg-[#120b22] text-white">
+    <div className="min-h-screen bg-slate-950 text-white">
       <div className="w-full px-5 py-6">
         <div className="mb-5 flex items-center gap-3">
           <button
@@ -332,7 +332,7 @@ export default function Broadcast() {
           </h1>
         </div>
 
-        <section className="rounded-[10px] border border-white/7 bg-[linear-gradient(180deg,rgba(31,24,55,0.98),rgba(24,18,42,0.98))] p-5 shadow-[0_18px_40px_rgba(4,2,16,0.28)]">
+        <section className="rounded-[10px] border border-white/7 bg-slate-950 p-5 shadow-[0_18px_40px_rgba(4,2,16,0.28)]">
           <div className="flex items-center justify-between gap-3">
             <div className="text-[15px] font-semibold text-white/92">
               Send Broadcast
@@ -354,12 +354,12 @@ export default function Broadcast() {
           </div>
 
           {!isComposeCollapsed && (
-            <div className="mt-4 rounded-[10px] border border-white/7 bg-white/[0.025] p-4">
+            <div className="mt-4 rounded-[10px] border border-white/7 bg-slate-950 p-4">
             <label className="mb-2 block text-[13px] font-semibold text-white/78">
               Recipients
             </label>
 
-            <div className="rounded-[9px] border border-white/8 bg-[#282047]/82 px-4 py-3">
+            <div className="rounded-[9px] border border-white/8 bg-slate-950 px-4 py-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex flex-wrap gap-1.5">
                   {recipientOptions.map((option) => {
@@ -397,8 +397,8 @@ export default function Broadcast() {
                 }
                 className={`flex w-full items-center justify-between rounded-[9px] border border-white/8 px-4 py-3 text-left text-[13px] transition ${
                   recipients === "all"
-                    ? "cursor-default bg-[#282047]/50 text-white/42"
-                    : "bg-[#282047]/72 text-white/72 hover:text-white"
+                    ? "cursor-default bg-slate-950 text-white/42"
+                    : "bg-slate-950 text-white/72 hover:text-white"
                 }`}
               >
                 <span>{recipients === "all" ? "Select Users..." : selectionLabel}</span>
@@ -410,7 +410,7 @@ export default function Broadcast() {
               </button>
 
               {recipients !== "all" && showRecipientList && (
-                <div className="mt-2 rounded-[9px] border border-white/8 bg-[#231b3f] p-3">
+                <div className="mt-2 rounded-[9px] border border-white/8 bg-slate-950 p-3">
                   <div className="mb-2 px-1 text-[11px] uppercase tracking-[0.22em] text-white/34">
                     {recipients === "drivers"
                       ? `${selectedDriverCount} Selected`
@@ -489,13 +489,13 @@ export default function Broadcast() {
                   }
                   rows={4}
                   placeholder="Enter your broadcast message..."
-                  className="min-h-[112px] w-full resize-none rounded-[9px] border border-white/8 bg-[#282047]/72 px-4 py-3.5 pr-16 text-[13px] text-white outline-none placeholder:text-white/27 focus:border-[#6b82ff]/75"
+                  className="min-h-[112px] w-full resize-none rounded-[9px] border border-white/8 bg-slate-950 px-4 py-3.5 pr-16 text-[13px] text-white outline-none placeholder:text-white/27 focus:border-[#6b82ff]/75"
                 />
                 <div className="absolute bottom-3 right-3">
                   <button
                     type="button"
                     onClick={() => setShowAttachmentOptions((prev) => !prev)}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/8 bg-black/10 text-white/72 backdrop-blur-sm transition hover:bg-black/20 hover:text-white"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/8 bg-[#111b21] text-white/72 backdrop-blur-sm transition hover:bg-[#1a252c] hover:text-white"
                     aria-label="Attach file to broadcast"
                     aria-expanded={showAttachmentOptions}
                     aria-haspopup="true"
@@ -552,7 +552,7 @@ export default function Broadcast() {
               </div>
 
               {selectedAttachment?.url && (
-                <div className="mt-3 flex items-center justify-between gap-3 rounded-[11px] border border-white/8 bg-[#282047]/72 px-4 py-3 text-[13px] text-white/80">
+                <div className="mt-3 flex items-center justify-between gap-3 rounded-[11px] border border-white/8 bg-slate-950 px-4 py-3 text-[13px] text-white/80">
                   <div className="flex min-w-0 flex-1 items-center gap-3">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/55">
                       <Paperclip className="h-4 w-4" />
@@ -600,7 +600,7 @@ export default function Broadcast() {
           )}
         </section>
 
-        <section className="mt-4 rounded-[10px] border border-white/7 bg-[linear-gradient(180deg,rgba(31,24,55,0.98),rgba(24,18,42,0.98))] shadow-[0_18px_40px_rgba(4,2,16,0.24)]">
+        <section className="mt-4 rounded-[10px] border border-white/7 bg-slate-950 shadow-[0_18px_40px_rgba(4,2,16,0.24)]">
           <div className="border-b border-white/7 px-5 py-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-[15px] font-semibold text-white/92">
@@ -616,12 +616,12 @@ export default function Broadcast() {
                         value={historySearch}
                         onChange={(event) => setHistorySearch(event.target.value)}
                         placeholder="Search broadcasts..."
-                        className="h-8 w-[148px] rounded-md border border-white/8 bg-[#282047]/72 pl-8 pr-2 text-[12px] text-white outline-none placeholder:text-white/27"
+                        className="h-8 w-[148px] rounded-md border border-white/8 bg-slate-950 pl-8 pr-2 text-[12px] text-white outline-none placeholder:text-white/27"
                       />
                     </div>
                     <button
                       type="button"
-                      className="flex h-8 w-8 items-center justify-center rounded-md border border-white/8 bg-[#282047]/72 text-white/60"
+                      className="flex h-8 w-8 items-center justify-center rounded-md border border-white/8 bg-slate-950 text-white/60"
                     >
                       <Filter className="h-3.5 w-3.5" />
                     </button>
@@ -630,7 +630,7 @@ export default function Broadcast() {
                 <button
                   type="button"
                   onClick={() => setIsHistoryCollapsed((prev) => !prev)}
-                  className="flex h-8 w-8 items-center justify-center rounded-md border border-white/8 bg-[#282047]/72 text-white/60 transition hover:text-white"
+                  className="flex h-8 w-8 items-center justify-center rounded-md border border-white/8 bg-slate-950 text-white/60 transition hover:text-white"
                   aria-label={
                     isHistoryCollapsed
                       ? "Expand broadcast history panel"
@@ -666,7 +666,7 @@ export default function Broadcast() {
 
                 <button
                   type="button"
-                  className="flex h-8 w-8 items-center justify-center rounded-md border border-white/8 bg-[#282047]/72 text-white/60"
+                  className="flex h-8 w-8 items-center justify-center rounded-md border border-white/8 bg-slate-950 text-white/60"
                 >
                   <Filter className="h-3.5 w-3.5" />
                 </button>
@@ -695,7 +695,7 @@ export default function Broadcast() {
                   return (
                     <article
                       key={broadcast.id}
-                      className="rounded-[10px] border border-white/7 bg-[linear-gradient(180deg,rgba(36,29,64,0.98),rgba(28,22,49,0.98))] p-3"
+                      className="rounded-[10px] border border-white/7 bg-slate-950 p-3"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex gap-2.5">
