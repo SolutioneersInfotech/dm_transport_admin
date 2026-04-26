@@ -320,7 +320,10 @@ function ChatMessageBubble({
     isBroadcast ||
     msg?.type === "broadcast" ||
     msg?.isBroadcast === true ||
+    msg?.isbroadcast === true ||
+    String(msg?.isbroadcast).toLowerCase() === "true" ||
     msg?.broadcast === true ||
+    String(msg?.broadcast).toLowerCase() === "true" ||
     Boolean(msg?.recipientType) ||
     Boolean(msg?.broadcastId) ||
     msg?.source === "broadcast";

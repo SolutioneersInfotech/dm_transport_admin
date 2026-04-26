@@ -270,7 +270,10 @@ function isBroadcastMessage(message) {
   return (
     message?.type === "broadcast" ||
     message?.isBroadcast === true ||
+    message?.isbroadcast === true ||
+    String(message?.isbroadcast).toLowerCase() === "true" ||
     message?.broadcast === true ||
+    String(message?.broadcast).toLowerCase() === "true" ||
     Boolean(message?.recipientType) ||
     Boolean(message?.broadcastId) ||
     message?.source === "broadcast"
