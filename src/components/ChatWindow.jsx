@@ -876,21 +876,6 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     }
   }
 
-  const handleDeleteMessage = useCallback(
-    async (messageId) => {
-      if (!messageId || !driverId) return;
-      try {
-        await deleteSpecificMessage(messageId, driverId);
-        setMessages((prev) => prev.filter((m) => m.msgId !== messageId));
-        toast.success("Message deleted");
-      } catch (error) {
-        console.error("Failed to delete message:", error);
-        toast.error("Failed to delete message");
-      }
-    },
-    [driverId, deleteSpecificMessage]
-  );
-
   const deleteConfirmTitle = deleteActionType === "selected" ? "Delete Selected Messages" : "Delete All Messages";
   const deleteConfirmDescription =
     deleteActionType === "selected"
@@ -1235,7 +1220,6 @@ const grouped = groupMessagesByDate(allMessages);
                       onDownloadMedia={(url) =>
                         downloadChatMedia(url, senderName, msg?.dateTime)
                       }
-                      onDelete={handleDeleteMessage}
                     />
 
                   </div>
