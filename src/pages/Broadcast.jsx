@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Check,
@@ -24,11 +24,11 @@ import { Checkbox } from "../components/ui/checkbox";
 import { sendBroadcast, fetchBroadcastHistory, deleteBroadcast } from "../services/broadcastAPI";
 import { uploadBroadcastFile } from "../services/broadcastFileUpload";
 import FilePreviewModal from "../components/FilePreviewModal";
-import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { useAppSelector } from "../store/hooks";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
 import { extractAttachmentDisplayName } from "../utils/chatAttachments";
-import { fetchMaintenanceUsers } from "../store/slices/maintenanceUsersSlice";
+import { fetchMaintenanceUsersRoute } from "../utils/apiRoutes";
 
 const MESSAGE_LIMIT = 500;
 
@@ -77,22 +77,47 @@ export default function Broadcast() {
   const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
   const [pendingDeleteBroadcast, setPendingDeleteBroadcast] = useState(null);
   const [isDeletingBroadcast, setIsDeletingBroadcast] = useState(false);
+  const [broadcastAdmins, setBroadcastAdmins] = useState([]);
+  const [broadcastAdminsLoading, setBroadcastAdminsLoading] = useState(false);
   const fileInputRef = useRef(null);
 
-  const dispatch = useAppDispatch();
   const { users: drivers = [] } = useAppSelector((state) => state.users);
-  const maintenanceUsers = useAppSelector(
-    (state) => state?.maintenanceUsers?.users || []
-  );
   const { user: adminUser } = useAuth();
+
+  const loadBroadcastAdmins = useCallback(async () => {
+    setBroadcastAdminsLoading(true);
+    try {
+      const token = localStorage.getItem("adminToken");
+      const res = await fetch(fetchMaintenanceUsersRoute(-1), {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.message || "Failed to fetch admins");
+      }
+
+      setBroadcastAdmins(data.users || []);
+    } catch (error) {
+      console.error("Failed to load broadcast admins:", error);
+      toast.error("Failed to load admins");
+    } finally {
+      setBroadcastAdminsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     loadBroadcastHistory();
   }, []);
 
   useEffect(() => {
-    dispatch(fetchMaintenanceUsers({ limit: -1 }));
-  }, [dispatch]);
+    loadBroadcastAdmins();
+  }, [loadBroadcastAdmins]);
 
   useEffect(() => {
     setDriverSelections((prev) => {
@@ -113,7 +138,7 @@ export default function Broadcast() {
     setAdminSelections((prev) => {
       const next = { ...prev };
 
-      maintenanceUsers.forEach((admin) => {
+      broadcastAdmins.forEach((admin) => {
         const id = admin?.userid ?? admin?.id;
         if (id && !(id in next)) {
           next[id] = true;
@@ -122,7 +147,7 @@ export default function Broadcast() {
 
       return next;
     });
-  }, [maintenanceUsers]);
+  }, [broadcastAdmins]);
 
   useEffect(() => {
     setShowRecipientList(false);
@@ -152,13 +177,13 @@ export default function Broadcast() {
       .filter((id) => id && driverSelections[id]);
 
   const getSelectedAdminIds = () =>
-    maintenanceUsers
+    broadcastAdmins
       .map((admin) => admin?.userid ?? admin?.id)
       .filter((id) => id && adminSelections[id]);
 
   const selectedDriverCount = getSelectedDriverIds().length;
   const selectedAdminCount = getSelectedAdminIds().length;
-  const selectionList = recipients === "drivers" ? drivers : maintenanceUsers;
+  const selectionList = recipients === "drivers" ? drivers : broadcastAdmins;
   const currentSelections =
     recipients === "drivers" ? driverSelections : adminSelections;
   const getPersonId = (person) => person?.userid ?? person?.id;
@@ -330,7 +355,7 @@ export default function Broadcast() {
         recipients,
         message,
         drivers,
-        maintenanceUsers,
+        broadcastAdmins,
         getSelectedDriverIds(),
         getSelectedAdminIds(),
         {
@@ -508,6 +533,11 @@ export default function Broadcast() {
                   </label>
 
                   <div className="dark-scrollbar max-h-52 space-y-1 overflow-y-auto pr-1">
+                    {recipients === "admins" && broadcastAdminsLoading && (
+                      <div className="px-2 py-2 text-[12px] text-white/50">
+                        Loading admins...
+                      </div>
+                    )}
                     {filteredSelectionList.length === 0 && (
                       <div className="px-2 py-3 text-center text-[12px] text-white/45">
                         No users found
@@ -968,4 +998,3 @@ function formatDateCompact(timestamp) {
     return timestamp;
   }
 }
-
