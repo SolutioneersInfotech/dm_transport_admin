@@ -245,6 +245,34 @@ body{
 }
 
 /* ========================= */
+/* REUSABLE DARK SCROLLBAR */
+/* ========================= */
+
+.dark-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(110, 131, 255, 0.45) rgba(255, 255, 255, 0.06);
+}
+
+.dark-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.dark-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 999px;
+}
+
+.dark-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(110, 131, 255, 0.45);
+  border-radius: 999px;
+  border: 2px solid rgba(35, 27, 63, 1);
+}
+
+.dark-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(110, 131, 255, 0.7);
+}
+
+/* ========================= */
 /* LOADER */
 /* ========================= */
 
