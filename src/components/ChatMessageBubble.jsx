@@ -292,7 +292,7 @@
 //   );
 // }
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { Check, CheckCheck, Download, ExternalLink, FileText, Copy, Megaphone } from "lucide-react";
 import {
   extractAttachmentDisplayName,
@@ -302,7 +302,7 @@ import {
 import PdfThumbnail from "./PdfThumbnail";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
-export default function ChatMessageBubble({
+function ChatMessageBubble({
   msg,
   senderName,
   showSenderName = true,
@@ -728,3 +728,5 @@ export default function ChatMessageBubble({
     </div>
   );
 }
+
+export default memo(ChatMessageBubble);
