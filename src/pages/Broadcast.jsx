@@ -28,7 +28,7 @@ import { useAppSelector } from "../store/hooks";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
 import { extractAttachmentDisplayName } from "../utils/chatAttachments";
-import { fetchMaintenanceUsersRoute } from "../utils/apiRoutes";
+import { fetchAdmins } from "../services/adminAPI";
 
 const MESSAGE_LIMIT = 500;
 
@@ -56,6 +56,36 @@ function getBroadcastAudienceLabel(recipientType) {
       return "Broadcast";
   }
 }
+
+const normalizeBroadcastAdmins = (payload) => {
+  const candidates = Array.isArray(payload)
+    ? payload
+    : payload?.admins || payload?.data || payload?.users || payload?.result || [];
+
+  if (!Array.isArray(candidates)) return [];
+
+  return candidates
+    .map((admin, index) => {
+      const userid =
+        admin?.userid ||
+        admin?.userId ||
+        admin?.username ||
+        admin?.name ||
+        admin?.email ||
+        admin?.id ||
+        `admin-${index + 1}`;
+
+      return {
+        ...admin,
+        userid,
+        id: admin?.id || userid,
+        name: admin?.name || admin?.username || admin?.userid || admin?.email || userid,
+        admin_name:
+          admin?.admin_name || admin?.name || admin?.username || admin?.userid || userid,
+      };
+    })
+    .filter((admin) => admin.userid || admin.id);
+};
 
 export default function Broadcast() {
   const navigate = useNavigate();
@@ -87,22 +117,8 @@ export default function Broadcast() {
   const loadBroadcastAdmins = useCallback(async () => {
     setBroadcastAdminsLoading(true);
     try {
-      const token = localStorage.getItem("adminToken");
-      const res = await fetch(fetchMaintenanceUsersRoute(-1), {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data?.message || "Failed to fetch admins");
-      }
-
-      setBroadcastAdmins(data.users || []);
+      const response = await fetchAdmins();
+      setBroadcastAdmins(normalizeBroadcastAdmins(response));
     } catch (error) {
       console.error("Failed to load broadcast admins:", error);
       toast.error("Failed to load admins");
