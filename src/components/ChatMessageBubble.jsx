@@ -293,7 +293,7 @@
 // }
 
 import { useEffect, useState } from "react";
-import { Check, CheckCheck, Download, ExternalLink, FileText, Copy, Trash2, Megaphone } from "lucide-react";
+import { Check, CheckCheck, Download, ExternalLink, FileText, Copy, Megaphone } from "lucide-react";
 import {
   extractAttachmentDisplayName,
   getAttachmentKind,
@@ -312,7 +312,6 @@ export default function ChatMessageBubble({
   onImageClick,
   onDownloadMedia,
   isLastMessageInChat,
-  onDelete,
   isBroadcast = false,
 }) {
   /* ================= DATA ================= */
@@ -498,13 +497,6 @@ export default function ChatMessageBubble({
     }
   };
 
-  const handleDeleteMessage = () => {
-    if (!onDelete) return;
-    if (window.confirm("Delete this message?")) {
-      onDelete(msg?.msgId || msg?.id);
-    }
-  };
-
   const copyButton = showCopyButton ? (
     <button
       type="button"
@@ -517,28 +509,15 @@ export default function ChatMessageBubble({
     </button>
   ) : null;
 
-  const deleteButton = onDelete && isAdmin ? (
-    <button
-      type="button"
-      onClick={handleDeleteMessage}
-      className={`inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-red-400 transition-colors hover:bg-red-500/20 hover:text-red-300 ${showSenderName ? "mt-5" : "mt-0.5"}`}
-      aria-label="Delete message"
-      title="Delete message"
-    >
-      <Trash2 className="h-4 w-4" />
-    </button>
-  ) : null;
-
   /* ================= RENDER ================= */
   return (
     <div className={`flex ${containerAlign} mb-2`}>
       <div className={`relative flex flex-col max-w-[65%] ${bubbleAlign}`}>
-        {(copyButton || deleteButton) && (
+        {copyButton && (
           <div
-            className={`absolute z-10 flex gap-2 ${showSenderName ? "top-5" : "top-0.5"} ${isAdmin ? "-left-20" : "-right-20"}`}
+            className={`absolute z-10 flex ${showSenderName ? "top-5" : "top-0.5"} ${isAdmin ? "-left-10" : "-right-10"}`}
           >
             {copyButton}
-            {deleteButton}
           </div>
         )}
         {/* Sender name */}
