@@ -64,6 +64,7 @@ export default function Broadcast() {
   const [broadcasting, setBroadcasting] = useState(false);
   const [broadcastHistory, setBroadcastHistory] = useState([]);
   const [showRecipientList, setShowRecipientList] = useState(false);
+  const [recipientSearch, setRecipientSearch] = useState("");
   const [driverSelections, setDriverSelections] = useState({});
   const [adminSelections, setAdminSelections] = useState({});
   const [historyFilter, setHistoryFilter] = useState("all");
@@ -119,6 +120,7 @@ export default function Broadcast() {
 
   useEffect(() => {
     setShowRecipientList(false);
+    setRecipientSearch("");
   }, [recipients]);
 
   useEffect(() => {
@@ -153,11 +155,30 @@ export default function Broadcast() {
   const selectionList = recipients === "drivers" ? drivers : maintenanceUsers;
   const currentSelections =
     recipients === "drivers" ? driverSelections : adminSelections;
+  const getPersonId = (person) => person?.userid ?? person?.id;
+  const getPersonName = (person) =>
+    person?.name ||
+    person?.driver_name ||
+    person?.admin_name ||
+    person?.username ||
+    "Unknown";
+  const filteredSelectionList = selectionList.filter((person) => {
+    const searchValue = recipientSearch.trim().toLowerCase();
+    if (!searchValue) return true;
+
+    const id = String(getPersonId(person) || "").toLowerCase();
+    const name = String(getPersonName(person) || "").toLowerCase();
+    const phone = String(
+      person?.phone || person?.mobile || person?.phoneNumber || ""
+    ).toLowerCase();
+
+    return [id, name, phone].some((value) => value.includes(searchValue));
+  });
 
   const allVisibleSelected =
-    selectionList.length > 0 &&
-    selectionList.every((person) => {
-      const id = person?.userid ?? person?.id;
+    filteredSelectionList.length > 0 &&
+    filteredSelectionList.every((person) => {
+      const id = getPersonId(person);
       return id ? currentSelections[id] : false;
     });
 
@@ -212,21 +233,31 @@ export default function Broadcast() {
 
   const handleToggleAll = () => {
     const nextValue = !allVisibleSelected;
-    const nextSelections = {};
-
-    selectionList.forEach((person) => {
-      const id = person?.userid ?? person?.id;
-      if (id) {
-        nextSelections[id] = nextValue;
-      }
-    });
 
     if (recipients === "drivers") {
-      setDriverSelections(nextSelections);
+      setDriverSelections((prev) => {
+        const nextSelections = { ...prev };
+        filteredSelectionList.forEach((person) => {
+          const id = getPersonId(person);
+          if (id) {
+            nextSelections[id] = nextValue;
+          }
+        });
+        return nextSelections;
+      });
       return;
     }
 
-    setAdminSelections(nextSelections);
+    setAdminSelections((prev) => {
+      const nextSelections = { ...prev };
+      filteredSelectionList.forEach((person) => {
+        const id = getPersonId(person);
+        if (id) {
+          nextSelections[id] = nextValue;
+        }
+      });
+      return nextSelections;
+    });
   };
 
   const openAttachmentPicker = (accept) => {
@@ -435,6 +466,26 @@ export default function Broadcast() {
                       ? `${selectedDriverCount} Selected`
                       : `${selectedAdminCount} Selected`}
                   </div>
+                  <div className="relative mb-2">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
+                    <input
+                      type="text"
+                      value={recipientSearch}
+                      onChange={(event) => setRecipientSearch(event.target.value)}
+                      placeholder={`Search ${recipients === "drivers" ? "drivers" : "admins"}...`}
+                      className="h-9 w-full rounded-md border border-white/8 bg-[#17122c] pl-9 pr-9 text-[13px] text-white outline-none placeholder:text-white/30 focus:border-[#6b82ff]/75"
+                    />
+                    {recipientSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setRecipientSearch("")}
+                        className="absolute right-2 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-white/45 transition hover:bg-white/10 hover:text-white"
+                        aria-label="Clear recipient search"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
 
                   <label className="mb-1 flex items-center justify-between rounded-md px-2 py-2 text-[13px] text-white/82 hover:bg-white/[0.04]">
                     <div className="flex items-center gap-2.5">
@@ -450,15 +501,15 @@ export default function Broadcast() {
                     </span>
                   </label>
 
-                  <div className="max-h-52 space-y-1 overflow-y-auto pr-1">
-                    {selectionList.map((person) => {
-                      const id = person?.userid ?? person?.id;
-                      const name =
-                        person?.name ||
-                        person?.driver_name ||
-                        person?.admin_name ||
-                        person?.username ||
-                        "Unknown";
+                  <div className="dark-scrollbar max-h-52 space-y-1 overflow-y-auto pr-1">
+                    {filteredSelectionList.length === 0 && (
+                      <div className="px-2 py-3 text-center text-[12px] text-white/45">
+                        No users found
+                      </div>
+                    )}
+                    {filteredSelectionList.map((person) => {
+                      const id = getPersonId(person);
+                      const name = getPersonName(person);
 
                       return (
                         <label
@@ -911,5 +962,4 @@ function formatDateCompact(timestamp) {
     return timestamp;
   }
 }
-
 
