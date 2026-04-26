@@ -265,7 +265,7 @@ body{
 .dark-scrollbar::-webkit-scrollbar-thumb {
   background: rgba(110, 131, 255, 0.45);
   border-radius: 999px;
-  border: 2px solid rgba(35, 27, 63, 1);
+  border: 2px solid rgba(12, 10, 24, 1);
 }
 
 .dark-scrollbar::-webkit-scrollbar-thumb:hover {

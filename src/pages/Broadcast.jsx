@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Check,
@@ -28,6 +28,7 @@ import { useAppSelector } from "../store/hooks";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
 import { extractAttachmentDisplayName } from "../utils/chatAttachments";
+import { fetchAdmins } from "../services/adminAPI";
 
 const MESSAGE_LIMIT = 500;
 
@@ -56,6 +57,36 @@ function getBroadcastAudienceLabel(recipientType) {
   }
 }
 
+const normalizeBroadcastAdmins = (payload) => {
+  const candidates = Array.isArray(payload)
+    ? payload
+    : payload?.admins || payload?.data || payload?.users || payload?.result || [];
+
+  if (!Array.isArray(candidates)) return [];
+
+  return candidates
+    .map((admin, index) => {
+      const userid =
+        admin?.userid ||
+        admin?.userId ||
+        admin?.username ||
+        admin?.name ||
+        admin?.email ||
+        admin?.id ||
+        `admin-${index + 1}`;
+
+      return {
+        ...admin,
+        userid,
+        id: admin?.id || userid,
+        name: admin?.name || admin?.username || admin?.userid || admin?.email || userid,
+        admin_name:
+          admin?.admin_name || admin?.name || admin?.username || admin?.userid || userid,
+      };
+    })
+    .filter((admin) => admin.userid || admin.id);
+};
+
 export default function Broadcast() {
   const navigate = useNavigate();
   const [recipients, setRecipients] = useState("all");
@@ -76,17 +107,33 @@ export default function Broadcast() {
   const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
   const [pendingDeleteBroadcast, setPendingDeleteBroadcast] = useState(null);
   const [isDeletingBroadcast, setIsDeletingBroadcast] = useState(false);
+  const [broadcastAdmins, setBroadcastAdmins] = useState([]);
+  const [broadcastAdminsLoading, setBroadcastAdminsLoading] = useState(false);
   const fileInputRef = useRef(null);
 
   const { users: drivers = [] } = useAppSelector((state) => state.users);
-  const maintenanceUsers = useAppSelector(
-    (state) => state?.maintenanceUsers?.users || []
-  );
   const { user: adminUser } = useAuth();
+
+  const loadBroadcastAdmins = useCallback(async () => {
+    setBroadcastAdminsLoading(true);
+    try {
+      const response = await fetchAdmins();
+      setBroadcastAdmins(normalizeBroadcastAdmins(response));
+    } catch (error) {
+      console.error("Failed to load broadcast admins:", error);
+      toast.error("Failed to load admins");
+    } finally {
+      setBroadcastAdminsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     loadBroadcastHistory();
   }, []);
+
+  useEffect(() => {
+    loadBroadcastAdmins();
+  }, [loadBroadcastAdmins]);
 
   useEffect(() => {
     setDriverSelections((prev) => {
@@ -107,7 +154,7 @@ export default function Broadcast() {
     setAdminSelections((prev) => {
       const next = { ...prev };
 
-      maintenanceUsers.forEach((admin) => {
+      broadcastAdmins.forEach((admin) => {
         const id = admin?.userid ?? admin?.id;
         if (id && !(id in next)) {
           next[id] = true;
@@ -116,7 +163,7 @@ export default function Broadcast() {
 
       return next;
     });
-  }, [maintenanceUsers]);
+  }, [broadcastAdmins]);
 
   useEffect(() => {
     setShowRecipientList(false);
@@ -146,13 +193,13 @@ export default function Broadcast() {
       .filter((id) => id && driverSelections[id]);
 
   const getSelectedAdminIds = () =>
-    maintenanceUsers
+    broadcastAdmins
       .map((admin) => admin?.userid ?? admin?.id)
       .filter((id) => id && adminSelections[id]);
 
   const selectedDriverCount = getSelectedDriverIds().length;
   const selectedAdminCount = getSelectedAdminIds().length;
-  const selectionList = recipients === "drivers" ? drivers : maintenanceUsers;
+  const selectionList = recipients === "drivers" ? drivers : broadcastAdmins;
   const currentSelections =
     recipients === "drivers" ? driverSelections : adminSelections;
   const getPersonId = (person) => person?.userid ?? person?.id;
@@ -324,7 +371,7 @@ export default function Broadcast() {
         recipients,
         message,
         drivers,
-        maintenanceUsers,
+        broadcastAdmins,
         getSelectedDriverIds(),
         getSelectedAdminIds(),
         {
@@ -502,6 +549,11 @@ export default function Broadcast() {
                   </label>
 
                   <div className="dark-scrollbar max-h-52 space-y-1 overflow-y-auto pr-1">
+                    {recipients === "admins" && broadcastAdminsLoading && (
+                      <div className="px-2 py-2 text-[12px] text-white/50">
+                        Loading admins...
+                      </div>
+                    )}
                     {filteredSelectionList.length === 0 && (
                       <div className="px-2 py-3 text-center text-[12px] text-white/45">
                         No users found
@@ -745,7 +797,7 @@ export default function Broadcast() {
           </div>
 
           {!isHistoryCollapsed && (
-            <div className="max-h-[420px] space-y-3 overflow-y-auto px-4 py-4">
+            <div className="dark-scrollbar max-h-[420px] space-y-3 overflow-y-auto px-4 py-4">
               {loading ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="h-5 w-5 animate-spin text-white/65" />
@@ -962,4 +1014,3 @@ function formatDateCompact(timestamp) {
     return timestamp;
   }
 }
-
