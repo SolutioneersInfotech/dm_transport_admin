@@ -24,10 +24,11 @@ import { Checkbox } from "../components/ui/checkbox";
 import { sendBroadcast, fetchBroadcastHistory, deleteBroadcast } from "../services/broadcastAPI";
 import { uploadBroadcastFile } from "../services/broadcastFileUpload";
 import FilePreviewModal from "../components/FilePreviewModal";
-import { useAppSelector } from "../store/hooks";
+import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
 import { extractAttachmentDisplayName } from "../utils/chatAttachments";
+import { fetchMaintenanceUsers } from "../store/slices/maintenanceUsersSlice";
 
 const MESSAGE_LIMIT = 500;
 
@@ -78,6 +79,7 @@ export default function Broadcast() {
   const [isDeletingBroadcast, setIsDeletingBroadcast] = useState(false);
   const fileInputRef = useRef(null);
 
+  const dispatch = useAppDispatch();
   const { users: drivers = [] } = useAppSelector((state) => state.users);
   const maintenanceUsers = useAppSelector(
     (state) => state?.maintenanceUsers?.users || []
@@ -87,6 +89,10 @@ export default function Broadcast() {
   useEffect(() => {
     loadBroadcastHistory();
   }, []);
+
+  useEffect(() => {
+    dispatch(fetchMaintenanceUsers({ limit: -1 }));
+  }, [dispatch]);
 
   useEffect(() => {
     setDriverSelections((prev) => {
@@ -745,7 +751,7 @@ export default function Broadcast() {
           </div>
 
           {!isHistoryCollapsed && (
-            <div className="max-h-[420px] space-y-3 overflow-y-auto px-4 py-4">
+            <div className="dark-scrollbar max-h-[420px] space-y-3 overflow-y-auto px-4 py-4">
               {loading ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="h-5 w-5 animate-spin text-white/65" />

@@ -25,7 +25,7 @@ const ProtectedLayout = () => {
       <GlobalUnreadBadgeSync />
       <GlobalResumeReconcile />
       <Sidebar />
-      <div className="flex-1 h-screen overflow-y-auto">
+      <div className="dark-scrollbar flex-1 h-screen overflow-y-auto">
         <Outlet />
       </div>
     </div>
