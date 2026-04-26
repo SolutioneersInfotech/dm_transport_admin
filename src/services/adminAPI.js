@@ -19,8 +19,10 @@ async function api(url, method = "GET", body = null) {
   });
 
   if (!res.ok) {
-    const message = await res.text();
-    throw new Error(message || "Failed to fetch admin data.");
+    const errorPayload = await res.json().catch(async () => ({
+      message: await res.text().catch(() => ""),
+    }));
+    throw new Error(errorPayload?.message || "Failed to fetch admin data.");
   }
 
   return res.json();
@@ -52,8 +54,10 @@ export async function deleteAdmin(userid) {
   });
 
   if (!res.ok) {
-    const message = await res.text();
-    throw new Error(message || "Failed to delete admin.");
+    const errorPayload = await res.json().catch(async () => ({
+      message: await res.text().catch(() => ""),
+    }));
+    throw new Error(errorPayload?.message || "Failed to delete admin.");
   }
 
   return res.json().catch(() => ({}));
