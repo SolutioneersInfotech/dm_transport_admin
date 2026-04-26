@@ -88,25 +88,33 @@ export default function Broadcast() {
   }, []);
 
   useEffect(() => {
-    const selections = {};
-    drivers.forEach((driver) => {
-      const id = driver?.userid ?? driver?.id;
-      if (id) {
-        selections[id] = true;
-      }
+    setDriverSelections((prev) => {
+      const next = { ...prev };
+
+      drivers.forEach((driver) => {
+        const id = driver?.userid ?? driver?.id;
+        if (id && !(id in next)) {
+          next[id] = true;
+        }
+      });
+
+      return next;
     });
-    setDriverSelections(selections);
   }, [drivers]);
 
   useEffect(() => {
-    const selections = {};
-    maintenanceUsers.forEach((admin) => {
-      const id = admin?.userid ?? admin?.id;
-      if (id) {
-        selections[id] = true;
-      }
+    setAdminSelections((prev) => {
+      const next = { ...prev };
+
+      maintenanceUsers.forEach((admin) => {
+        const id = admin?.userid ?? admin?.id;
+        if (id && !(id in next)) {
+          next[id] = true;
+        }
+      });
+
+      return next;
     });
-    setAdminSelections(selections);
   }, [maintenanceUsers]);
 
   useEffect(() => {
@@ -131,10 +139,14 @@ export default function Broadcast() {
   };
 
   const getSelectedDriverIds = () =>
-    Object.keys(driverSelections).filter((id) => driverSelections[id]);
+    drivers
+      .map((driver) => driver?.userid ?? driver?.id)
+      .filter((id) => id && driverSelections[id]);
 
   const getSelectedAdminIds = () =>
-    Object.keys(adminSelections).filter((id) => adminSelections[id]);
+    maintenanceUsers
+      .map((admin) => admin?.userid ?? admin?.id)
+      .filter((id) => id && adminSelections[id]);
 
   const selectedDriverCount = getSelectedDriverIds().length;
   const selectedAdminCount = getSelectedAdminIds().length;
