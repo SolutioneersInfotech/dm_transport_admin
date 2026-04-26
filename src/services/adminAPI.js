@@ -8,6 +8,18 @@ function getToken() {
   return localStorage.getItem("adminToken");
 }
 
+async function readErrorMessage(res, fallback) {
+  const raw = await res.text().catch(() => "");
+  if (!raw) return fallback;
+
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed?.message || raw || fallback;
+  } catch {
+    return raw || fallback;
+  }
+}
+
 async function api(url, method = "GET", body = null) {
   const res = await fetch(`${BASE_URL}/${url}`, {
     method,
@@ -19,8 +31,8 @@ async function api(url, method = "GET", body = null) {
   });
 
   if (!res.ok) {
-    const message = await res.text();
-    throw new Error(message || "Failed to fetch admin data.");
+    const message = await readErrorMessage(res, "Failed to fetch admin data.");
+    throw new Error(message);
   }
 
   return res.json();
@@ -39,22 +51,5 @@ export async function createAdmin(payload) {
 }
 
 export async function deleteAdmin(userid) {
-  const token = getToken();
-  const formData = new FormData();
-  formData.append("userid", userid);
-
-  const res = await fetch(`${BASE_URL}/deleteadmin`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    body: formData,
-  });
-
-  if (!res.ok) {
-    const message = await res.text();
-    throw new Error(message || "Failed to delete admin.");
-  }
-
-  return res.json().catch(() => ({}));
+  return api("deleteadmin", "POST", { userid });
 }
