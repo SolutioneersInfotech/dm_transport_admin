@@ -279,11 +279,16 @@ function isMessageConfirmed(optimisticMessage, confirmedMessage) {
   const confirmedAttachment = String(confirmedMessage?.content?.attachmentUrl ?? "").trim();
   const optimisticSender = String(optimisticMessage?.sendername ?? "").trim();
   const confirmedSender = String(confirmedMessage?.sendername ?? "").trim();
+  const optimisticTime = parseMessageDateTime(optimisticMessage?.dateTime);
+  const confirmedTime = parseMessageDateTime(confirmedMessage?.dateTime);
+  const hasComparableTime = optimisticTime > 0 && confirmedTime > 0;
+  const withinTwoMinutes = Math.abs(optimisticTime - confirmedTime) <= 2 * 60 * 1000;
 
   return (
     optimisticText === confirmedText &&
     optimisticAttachment === confirmedAttachment &&
-    optimisticSender === confirmedSender
+    optimisticSender === confirmedSender &&
+    (!hasComparableTime || withinTwoMinutes)
   );
 }
 
@@ -745,7 +750,6 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     console.log("📤 Creating temporary message with attachment:", tempMsg);
     
     setOptimisticMessages((prev) => [...prev, tempMsg]);
-    setMessages((prev) => sortMessagesByDate([...prev, tempMsg]));
     setSelectedFile(null);
     setShowFilePreview(false);
     setReplyTo(null);
@@ -818,7 +822,6 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     };
 
     setOptimisticMessages((prev) => [...prev, tempMsg]);
-    setMessages((prev) => sortMessagesByDate([...prev, tempMsg]));
 
     const now = new Date().toISOString();
     dispatch(updateLastMessageAction({ userid: driverId, lastMessage: trimmedText, lastChatTime: now }));
