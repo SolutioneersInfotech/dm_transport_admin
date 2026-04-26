@@ -69,13 +69,18 @@ export async function sendBroadcast(
     let recipientNames = [];
 
     if (type === "all") {
-      // All users = all drivers + all admins
-      const allDriverIds = drivers.map((d) => d?.userid ?? d?.id).filter(Boolean);
-      const allAdminIds = admins.map((a) => a?.userid ?? a?.id).filter(Boolean);
-      userids = [...allDriverIds, ...allAdminIds];
-      
-      const driverNames = drivers.map((d) => d?.name || d?.driver_name || "Unknown").filter(Boolean);
-      const adminNames = admins.map((a) => a?.name || a?.username || "Unknown").filter(Boolean);
+      const selectedDriverIdSet = new Set(selectedDriverIds.filter(Boolean));
+      const selectedAdminIdSet = new Set(selectedAdminIds.filter(Boolean));
+      userids = [...selectedDriverIdSet, ...selectedAdminIdSet];
+
+      const driverNames = drivers
+        .filter((d) => selectedDriverIdSet.has(d?.userid ?? d?.id))
+        .map((d) => d?.name || d?.driver_name || "Unknown")
+        .filter(Boolean);
+      const adminNames = admins
+        .filter((a) => selectedAdminIdSet.has(a?.userid ?? a?.id))
+        .map((a) => a?.name || a?.username || "Unknown")
+        .filter(Boolean);
       recipientNames = [...driverNames, ...adminNames];
     } else if (type === "drivers") {
       // Only selected drivers
