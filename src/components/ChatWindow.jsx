@@ -266,6 +266,20 @@ function buildOptimisticMessageId() {
   return `temp-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function isBroadcastMessage(message) {
+  return (
+    message?.type === "broadcast" ||
+    message?.isBroadcast === true ||
+    message?.isbroadcast === true ||
+    String(message?.isbroadcast).toLowerCase() === "true" ||
+    message?.broadcast === true ||
+    String(message?.broadcast).toLowerCase() === "true" ||
+    Boolean(message?.recipientType) ||
+    Boolean(message?.broadcastId) ||
+    message?.source === "broadcast"
+  );
+}
+
 function sortMessagesByDate(messages) {
   return [...messages].sort((left, right) => {
     return parseMessageDateTime(left?.dateTime) - parseMessageDateTime(right?.dateTime);
@@ -1217,7 +1231,7 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
                   <div className="flex-1 min-w-0">
                     <ChatMessageBubble
                       msg={msg}
-                      isBroadcast={msg.type === "broadcast"}
+                      isBroadcast={isBroadcastMessage(msg)}
                       senderName={senderName}
                       showSenderName={showSenderName}
                       replyToMessage={replyToMessage}

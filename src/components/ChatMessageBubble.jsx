@@ -316,6 +316,17 @@ function ChatMessageBubble({
 }) {
   /* ================= DATA ================= */
   const isAdmin = msg?.type === 1;
+  const isBroadcastMessage =
+    isBroadcast ||
+    msg?.type === "broadcast" ||
+    msg?.isBroadcast === true ||
+    msg?.isbroadcast === true ||
+    String(msg?.isbroadcast).toLowerCase() === "true" ||
+    msg?.broadcast === true ||
+    String(msg?.broadcast).toLowerCase() === "true" ||
+    Boolean(msg?.recipientType) ||
+    Boolean(msg?.broadcastId) ||
+    msg?.source === "broadcast";
 
   const rawMessage = msg?.content?.message;
   const text =
@@ -530,14 +541,6 @@ function ChatMessageBubble({
             >
               {displayName}
             </span>
-            {isBroadcast && (
-              <span
-                className="inline-flex items-center justify-center rounded-full bg-[#6e83ff]/20 p-1 text-[#85a0ff]"
-                title="Broadcast message"
-              >
-                <Megaphone className="h-3.5 w-3.5" />
-              </span>
-            )}
           </div>
         )}
 
@@ -545,13 +548,6 @@ function ChatMessageBubble({
         <div
           className={`px-3 py-2 shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] text-sm ${bubbleStyle} ${bubbleRounding}`}
         >
-          {/* Broadcast indicator (when sender name is not shown) */}
-          {isBroadcast && !showSenderName && (
-            <div className="mb-2 inline-flex items-center justify-center rounded-full bg-white/[0.08] p-1 text-[#85a0ff]">
-              <Megaphone className="h-3.5 w-3.5" />
-            </div>
-          )}
-
           {/* Replying to */}
           {showReplyTo && (
             <button
@@ -708,6 +704,15 @@ function ChatMessageBubble({
 
           {/* Meta */}
           <div className="mt-1 flex items-center justify-end gap-1">
+            {isBroadcastMessage && (
+              <span
+                className="inline-flex items-center text-white/75"
+                title="Broadcast message"
+                aria-label="Broadcast message"
+              >
+                <Megaphone className="h-3.5 w-3.5" />
+              </span>
+            )}
             <span
               className={`text-[10px] ${isAdmin ? "text-white/80" : "text-gray-400"}`}
             >
