@@ -21,7 +21,11 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Checkbox } from "../components/ui/checkbox";
-import { sendBroadcast, fetchBroadcastHistory, deleteBroadcast } from "../services/broadcastAPI";
+import {
+  sendBroadcast,
+  fetchBroadcastHistory,
+  deleteBroadcast,
+} from "../services/broadcastAPI";
 import { uploadBroadcastFile } from "../services/broadcastFileUpload";
 import FilePreviewModal from "../components/FilePreviewModal";
 import { useAppSelector } from "../store/hooks";
@@ -60,7 +64,11 @@ function getBroadcastAudienceLabel(recipientType) {
 const normalizeBroadcastAdmins = (payload) => {
   const candidates = Array.isArray(payload)
     ? payload
-    : payload?.admins || payload?.data || payload?.users || payload?.result || [];
+    : payload?.admins ||
+      payload?.data ||
+      payload?.users ||
+      payload?.result ||
+      [];
 
   if (!Array.isArray(candidates)) return [];
 
@@ -79,9 +87,18 @@ const normalizeBroadcastAdmins = (payload) => {
         ...admin,
         userid,
         id: admin?.id || userid,
-        name: admin?.name || admin?.username || admin?.userid || admin?.email || userid,
+        name:
+          admin?.name ||
+          admin?.username ||
+          admin?.userid ||
+          admin?.email ||
+          userid,
         admin_name:
-          admin?.admin_name || admin?.name || admin?.username || admin?.userid || userid,
+          admin?.admin_name ||
+          admin?.name ||
+          admin?.username ||
+          admin?.userid ||
+          userid,
       };
     })
     .filter((admin) => admin.userid || admin.id);
@@ -205,7 +222,10 @@ export default function Broadcast() {
     __selectionKey: `driver:${driver?.userid ?? driver?.id}`,
     __id: driver?.userid ?? driver?.id,
     __name:
-      driver?.name || driver?.driver_name || driver?.username || "Unknown Driver",
+      driver?.name ||
+      driver?.driver_name ||
+      driver?.username ||
+      "Unknown Driver",
   }));
   const adminRows = broadcastAdmins.map((admin) => ({
     ...admin,
@@ -239,10 +259,16 @@ export default function Broadcast() {
   const togglePersonSelection = (person) => {
     if (!person?.__id) return;
     if (person.__recipientKind === "driver") {
-      setDriverSelections((prev) => ({ ...prev, [person.__id]: !prev[person.__id] }));
+      setDriverSelections((prev) => ({
+        ...prev,
+        [person.__id]: !prev[person.__id],
+      }));
       return;
     }
-    setAdminSelections((prev) => ({ ...prev, [person.__id]: !prev[person.__id] }));
+    setAdminSelections((prev) => ({
+      ...prev,
+      [person.__id]: !prev[person.__id],
+    }));
   };
 
   const filteredSelectionList = selectionList.filter((person) => {
@@ -252,12 +278,14 @@ export default function Broadcast() {
     const id = String(person?.__id || "").toLowerCase();
     const name = String(person?.__name || "").toLowerCase();
     const phone = String(
-      person?.phone || person?.mobile || person?.phoneNumber || ""
+      person?.phone || person?.mobile || person?.phoneNumber || "",
     ).toLowerCase();
     const email = String(person?.email || "").toLowerCase();
     const typeLabel = person?.__recipientKind === "admin" ? "admin" : "driver";
 
-    return [id, name, phone, email, typeLabel].some((value) => value.includes(searchValue));
+    return [id, name, phone, email, typeLabel].some((value) =>
+      value.includes(searchValue),
+    );
   });
 
   const allVisibleSelected =
@@ -354,7 +382,7 @@ export default function Broadcast() {
             name: prev.name || "",
             mimeType: prev.type || "",
           }
-        : prev
+        : prev,
     );
     setShowAttachmentPreview(false);
   };
@@ -368,7 +396,9 @@ export default function Broadcast() {
   const handleSendBroadcast = async () => {
     const hasMessage = Boolean(message.trim());
     const attachmentMeta =
-      selectedAttachment && !(selectedAttachment instanceof File) ? selectedAttachment : null;
+      selectedAttachment && !(selectedAttachment instanceof File)
+        ? selectedAttachment
+        : null;
 
     if (!hasMessage && !attachmentMeta?.url) {
       toast.error("Enter a message or attach a file");
@@ -384,7 +414,10 @@ export default function Broadcast() {
       toast.error("Select at least one admin");
       return;
     }
-    if (recipients === "all" && selectedDriverCount + selectedAdminCount === 0) {
+    if (
+      recipients === "all" &&
+      selectedDriverCount + selectedAdminCount === 0
+    ) {
       toast.error("Select at least one user");
       return;
     }
@@ -402,7 +435,7 @@ export default function Broadcast() {
           attachmentUrl: attachmentMeta?.url || "",
           attachmentName: attachmentMeta?.name || "",
           attachmentMimeType: attachmentMeta?.mimeType || "",
-        }
+        },
       );
 
       toast.success("Broadcast sent successfully");
@@ -463,7 +496,9 @@ export default function Broadcast() {
               onClick={() => setIsComposeCollapsed((prev) => !prev)}
               className="flex h-9 w-9 items-center justify-center rounded-md border border-white/8 bg-[#282047]/72 text-white/60 transition hover:text-white"
               aria-label={
-                isComposeCollapsed ? "Expand send broadcast panel" : "Collapse send broadcast panel"
+                isComposeCollapsed
+                  ? "Expand send broadcast panel"
+                  : "Collapse send broadcast panel"
               }
             >
               <ChevronDown
@@ -476,278 +511,289 @@ export default function Broadcast() {
 
           {!isComposeCollapsed && (
             <div className="mt-4 rounded-[10px] border border-white/7 bg-slate-950 p-4">
-            <label className="mb-2 block text-[13px] font-semibold text-white/78">
-              Recipients
-            </label>
+              <label className="mb-2 block text-[13px] font-semibold text-white/78">
+                Recipients
+              </label>
 
-            <div className="rounded-[9px] border border-white/8 bg-slate-950 px-4 py-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex flex-wrap gap-1.5">
-                  {recipientOptions.map((option) => {
-                    const Icon = option.icon;
-                    const active = recipients === option.value;
-
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setRecipients(option.value)}
-                        className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition ${
-                          active
-                            ? "border-[#7287ff]/70 bg-[#6b7ef6]/20 text-white"
-                            : "border-white/8 bg-white/[0.03] text-white/68 hover:text-white/88"
-                        }`}
-                      >
-                        <Icon className="h-3 w-3" />
-                        <span>{option.label}</span>
-                        {active && <X className="h-3 w-3 text-white/45" />}
-                      </button>
-                    );
-                  })}
-                </div>
-                <ChevronDown className="h-4 w-4 text-white/32" />
-              </div>
-            </div>
-
-            <div className="mt-2">
-              <button
-                type="button"
-                onClick={() => setShowRecipientList((prev) => !prev)}
-                className="flex w-full items-center justify-between rounded-[9px] border border-white/8 bg-slate-950 px-4 py-3 text-left text-[13px] text-white/72 transition hover:text-white"
-              >
-                <span>{selectionLabel}</span>
-                <ChevronDown
-                  className={`h-4 w-4 text-white/35 transition-transform ${
-                    showRecipientList ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
-
-              {showRecipientList && (
-                <div className="mt-2 rounded-[9px] border border-white/8 bg-slate-950 p-3">
-                  <div className="mb-2 px-1 text-[11px] uppercase tracking-[0.22em] text-white/34">
-                    {recipients === "drivers"
-                      ? `${selectedDriverCount} Selected`
-                      : recipients === "admins"
-                        ? `${selectedAdminCount} Selected`
-                        : `${selectedDriverCount + selectedAdminCount} Selected`}
-                  </div>
-                  <div className="relative mb-2">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
-                    <input
-                      type="text"
-                      value={recipientSearch}
-                      onChange={(event) => setRecipientSearch(event.target.value)}
-                      placeholder={`Search ${
-                        recipients === "drivers"
-                          ? "drivers"
-                          : recipients === "admins"
-                            ? "admins"
-                            : "users"
-                      }...`}
-                      className="h-9 w-full rounded-md border border-white/8 bg-[#17122c] pl-9 pr-9 text-[13px] text-white outline-none placeholder:text-white/30 focus:border-[#6b82ff]/75"
-                    />
-                    {recipientSearch && (
-                      <button
-                        type="button"
-                        onClick={() => setRecipientSearch("")}
-                        className="absolute right-2 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-white/45 transition hover:bg-white/10 hover:text-white"
-                        aria-label="Clear recipient search"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-
-                  <label className="mb-1 flex items-center justify-between rounded-md px-2 py-2 text-[13px] text-white/82 hover:bg-white/[0.04]">
-                    <div className="flex items-center gap-2.5">
-                      <Checkbox
-                        checked={allVisibleSelected}
-                        onCheckedChange={handleToggleAll}
-                        className="border-white/18 bg-white/[0.04] data-[state=checked]:border-[#6b82ff] data-[state=checked]:bg-[#6b82ff] data-[state=checked]:text-white"
-                      />
-                      <span>Select All</span>
-                    </div>
-                    <span className="text-[10px] uppercase tracking-[0.18em] text-white/32">
-                      Default
-                    </span>
-                  </label>
-
-                  <div className="dark-scrollbar max-h-52 space-y-1 overflow-y-auto pr-1">
-                    {(recipients === "admins" || recipients === "all") && broadcastAdminsLoading && (
-                      <div className="px-2 py-2 text-[12px] text-white/50">
-                        Loading admins...
-                      </div>
-                    )}
-                    {filteredSelectionList.length === 0 && (
-                      <div className="px-2 py-3 text-center text-[12px] text-white/45">
-                        No users found
-                      </div>
-                    )}
-                    {filteredSelectionList.map((person) => {
-                      const id = person?.__id;
-                      const name = person?.__name;
+              <div className="rounded-[9px] border border-white/8 bg-slate-950 px-4 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {recipientOptions.map((option) => {
+                      const Icon = option.icon;
+                      const active = recipients === option.value;
 
                       return (
-                        <label
-                          key={person.__selectionKey}
-                          className="flex items-center justify-between gap-3 rounded-md px-2 py-2 text-[13px] text-white/74 transition hover:bg-white/[0.04] hover:text-white"
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setRecipients(option.value)}
+                          className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition ${
+                            active
+                              ? "border-[#7287ff]/70 bg-[#6b7ef6]/20 text-white"
+                              : "border-white/8 bg-white/[0.03] text-white/68 hover:text-white/88"
+                          }`}
                         >
-                          <div className="flex min-w-0 items-center gap-2.5">
-                            <Checkbox
-                              checked={isPersonSelected(person)}
-                              onCheckedChange={() => togglePersonSelection(person)}
-                              className="border-white/18 bg-white/[0.04] data-[state=checked]:border-[#6b82ff] data-[state=checked]:bg-[#6b82ff] data-[state=checked]:text-white"
-                            />
-                            <span className="truncate">{name}</span>
-                            {recipients === "all" && (
-                              <span className="rounded border border-white/8 bg-white/[0.04] px-1.5 py-0.5 text-[10px] text-white/38">
-                                {person.__recipientKind === "driver" ? "Driver" : "Admin"}
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[11px] text-white/28">{id}</span>
-                        </label>
+                          <Icon className="h-3 w-3" />
+                          <span>{option.label}</span>
+                          {active && <X className="h-3 w-3 text-white/45" />}
+                        </button>
                       );
                     })}
                   </div>
+                  <ChevronDown className="h-4 w-4 text-white/32" />
                 </div>
-              )}
-            </div>
-
-            <div className="mt-4">
-              <div className="mb-2 flex items-center justify-between">
-                <label className="text-[13px] font-semibold text-white/78">
-                  Message
-                </label>
-                <span className="text-[11px] text-white/36">
-                  {message.length}/{MESSAGE_LIMIT}
-                </span>
               </div>
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,video/*,application/pdf"
-                onChange={handleAttachmentSelect}
-                className="hidden"
-                aria-label="Attach file to broadcast"
-              />
-              <div className="relative">
-                <textarea
-                  value={message}
-                  onChange={(event) =>
-                    setMessage(event.target.value.slice(0, MESSAGE_LIMIT))
-                  }
-                  rows={4}
-                  placeholder="Enter your broadcast message..."
-                  className="min-h-[112px] w-full resize-none rounded-[9px] border border-white/8 bg-slate-950 px-4 py-3.5 pr-16 text-[13px] text-white outline-none placeholder:text-white/27 focus:border-[#6b82ff]/75"
-                />
-                <div className="absolute bottom-3 right-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowAttachmentOptions((prev) => !prev)}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/8 bg-[#111b21] text-white/72 backdrop-blur-sm transition hover:bg-[#1a252c] hover:text-white"
-                    aria-label="Attach file to broadcast"
-                    aria-expanded={showAttachmentOptions}
-                    aria-haspopup="true"
-                  >
-                    <Paperclip className="h-4.5 w-4.5" />
-                  </button>
-                  {showAttachmentOptions && (
-                    <>
-                      <div
-                        className="fixed inset-0 z-40"
-                        onClick={() => setShowAttachmentOptions(false)}
-                        aria-hidden="true"
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowRecipientList((prev) => !prev)}
+                  className="flex w-full items-center justify-between rounded-[9px] border border-white/8 bg-slate-950 px-4 py-3 text-left text-[13px] text-white/72 transition hover:text-white"
+                >
+                  <span>{selectionLabel}</span>
+                  <ChevronDown
+                    className={`h-4 w-4 text-white/35 transition-transform ${
+                      showRecipientList ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+
+                {showRecipientList && (
+                  <div className="mt-2 rounded-[9px] border border-white/8 bg-slate-950 p-3">
+                    <div className="mb-2 px-1 text-[11px] uppercase tracking-[0.22em] text-white/34">
+                      {recipients === "drivers"
+                        ? `${selectedDriverCount} Selected`
+                        : recipients === "admins"
+                          ? `${selectedAdminCount} Selected`
+                          : `${selectedDriverCount + selectedAdminCount} Selected`}
+                    </div>
+                    <div className="relative mb-2">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
+                      <input
+                        type="text"
+                        value={recipientSearch}
+                        onChange={(event) =>
+                          setRecipientSearch(event.target.value)
+                        }
+                        placeholder={`Search ${
+                          recipients === "drivers"
+                            ? "drivers"
+                            : recipients === "admins"
+                              ? "admins"
+                              : "users"
+                        }...`}
+                        className="h-9 w-full rounded-md border border-white/8 bg-[#17122c] pl-9 pr-9 text-[13px] text-white outline-none placeholder:text-white/30 focus:border-[#6b82ff]/75"
                       />
-                      <div
-                        className="absolute right-0 top-full z-50 mt-2 w-48 rounded-xl border border-white/10 bg-[#18142b] py-2 shadow-[0_18px_40px_rgba(0,0,0,0.38)]"
-                        role="menu"
-                        aria-label="Choose attachment type"
-                      >
+                      {recipientSearch && (
                         <button
                           type="button"
-                          onClick={() => openAttachmentPicker("image/*")}
-                          className="flex w-full items-center gap-3 px-4 py-3 text-left text-white/86 transition hover:bg-white/[0.05]"
-                          role="menuitem"
+                          onClick={() => setRecipientSearch("")}
+                          className="absolute right-2 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-white/45 transition hover:bg-white/10 hover:text-white"
+                          aria-label="Clear recipient search"
                         >
-                          <Image className="h-4.5 w-4.5 text-[#8ab4f8]" />
-                          <span className="text-sm">Photo</span>
+                          <X className="h-3.5 w-3.5" />
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => openAttachmentPicker("video/*")}
-                          className="flex w-full items-center gap-3 px-4 py-3 text-left text-white/86 transition hover:bg-white/[0.05]"
-                          role="menuitem"
-                        >
-                          <Video className="h-4.5 w-4.5 text-[#b5a3ff]" />
-                          <span className="text-sm">Video</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openAttachmentPicker("application/pdf")}
-                          className="flex w-full items-center gap-3 px-4 py-3 text-left text-white/86 transition hover:bg-white/[0.05]"
-                          role="menuitem"
-                        >
-                          <FileText className="h-4.5 w-4.5 text-[#fca5a5]" />
-                          <span className="text-sm">PDF</span>
-                        </button>
+                      )}
+                    </div>
+
+                    <label className="mb-1 flex items-center justify-between rounded-md px-2 py-2 text-[13px] text-white/82 hover:bg-white/[0.04]">
+                      <div className="flex items-center gap-2.5">
+                        <Checkbox
+                          checked={allVisibleSelected}
+                          onCheckedChange={handleToggleAll}
+                          className="border-white/18 bg-white/[0.04] data-[state=checked]:border-[#6b82ff] data-[state=checked]:bg-[#6b82ff] data-[state=checked]:text-white"
+                        />
+                        <span>Select All</span>
                       </div>
-                    </>
-                  )}
-                </div>
-              </div>
+                      <span className="text-[10px] uppercase tracking-[0.18em] text-white/32">
+                        Default
+                      </span>
+                    </label>
 
-              <div className="mt-1 text-[11px] text-white/34">
-                {message.length}/{MESSAGE_LIMIT}
-              </div>
+                    <div className="dark-scrollbar max-h-52 space-y-1 overflow-y-auto pr-1">
+                      {(recipients === "admins" || recipients === "all") &&
+                        broadcastAdminsLoading && (
+                          <div className="px-2 py-2 text-[12px] text-white/50">
+                            Loading admins...
+                          </div>
+                        )}
+                      {filteredSelectionList.length === 0 && (
+                        <div className="px-2 py-3 text-center text-[12px] text-white/45">
+                          No users found
+                        </div>
+                      )}
+                      {filteredSelectionList.map((person) => {
+                        const id = person?.__id;
+                        const name = person?.__name;
 
-              {selectedAttachment?.url && (
-                <div className="mt-3 flex items-center justify-between gap-3 rounded-[11px] border border-white/8 bg-slate-950 px-4 py-3 text-[13px] text-white/80">
-                  <div className="flex min-w-0 flex-1 items-center gap-3">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/55">
-                      <Paperclip className="h-4 w-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-[13px] font-medium text-white/88">
-                        {selectedAttachment.name || "Attachment ready"}
-                      </p>
-                      <p className="text-[11px] text-white/42">
-                        Ready to send with this broadcast
-                      </p>
+                        return (
+                          <label
+                            key={person.__selectionKey}
+                            className="flex items-center justify-between gap-3 rounded-md px-2 py-2 text-[13px] text-white/74 transition hover:bg-white/[0.04] hover:text-white"
+                          >
+                            <div className="flex min-w-0 items-center gap-2.5">
+                              <Checkbox
+                                checked={isPersonSelected(person)}
+                                onCheckedChange={() =>
+                                  togglePersonSelection(person)
+                                }
+                                className="border-white/18 bg-white/[0.04] data-[state=checked]:border-[#6b82ff] data-[state=checked]:bg-[#6b82ff] data-[state=checked]:text-white"
+                              />
+                              <span className="truncate">{name}</span>
+                              {recipients === "all" && (
+                                <span className="rounded border border-white/8 bg-white/[0.04] px-1.5 py-0.5 text-[10px] text-white/38">
+                                  {person.__recipientKind === "driver"
+                                    ? "Driver"
+                                    : "Admin"}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[11px] text-white/28">
+                              {id}
+                            </span>
+                          </label>
+                        );
+                      })}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={clearAttachment}
-                    className="rounded p-1 text-white/45 transition hover:bg-white/[0.05] hover:text-white"
-                    aria-label="Remove attachment"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
 
-            <button
-              type="button"
-              onClick={handleSendBroadcast}
-              disabled={broadcasting}
-              className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-[8px] bg-[linear-gradient(90deg,#4b67de,#5f8dff)] text-[14px] font-semibold text-white shadow-[0_10px_24px_rgba(77,105,222,0.24)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {broadcasting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Sending Broadcast</span>
-                </>
-              ) : (
-                <>
-                  <Send className="h-4 w-4" />
-                  <span>Send Broadcast</span>
-                </>
-              )}
-            </button>
+              <div className="mt-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <label className="text-[13px] font-semibold text-white/78">
+                    Message
+                  </label>
+                  <span className="text-[11px] text-white/36">
+                    {message.length}/{MESSAGE_LIMIT}
+                  </span>
+                </div>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,video/*,application/pdf"
+                  onChange={handleAttachmentSelect}
+                  className="hidden"
+                  aria-label="Attach file to broadcast"
+                />
+                <div className="relative">
+                  <textarea
+                    value={message}
+                    onChange={(event) =>
+                      setMessage(event.target.value.slice(0, MESSAGE_LIMIT))
+                    }
+                    rows={4}
+                    placeholder="Enter your broadcast message..."
+                    className="min-h-[112px] w-full resize-none rounded-[9px] border border-white/8 bg-slate-950 px-4 py-3.5 pr-16 text-[13px] text-white outline-none placeholder:text-white/27 focus:border-[#6b82ff]/75"
+                  />
+                  <div className="absolute bottom-3 right-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowAttachmentOptions((prev) => !prev)}
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/8 bg-[#111b21] text-white/72 backdrop-blur-sm transition hover:bg-[#1a252c] hover:text-white"
+                      aria-label="Attach file to broadcast"
+                      aria-expanded={showAttachmentOptions}
+                      aria-haspopup="true"
+                    >
+                      <Paperclip className="h-4.5 w-4.5" />
+                    </button>
+                    {showAttachmentOptions && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setShowAttachmentOptions(false)}
+                          aria-hidden="true"
+                        />
+                        <div
+                          className="absolute right-0 top-full z-50 mt-2 w-48 rounded-xl border border-white/10 bg-[#18142b] py-2 shadow-[0_18px_40px_rgba(0,0,0,0.38)]"
+                          role="menu"
+                          aria-label="Choose attachment type"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => openAttachmentPicker("image/*")}
+                            className="flex w-full items-center gap-3 px-4 py-3 text-left text-white/86 transition hover:bg-white/[0.05]"
+                            role="menuitem"
+                          >
+                            <Image className="h-4.5 w-4.5 text-[#8ab4f8]" />
+                            <span className="text-sm">Photo</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openAttachmentPicker("video/*")}
+                            className="flex w-full items-center gap-3 px-4 py-3 text-left text-white/86 transition hover:bg-white/[0.05]"
+                            role="menuitem"
+                          >
+                            <Video className="h-4.5 w-4.5 text-[#b5a3ff]" />
+                            <span className="text-sm">Video</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openAttachmentPicker("application/pdf")
+                            }
+                            className="flex w-full items-center gap-3 px-4 py-3 text-left text-white/86 transition hover:bg-white/[0.05]"
+                            role="menuitem"
+                          >
+                            <FileText className="h-4.5 w-4.5 text-[#fca5a5]" />
+                            <span className="text-sm">PDF</span>
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-1 text-[11px] text-white/34">
+                  {message.length}/{MESSAGE_LIMIT}
+                </div>
+
+                {selectedAttachment?.url && (
+                  <div className="mt-3 flex items-center justify-between gap-3 rounded-[11px] border border-white/8 bg-slate-950 px-4 py-3 text-[13px] text-white/80">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/55">
+                        <Paperclip className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-[13px] font-medium text-white/88">
+                          {selectedAttachment.name || "Attachment ready"}
+                        </p>
+                        <p className="text-[11px] text-white/42">
+                          Ready to send with this broadcast
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearAttachment}
+                      className="rounded p-1 text-white/45 transition hover:bg-white/[0.05] hover:text-white"
+                      aria-label="Remove attachment"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleSendBroadcast}
+                disabled={broadcasting}
+                className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-[8px] bg-[linear-gradient(90deg,#4b67de,#5f8dff)] text-[14px] font-semibold text-white shadow-[0_10px_24px_rgba(77,105,222,0.24)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {broadcasting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Sending Broadcast</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" />
+                    <span>Send Broadcast</span>
+                  </>
+                )}
+              </button>
             </div>
           )}
         </section>
@@ -766,23 +812,25 @@ export default function Broadcast() {
                       <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/30" />
                       <input
                         value={historySearch}
-                        onChange={(event) => setHistorySearch(event.target.value)}
+                        onChange={(event) =>
+                          setHistorySearch(event.target.value)
+                        }
                         placeholder="Search broadcasts..."
-                        className="h-8 w-[148px] rounded-md border border-white/8 bg-slate-950 pl-8 pr-2 text-[12px] text-white outline-none placeholder:text-white/27"
+                        className="h-8 w-[248px] rounded-md border border-white/8 bg-slate-950 pl-8 pr-2 text-[12px] text-white outline-none placeholder:text-white/27"
                       />
                     </div>
-                    <button
+                    {/* <button
                       type="button"
                       className="flex h-8 w-8 items-center justify-center rounded-md border border-white/8 bg-slate-950 text-white/60"
                     >
                       <Filter className="h-3.5 w-3.5" />
-                    </button>
+                    </button> */}
                   </>
                 )}
                 <button
                   type="button"
                   onClick={() => setIsHistoryCollapsed((prev) => !prev)}
-                  className="flex h-8 w-8 items-center justify-center rounded-md border border-white/8 bg-slate-950 text-white/60 transition hover:text-white"
+                  className="flex h-9 w-9 items-center justify-center rounded-md border border-white/8 bg-[#282047]/72 text-white/60 transition hover:text-white"
                   aria-label={
                     isHistoryCollapsed
                       ? "Expand broadcast history panel"
@@ -812,16 +860,16 @@ export default function Broadcast() {
                     }`}
                   >
                     <span>{filter.label}</span>
-                    {filter.value === "all" && <ChevronDown className="h-3 w-3" />}
+                    {filter.value === "all"}
                   </button>
                 ))}
 
-                <button
+                {/* <button
                   type="button"
                   className="flex h-8 w-8 items-center justify-center rounded-md border border-white/8 bg-slate-950 text-white/60"
                 >
                   <Filter className="h-3.5 w-3.5" />
-                </button>
+                </button> */}
               </div>
             )}
           </div>
@@ -857,10 +905,14 @@ export default function Broadcast() {
 
                           <div>
                             <div className="text-[15px] font-semibold text-white/92">
-                              {getBroadcastAudienceLabel(broadcast.recipientType)}
+                              {getBroadcastAudienceLabel(
+                                broadcast.recipientType,
+                              )}
                             </div>
                             <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-white/40">
-                              <span>{formatDateCompact(broadcast.timestamp)}</span>
+                              <span>
+                                {formatDateCompact(broadcast.timestamp)}
+                              </span>
                               <span>|</span>
                               <span className="rounded bg-white/[0.04] px-1.5 py-0.5">
                                 {broadcast.sendername || "Unknown Admin"}
@@ -942,7 +994,6 @@ export default function Broadcast() {
               )}
             </div>
           )}
-
         </section>
       </div>
       {pendingDeleteBroadcast && (
@@ -964,7 +1015,9 @@ export default function Broadcast() {
               </div>
               <button
                 type="button"
-                onClick={() => !isDeletingBroadcast && setPendingDeleteBroadcast(null)}
+                onClick={() =>
+                  !isDeletingBroadcast && setPendingDeleteBroadcast(null)
+                }
                 disabled={isDeletingBroadcast}
                 className="rounded p-1 text-white/45 transition hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Close delete confirmation"
@@ -1013,10 +1066,26 @@ export default function Broadcast() {
       {showAttachmentPreview && selectedAttachment instanceof File && (
         <FilePreviewModal
           file={selectedAttachment}
-          adminId={adminUser?.userid || adminUser?.userId || adminUser?.id || "admin"}
+          adminId={
+            adminUser?.userid || adminUser?.userId || adminUser?.id || "admin"
+          }
           uploadContext={recipients}
-          uploadFile={(file, adminId, recipientType, onProgress, onError, onComplete) =>
-            uploadBroadcastFile(file, adminId, recipientType, onProgress, onError, onComplete)
+          uploadFile={(
+            file,
+            adminId,
+            recipientType,
+            onProgress,
+            onError,
+            onComplete,
+          ) =>
+            uploadBroadcastFile(
+              file,
+              adminId,
+              recipientType,
+              onProgress,
+              onError,
+              onComplete,
+            )
           }
           title="Attach to broadcast"
           onClose={() => setShowAttachmentPreview(false)}
