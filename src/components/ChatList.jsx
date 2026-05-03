@@ -57,7 +57,10 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const [categoryFilter, setCategoryFilter] = useState([]); // Array of selected categories: ["F", "D", "C"]
   const [statusFilter, setStatusFilter] = useState("all"); // "all" | "seen" | "unseen"
   const [isStatusPopoverOpen, setIsStatusPopoverOpen] = useState(false);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [isCompactSearchLayout, setIsCompactSearchLayout] = useState(false);
   const observerTarget = useRef(null);
+  const searchControlsRef = useRef(null);
   const [unreadCounts, setUnreadCounts] = useState({});
   const unsubscribeUnreadRefs = useRef({});
   const unsubscribeLastMessageRefs = useRef({});
@@ -501,6 +504,25 @@ const handleSelectDriver = (driver) => {
 };
   
   const selectedDriverId = getDriverId(selectedDriver);
+  const shouldHideFiltersForCompactSearch =
+    isCompactSearchLayout && (isSearchFocused || Boolean(search.trim()));
+
+  useEffect(() => {
+    const container = searchControlsRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return undefined;
+
+    const updateLayoutMode = () => {
+      setIsCompactSearchLayout(container.clientWidth < 180);
+    };
+
+    updateLayoutMode();
+    const observer = new ResizeObserver(updateLayoutMode);
+    observer.observe(container);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     if (!isMaintenanceChat) return;
@@ -514,16 +536,22 @@ const handleSelectDriver = (driver) => {
     <div className="h-full flex flex-col">
       {/* 🔍 SEARCH BAR (STICKY) */}
       <div className="p-5 border-b border-gray-700 sticky top-0 bg-[#0d1117] z-20 space-y-3">
-        <div className="flex items-center justify-center gap-3">
+        <div ref={searchControlsRef} className="flex items-center justify-center gap-3">
           <Input
             type="text"
             placeholder="Search drivers..."
-            className="flex-1 max-w-md bg-[#1f2937]"
+            className={cn(
+              "flex-1 bg-[#1f2937]",
+              shouldHideFiltersForCompactSearch ? "w-full max-w-none" : "max-w-md"
+            )}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onFocus={() => setIsSearchFocused(true)}
+            onBlur={() => setIsSearchFocused(false)}
           />
 
           {/* Category Filters */}
+          {!shouldHideFiltersForCompactSearch && (
           <div className="flex items-center gap-2">
             {["C", "D", "F"].map((cat) => {
               const isSelected = categoryFilter.includes(cat);
@@ -634,6 +662,7 @@ const handleSelectDriver = (driver) => {
               <FaBullhorn className="h-4 w-4" />
             </Button>
           </div>
+          )}
         </div>
       </div>
 
