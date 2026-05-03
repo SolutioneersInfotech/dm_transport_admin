@@ -57,6 +57,8 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const [categoryFilter, setCategoryFilter] = useState([]); // Array of selected categories: ["F", "D", "C"]
   const [statusFilter, setStatusFilter] = useState("all"); // "all" | "seen" | "unseen"
   const [isStatusPopoverOpen, setIsStatusPopoverOpen] = useState(false);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [isSearchHovered, setIsSearchHovered] = useState(false);
   const observerTarget = useRef(null);
   const [unreadCounts, setUnreadCounts] = useState({});
   const unsubscribeUnreadRefs = useRef({});
@@ -502,6 +504,9 @@ const handleSelectDriver = (driver) => {
   
   const selectedDriverId = getDriverId(selectedDriver);
 
+  const hasSearchValue = Boolean(search?.trim());
+  const isSearchExpanded = isSearchFocused || isSearchHovered || hasSearchValue;
+
   useEffect(() => {
     if (!isMaintenanceChat) return;
     if (selectedDriverId) return;
@@ -514,17 +519,40 @@ const handleSelectDriver = (driver) => {
     <div className="h-full flex flex-col">
       {/* 🔍 SEARCH BAR (STICKY) */}
       <div className="p-5 border-b border-gray-700 sticky top-0 bg-[#0d1117] z-20 space-y-3">
-        <div className="flex items-center justify-center gap-3">
-          <Input
-            type="text"
-            placeholder="Search drivers..."
-            className="flex-1 max-w-md bg-[#1f2937]"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+        <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+          <div
+            className={cn(
+              "relative flex-shrink-0 rounded-md border bg-[#1f2937]/90 transition-all duration-200 ease-in-out",
+              isSearchExpanded
+                ? "w-[clamp(180px,45%,240px)] border-blue-400/70 bg-[#1f2937] shadow-[0_0_0_1px_rgba(59,130,246,0.25)]"
+                : "w-[82px] border-transparent hover:border-white/10",
+              isSearchFocused && "ring-1 ring-blue-400/60"
+            )}
+            onMouseEnter={() => setIsSearchHovered(true)}
+            onMouseLeave={() => setIsSearchHovered(false)}
+          >
+            <Input
+              type="text"
+              placeholder="Search drivers..."
+              className="h-8 border-0 bg-transparent px-3 text-sm text-gray-100 placeholder:text-gray-400 focus-visible:ring-0 focus-visible:ring-offset-0"
+              value={search}
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setIsSearchFocused(false)}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  if (search) {
+                    setSearch("");
+                  } else {
+                    e.currentTarget.blur();
+                  }
+                }
+              }}
+            />
+          </div>
 
           {/* Category Filters */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             {["C", "D", "F"].map((cat) => {
               const isSelected = categoryFilter.includes(cat);
               return (
