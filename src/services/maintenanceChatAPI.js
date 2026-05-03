@@ -207,6 +207,16 @@ export async function fetchMessages(userid, messageLimit = 10) {
     return { messages: [messages[messages.length - 1]] };
   }
 
+  const shouldFetchAll =
+    messageLimit === null ||
+    messageLimit === undefined ||
+    messageLimit === 0 ||
+    messageLimit === -1;
+
+  if (shouldFetchAll) {
+    return { messages };
+  }
+
   // Return the last N messages (most recent)
   return { messages: messages.slice(-messageLimit) };
 }
