@@ -535,7 +535,7 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
 
     let isCancelled = false;
 
-    fetchMessages(messageSubscriptionTarget, 200)
+    fetchMessages(messageSubscriptionTarget, -1)
       .then((response) => {
         if (isCancelled) return;
         const confirmedMessages = response?.messages || [];
