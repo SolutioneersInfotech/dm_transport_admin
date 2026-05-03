@@ -60,7 +60,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [isCompactSearchLayout, setIsCompactSearchLayout] = useState(false);
   const observerTarget = useRef(null);
-  const searchControlsRef = useRef(null);
+  const searchInputWrapRef = useRef(null);
   const [unreadCounts, setUnreadCounts] = useState({});
   const unsubscribeUnreadRefs = useRef({});
   const unsubscribeLastMessageRefs = useRef({});
@@ -508,16 +508,16 @@ const handleSelectDriver = (driver) => {
     isCompactSearchLayout && (isSearchFocused || Boolean(search.trim()));
 
   useEffect(() => {
-    const container = searchControlsRef.current;
-    if (!container || typeof ResizeObserver === "undefined") return undefined;
+    const inputWrap = searchInputWrapRef.current;
+    if (!inputWrap || typeof ResizeObserver === "undefined") return undefined;
 
     const updateLayoutMode = () => {
-      setIsCompactSearchLayout(container.clientWidth < 180);
+      setIsCompactSearchLayout(inputWrap.clientWidth < 180);
     };
 
     updateLayoutMode();
     const observer = new ResizeObserver(updateLayoutMode);
-    observer.observe(container);
+    observer.observe(inputWrap);
 
     return () => {
       observer.disconnect();
@@ -536,19 +536,21 @@ const handleSelectDriver = (driver) => {
     <div className="h-full flex flex-col">
       {/* 🔍 SEARCH BAR (STICKY) */}
       <div className="p-5 border-b border-gray-700 sticky top-0 bg-[#0d1117] z-20 space-y-3">
-        <div ref={searchControlsRef} className="flex items-center justify-center gap-3">
-          <Input
-            type="text"
-            placeholder="Search drivers..."
-            className={cn(
-              "flex-1 bg-[#1f2937]",
-              shouldHideFiltersForCompactSearch ? "w-full max-w-none" : "max-w-md"
-            )}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onFocus={() => setIsSearchFocused(true)}
-            onBlur={() => setIsSearchFocused(false)}
-          />
+        <div className="flex items-center justify-center gap-3">
+          <div
+            ref={searchInputWrapRef}
+            className={cn("flex-1", shouldHideFiltersForCompactSearch ? "w-full max-w-none" : "max-w-md")}
+          >
+            <Input
+              type="text"
+              placeholder="Search drivers..."
+              className="bg-[#1f2937]"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setIsSearchFocused(false)}
+            />
+          </div>
 
           {/* Category Filters */}
           {!shouldHideFiltersForCompactSearch && (
