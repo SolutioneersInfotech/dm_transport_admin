@@ -511,7 +511,7 @@ const handleSelectDriver = (driver) => {
   const hasSearchValue = Boolean(search?.trim());
   const isSearchActive = isSearchFocused || hasSearchValue;
   const isSearchHoverPreview = isSearchHovered && !isSearchFocused && !hasSearchValue;
-  const COMPACT_TOOLBAR_WIDTH = 250;
+  const COMPACT_TOOLBAR_WIDTH = 255;
   const GAP_ALLOWANCE = 16;
 
   const preCompactControls = toolbarWidth > 0 && toolbarWidth < COMPACT_TOOLBAR_WIDTH;
@@ -525,10 +525,10 @@ const handleSelectDriver = (driver) => {
 
   const useCompactControls = shouldUseTwoRows || preCompactControls;
   const categoryButtonSizeClass = useCompactControls
-    ? "h-7 min-w-[28px] px-1.5 text-[11px]"
-    : "h-8 min-w-[36px] px-2 text-xs";
+    ? "h-7 min-w-0 px-1.5 text-[11px]"
+    : "h-8 min-w-[32px] px-2 text-xs";
 
-  const iconButtonSizeClass = useCompactControls ? "h-7 w-7" : "h-8 w-8";
+  const iconButtonSizeClass = useCompactControls ? "h-7" : "h-8 w-8";
   const iconSizeClass = useCompactControls ? "h-3.5 w-3.5" : "h-4 w-4";
 
   useEffect(() => {
@@ -567,22 +567,23 @@ const handleSelectDriver = (driver) => {
   return (
     <div className="h-full flex flex-col">
       {/* 🔍 SEARCH BAR (STICKY) */}
-      <div className="px-4 py-3 border-b border-gray-700 sticky top-0 bg-[#0d1117] z-20">
-        <div
-          ref={toolbarRef}
-          className={cn(
-            "overflow-visible transition-all duration-200 ease-in-out",
-            shouldUseTwoRows
-              ? "flex flex-col items-stretch gap-1.5"
-              : "flex flex-row items-center gap-1.5 min-w-0"
-          )}
-        >
+      <div className="border-b border-gray-700 sticky top-0 bg-[#0d1117] z-20">
+        <div className="w-full min-w-0 box-border px-3 py-2.5">
+          <div
+            ref={toolbarRef}
+            className={cn(
+              "w-full min-w-0 overflow-visible transition-all duration-200 ease-in-out",
+              shouldUseTwoRows
+                ? "flex flex-col gap-1.5"
+                : "flex flex-row items-center gap-1.5"
+            )}
+          >
           <div
             className={cn(
-              "relative rounded-md border bg-[#1f2937]/90 transition-all duration-200 ease-in-out",
-              shouldUseTwoRows ? "w-full flex-none" : "flex-1 min-w-[88px] max-w-full",
+              "relative min-w-0 rounded-md border bg-[#1f2937]/90 transition-all duration-200 ease-in-out",
+              shouldUseTwoRows ? "w-full flex-none" : "flex-1 min-w-[88px]",
               (isSearchActive || isSearchHoverPreview)
-                ? `${useCompactControls ? "min-w-[120px]" : "min-w-[160px]"} border-blue-400/70 bg-[#1f2937] shadow-[0_0_0_1px_rgba(59,130,246,0.25)]`
+                ? `${useCompactControls ? "min-w-[120px]" : "min-w-[150px]"} border-blue-400/70 bg-[#1f2937] shadow-[0_0_0_1px_rgba(59,130,246,0.25)]`
                 : "border-transparent hover:border-white/10",
               isSearchFocused && "ring-1 ring-blue-400/60"
             )}
@@ -613,9 +614,10 @@ const handleSelectDriver = (driver) => {
           <div
             ref={filterGroupRef}
             className={cn(
-              "flex items-center flex-none shrink-0 overflow-visible",
-              useCompactControls ? "gap-1" : "gap-2",
-              shouldUseTwoRows ? "justify-start" : "justify-end"
+              "w-full overflow-visible",
+              shouldUseTwoRows
+                ? "grid grid-cols-5 gap-1.5"
+                : `flex items-center shrink-0 ${useCompactControls ? "gap-1" : "gap-1.5"} justify-end`
             )}
           >
             {["C", "D", "F"].map((cat) => {
@@ -634,11 +636,11 @@ const handleSelectDriver = (driver) => {
                   }}
                   variant={isSelected ? "default" : "outline"}
                   size="sm"
-                  className={`${categoryButtonSizeClass} border-0 ${
+                  className={cn(categoryButtonSizeClass, shouldUseTwoRows ? "w-full justify-center" : "", `border-0 ${
                     isSelected
                       ? "bg-[#0066ff50] text-white hover:bg-[#1a5ed45c]"
                       : "bg-[#161b22] text-gray-300 hover:bg-[#1d232a]"
-                  }`}
+                  }`)}
                 >
                   {cat}
                 </Button>
@@ -652,7 +654,9 @@ const handleSelectDriver = (driver) => {
                   variant="ghost"
                   size="icon"
                   className={cn(
-                    `${iconButtonSizeClass} rounded-full border border-transparent hover:border-white/10 hover:bg-white/5`,
+                    iconButtonSizeClass,
+                    shouldUseTwoRows ? "w-full min-w-0 justify-center" : "w-8",
+                    "rounded-full border border-transparent hover:border-white/10 hover:bg-white/5",
                     statusColorClass[statusFilter]
                   )}
                   aria-label={`Status filter: ${statusFilter}`}
@@ -720,12 +724,17 @@ const handleSelectDriver = (driver) => {
               type="button"
               variant="ghost"
               size="icon"
-              className={cn(iconButtonSizeClass, "rounded-full border border-transparent hover:border-white/10 hover:bg-white/5 text-blue-400")}
+              className={cn(
+                iconButtonSizeClass,
+                shouldUseTwoRows ? "w-full min-w-0 justify-center" : "w-8",
+                "rounded-full border border-transparent hover:border-white/10 hover:bg-white/5 text-blue-400"
+              )}
               aria-label="Send broadcast"
               title="Send broadcast message"
             >
               <FaBullhorn className={iconSizeClass} />
             </Button>
+          </div>
           </div>
         </div>
       </div>
