@@ -515,7 +515,7 @@ const handleSelectDriver = (driver) => {
     if (!inputWrap || typeof ResizeObserver === "undefined") return undefined;
 
     const updateLayoutMode = () => {
-      setIsCompactSearchLayout(inputWrap.clientWidth < 180);
+      setIsCompactSearchLayout(inputWrap.clientWidth < 125);
     };
 
     updateLayoutMode();
