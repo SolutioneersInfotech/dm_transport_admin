@@ -59,6 +59,7 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const [isStatusPopoverOpen, setIsStatusPopoverOpen] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [isCompactSearchLayout, setIsCompactSearchLayout] = useState(false);
+  const [lockCompactSearchMode, setLockCompactSearchMode] = useState(false);
   const observerTarget = useRef(null);
   const searchInputWrapRef = useRef(null);
   const [unreadCounts, setUnreadCounts] = useState({});
@@ -504,8 +505,10 @@ const handleSelectDriver = (driver) => {
 };
   
   const selectedDriverId = getDriverId(selectedDriver);
+  const hasSearchText = Boolean(search.trim());
   const shouldHideFiltersForCompactSearch =
-    isCompactSearchLayout && (isSearchFocused || Boolean(search.trim()));
+    (lockCompactSearchMode || isCompactSearchLayout) &&
+    (isSearchFocused || hasSearchText);
 
   useEffect(() => {
     const inputWrap = searchInputWrapRef.current;
@@ -523,6 +526,17 @@ const handleSelectDriver = (driver) => {
       observer.disconnect();
     };
   }, []);
+
+  useEffect(() => {
+    if (isSearchFocused && isCompactSearchLayout) {
+      setLockCompactSearchMode(true);
+      return;
+    }
+
+    if (!isSearchFocused && !hasSearchText) {
+      setLockCompactSearchMode(false);
+    }
+  }, [hasSearchText, isCompactSearchLayout, isSearchFocused]);
 
   useEffect(() => {
     if (!isMaintenanceChat) return;
@@ -547,8 +561,18 @@ const handleSelectDriver = (driver) => {
               className="bg-[#1f2937]"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              onFocus={() => setIsSearchFocused(true)}
-              onBlur={() => setIsSearchFocused(false)}
+              onFocus={() => {
+                setIsSearchFocused(true);
+                if (isCompactSearchLayout) {
+                  setLockCompactSearchMode(true);
+                }
+              }}
+              onBlur={() => {
+                setIsSearchFocused(false);
+                if (!hasSearchText) {
+                  setLockCompactSearchMode(false);
+                }
+              }}
             />
           </div>
 
