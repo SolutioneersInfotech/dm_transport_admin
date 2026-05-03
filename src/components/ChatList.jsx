@@ -509,15 +509,27 @@ const handleSelectDriver = (driver) => {
   const selectedDriverId = getDriverId(selectedDriver);
 
   const hasSearchValue = Boolean(search?.trim());
-  const isSearchExpanded = isSearchFocused || isSearchHovered || hasSearchValue;
-  const MIN_EXPANDED_SEARCH_WIDTH = 180;
+  const isSearchActive = isSearchFocused || hasSearchValue;
+  const isSearchHoverPreview = isSearchHovered && !isSearchFocused && !hasSearchValue;
+  const COMPACT_TOOLBAR_WIDTH = 250;
   const GAP_ALLOWANCE = 16;
 
+  const preCompactControls = toolbarWidth > 0 && toolbarWidth < COMPACT_TOOLBAR_WIDTH;
+  const minExpandedWidthEstimate = preCompactControls ? 140 : 180;
+
   const shouldUseTwoRows =
-    isSearchExpanded &&
+    isSearchActive &&
     toolbarWidth > 0 &&
     filterGroupWidth > 0 &&
-    toolbarWidth < filterGroupWidth + MIN_EXPANDED_SEARCH_WIDTH + GAP_ALLOWANCE;
+    toolbarWidth < filterGroupWidth + minExpandedWidthEstimate + GAP_ALLOWANCE;
+
+  const useCompactControls = shouldUseTwoRows || preCompactControls;
+  const categoryButtonSizeClass = useCompactControls
+    ? "h-7 min-w-[28px] px-1.5 text-[11px]"
+    : "h-8 min-w-[36px] px-2 text-xs";
+
+  const iconButtonSizeClass = useCompactControls ? "h-7 w-7" : "h-8 w-8";
+  const iconSizeClass = useCompactControls ? "h-3.5 w-3.5" : "h-4 w-4";
 
   useEffect(() => {
     const toolbarNode = toolbarRef.current;
@@ -555,22 +567,22 @@ const handleSelectDriver = (driver) => {
   return (
     <div className="h-full flex flex-col">
       {/* 🔍 SEARCH BAR (STICKY) */}
-      <div className="p-5 border-b border-gray-700 sticky top-0 bg-[#0d1117] z-20 space-y-3">
+      <div className="px-4 py-3 border-b border-gray-700 sticky top-0 bg-[#0d1117] z-20">
         <div
           ref={toolbarRef}
           className={cn(
-            "gap-2 overflow-visible",
+            "overflow-visible transition-all duration-200 ease-in-out",
             shouldUseTwoRows
-              ? "flex flex-col items-stretch"
-              : "flex flex-row items-center min-w-0"
+              ? "flex flex-col items-stretch gap-1.5"
+              : "flex flex-row items-center gap-1.5 min-w-0"
           )}
         >
           <div
             className={cn(
               "relative rounded-md border bg-[#1f2937]/90 transition-all duration-200 ease-in-out",
               shouldUseTwoRows ? "w-full flex-none" : "flex-1 min-w-[88px] max-w-full",
-              isSearchExpanded
-                ? "min-w-[160px] border-blue-400/70 bg-[#1f2937] shadow-[0_0_0_1px_rgba(59,130,246,0.25)]"
+              (isSearchActive || isSearchHoverPreview)
+                ? `${useCompactControls ? "min-w-[120px]" : "min-w-[160px]"} border-blue-400/70 bg-[#1f2937] shadow-[0_0_0_1px_rgba(59,130,246,0.25)]`
                 : "border-transparent hover:border-white/10",
               isSearchFocused && "ring-1 ring-blue-400/60"
             )}
@@ -601,7 +613,8 @@ const handleSelectDriver = (driver) => {
           <div
             ref={filterGroupRef}
             className={cn(
-              "flex items-center gap-2 flex-none shrink-0 overflow-visible",
+              "flex items-center flex-none shrink-0 overflow-visible",
+              useCompactControls ? "gap-1" : "gap-2",
               shouldUseTwoRows ? "justify-start" : "justify-end"
             )}
           >
@@ -621,7 +634,7 @@ const handleSelectDriver = (driver) => {
                   }}
                   variant={isSelected ? "default" : "outline"}
                   size="sm"
-                  className={`min-w-[36px] h-8 text-xs border-0 ${
+                  className={`${categoryButtonSizeClass} border-0 ${
                     isSelected
                       ? "bg-[#0066ff50] text-white hover:bg-[#1a5ed45c]"
                       : "bg-[#161b22] text-gray-300 hover:bg-[#1d232a]"
@@ -639,14 +652,14 @@ const handleSelectDriver = (driver) => {
                   variant="ghost"
                   size="icon"
                   className={cn(
-                    "h-8 w-8 rounded-full border border-transparent hover:border-white/10 hover:bg-white/5",
+                    `${iconButtonSizeClass} rounded-full border border-transparent hover:border-white/10 hover:bg-white/5`,
                     statusColorClass[statusFilter]
                   )}
                   aria-label={`Status filter: ${statusFilter}`}
                   title={`Status: ${statusFilter}`}
                 >
                   <span className="relative">
-                    <Eye className="h-4 w-4" />
+                    <Eye className={iconSizeClass} />
                     {statusFilter !== "all" && (
                       <span
                         className={cn(
@@ -707,11 +720,11 @@ const handleSelectDriver = (driver) => {
               type="button"
               variant="ghost"
               size="icon"
-              className="h-8 w-8 rounded-full border border-transparent hover:border-white/10 hover:bg-white/5 text-blue-400"
+              className={cn(iconButtonSizeClass, "rounded-full border border-transparent hover:border-white/10 hover:bg-white/5 text-blue-400")}
               aria-label="Send broadcast"
               title="Send broadcast message"
             >
-              <FaBullhorn className="h-4 w-4" />
+              <FaBullhorn className={iconSizeClass} />
             </Button>
           </div>
         </div>
