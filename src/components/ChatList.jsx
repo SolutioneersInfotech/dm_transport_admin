@@ -60,6 +60,10 @@ const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [isSearchHovered, setIsSearchHovered] = useState(false);
   const observerTarget = useRef(null);
+  const toolbarRef = useRef(null);
+  const filterGroupRef = useRef(null);
+  const [toolbarWidth, setToolbarWidth] = useState(0);
+  const [filterGroupWidth, setFilterGroupWidth] = useState(0);
   const [unreadCounts, setUnreadCounts] = useState({});
   const unsubscribeUnreadRefs = useRef({});
   const unsubscribeLastMessageRefs = useRef({});
@@ -506,6 +510,39 @@ const handleSelectDriver = (driver) => {
 
   const hasSearchValue = Boolean(search?.trim());
   const isSearchExpanded = isSearchFocused || isSearchHovered || hasSearchValue;
+  const MIN_EXPANDED_SEARCH_WIDTH = 180;
+  const GAP_ALLOWANCE = 16;
+
+  const shouldUseTwoRows =
+    isSearchExpanded &&
+    toolbarWidth > 0 &&
+    filterGroupWidth > 0 &&
+    toolbarWidth < filterGroupWidth + MIN_EXPANDED_SEARCH_WIDTH + GAP_ALLOWANCE;
+
+  useEffect(() => {
+    const toolbarNode = toolbarRef.current;
+    const filterNode = filterGroupRef.current;
+    if (!toolbarNode || !filterNode || typeof ResizeObserver === "undefined") return;
+
+    const updateSizes = () => {
+      const nextToolbarWidth = Math.round(toolbarNode.getBoundingClientRect().width);
+      const nextFilterWidth = Math.round(filterNode.getBoundingClientRect().width);
+
+      setToolbarWidth((prev) => (prev !== nextToolbarWidth ? nextToolbarWidth : prev));
+      setFilterGroupWidth((prev) => (prev !== nextFilterWidth ? nextFilterWidth : prev));
+    };
+
+    updateSizes();
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateSizes();
+    });
+
+    resizeObserver.observe(toolbarNode);
+    resizeObserver.observe(filterNode);
+
+    return () => resizeObserver.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!isMaintenanceChat) return;
@@ -519,13 +556,22 @@ const handleSelectDriver = (driver) => {
     <div className="h-full flex flex-col">
       {/* 🔍 SEARCH BAR (STICKY) */}
       <div className="p-5 border-b border-gray-700 sticky top-0 bg-[#0d1117] z-20 space-y-3">
-        <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+        <div
+          ref={toolbarRef}
+          className={cn(
+            "gap-2 overflow-visible",
+            shouldUseTwoRows
+              ? "flex flex-col items-stretch"
+              : "flex flex-row items-center min-w-0"
+          )}
+        >
           <div
             className={cn(
-              "relative flex-shrink-0 rounded-md border bg-[#1f2937]/90 transition-all duration-200 ease-in-out",
+              "relative rounded-md border bg-[#1f2937]/90 transition-all duration-200 ease-in-out",
+              shouldUseTwoRows ? "w-full flex-none" : "flex-1 min-w-[88px] max-w-full",
               isSearchExpanded
-                ? "w-[clamp(180px,45%,240px)] border-blue-400/70 bg-[#1f2937] shadow-[0_0_0_1px_rgba(59,130,246,0.25)]"
-                : "w-[82px] border-transparent hover:border-white/10",
+                ? "min-w-[160px] border-blue-400/70 bg-[#1f2937] shadow-[0_0_0_1px_rgba(59,130,246,0.25)]"
+                : "border-transparent hover:border-white/10",
               isSearchFocused && "ring-1 ring-blue-400/60"
             )}
             onMouseEnter={() => setIsSearchHovered(true)}
@@ -534,7 +580,7 @@ const handleSelectDriver = (driver) => {
             <Input
               type="text"
               placeholder="Search drivers..."
-              className="h-8 border-0 bg-transparent px-3 text-sm text-gray-100 placeholder:text-gray-400 focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="h-8 border-0 bg-transparent px-3 text-sm text-gray-100 placeholder:text-gray-400 focus-visible:ring-1 focus-visible:ring-blue-400/50 focus-visible:ring-offset-0"
               value={search}
               onFocus={() => setIsSearchFocused(true)}
               onBlur={() => setIsSearchFocused(false)}
@@ -552,7 +598,13 @@ const handleSelectDriver = (driver) => {
           </div>
 
           {/* Category Filters */}
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div
+            ref={filterGroupRef}
+            className={cn(
+              "flex items-center gap-2 flex-none shrink-0 overflow-visible",
+              shouldUseTwoRows ? "justify-start" : "justify-end"
+            )}
+          >
             {["C", "D", "F"].map((cat) => {
               const isSelected = categoryFilter.includes(cat);
               return (
