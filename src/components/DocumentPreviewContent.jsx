@@ -744,9 +744,20 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
     const doc = selectedDoc;
     if (!doc) return;
 
+    const directChatTarget =
+      doc.userid || doc.userId || doc.driver_id || doc.driverId || null;
+    const resolvedChatTarget =
+      directChatTarget ||
+      matchedDriver ||
+      findDriverByEmailOrName(doc.driver_email, doc.driver_name);
+    const acknowledgementType = getCurrentTypeLabel();
+
     setIsSendingAcknowledgement(true);
     try {
-      await sendAcknowledgement(doc, acknowledgementText);
+      await sendAcknowledgement(doc, acknowledgementText, {
+        chatTarget: resolvedChatTarget,
+        acknowledgementType,
+      });
 
       // Update local state
       const updatedDoc = { ...doc, acknowledgement: acknowledgementText };
@@ -1087,6 +1098,108 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
           </button>
         </div>
 
+        <div className="space-y-2 pt-4 border-t border-gray-700">
+          <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
+            Document
+          </span>
+          <Popover
+            open={showAcknowledgementDropdown}
+            onOpenChange={setShowAcknowledgementDropdown}
+          >
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                className={`w-full justify-center gap-2 border ${
+                  doc.acknowledgement
+                    ? "border-blue-500/70 bg-blue-500/15 text-blue-200 hover:bg-blue-500/25 hover:border-blue-400"
+                    : "border-gray-600 bg-[#111827] text-gray-200 hover:bg-[#1d232a] hover:border-gray-500 hover:text-white"
+                }`}
+              >
+                <Send className="h-4 w-4" />
+                {doc.acknowledgement
+                  ? "Acknowledgement Sent"
+                  : "Acknowledgement"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0" align="end">
+              <div className="max-h-[400px] overflow-y-auto">
+                <div className="p-3 border-b border-gray-700 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-white">
+                    Acknowledgements
+                  </h3>
+                  <Button
+                    onClick={handleAddAcknowledgement}
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 text-xs"
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Add
+                  </Button>
+                </div>
+
+                {isLoadingAcknowledgements && (
+                  <div className="p-4 text-center text-gray-400 text-sm">
+                    Loading templates...
+                  </div>
+                )}
+
+                {!isLoadingAcknowledgements &&
+                  acknowledgements.length === 0 && (
+                    <div className="p-4 text-center text-gray-400 text-sm">
+                      No acknowledgement templates found
+                    </div>
+                  )}
+
+                {!isLoadingAcknowledgements &&
+                  acknowledgements.length > 0 && (
+                    <div className="p-2">
+                      {acknowledgements.map((ack) => (
+                        <div
+                          key={ack.id}
+                          className="group p-2 rounded hover:bg-[#1d232a] transition-colors"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <button
+                              onClick={() =>
+                                handleSendAcknowledgement(ack.data)
+                              }
+                              disabled={isSendingAcknowledgement}
+                              className="flex-1 text-left text-sm text-gray-300 hover:text-white transition-colors disabled:opacity-50"
+                            >
+                              <p className="line-clamp-2">{ack.data}</p>
+                            </button>
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button
+                                onClick={() => handleEditAcknowledgement(ack)}
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6 text-gray-400 hover:text-white"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                onClick={() =>
+                                  handleDeleteAcknowledgement(ack.id)
+                                }
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6 text-gray-400 hover:text-red-500"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+
         {/* Flag Modal */}
         {showFlagModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
@@ -1374,115 +1487,6 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
                 <p>Delete Document</p>
               </TooltipContent>
             </Tooltip>
-
-            {/* Send Acknowledgement */}
-            <Popover
-              open={showAcknowledgementDropdown}
-              onOpenChange={setShowAcknowledgementDropdown}
-            >
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <PopoverTrigger asChild>
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      className={`h-10 w-10 cursor-pointer flex-1 ${
-                        doc.acknowledgement
-                          ? "border-blue-500/70 text-blue-300 bg-blue-500/15 hover:bg-blue-500/25 hover:border-blue-400 hover:text-blue-200"
-                          : "border-gray-600 text-gray-300 bg-[#111827] hover:bg-[#1d232a] hover:border-gray-500 hover:text-white"
-                      }`}
-                    >
-                      <Send className="h-4 w-4" />
-                    </Button>
-                  </PopoverTrigger>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>
-                    {doc.acknowledgement
-                      ? "Acknowledgement Already Sent"
-                      : "Send Acknowledgement"}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-              <PopoverContent className="w-80 p-0" align="end">
-                <div className="max-h-[400px] overflow-y-auto">
-                  {/* Header */}
-                  <div className="p-3 border-b border-gray-700 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-white">
-                      Acknowledgements
-                    </h3>
-                    <Button
-                      onClick={handleAddAcknowledgement}
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 px-2 text-xs"
-                    >
-                      <Plus className="h-3 w-3 mr-1" />
-                      Add
-                    </Button>
-                  </div>
-
-                  {/* Loading State */}
-                  {isLoadingAcknowledgements && (
-                    <div className="p-4 text-center text-gray-400 text-sm">
-                      Loading templates...
-                    </div>
-                  )}
-
-                  {/* Templates List */}
-                  {!isLoadingAcknowledgements &&
-                    acknowledgements.length === 0 && (
-                      <div className="p-4 text-center text-gray-400 text-sm">
-                        No acknowledgement templates found
-                      </div>
-                    )}
-
-                  {!isLoadingAcknowledgements &&
-                    acknowledgements.length > 0 && (
-                      <div className="p-2">
-                        {acknowledgements.map((ack) => (
-                          <div
-                            key={ack.id}
-                            className="group p-2 rounded hover:bg-[#1d232a] transition-colors"
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <button
-                                onClick={() =>
-                                  handleSendAcknowledgement(ack.data)
-                                }
-                                disabled={isSendingAcknowledgement}
-                                className="flex-1 text-left text-sm text-gray-300 hover:text-white transition-colors disabled:opacity-50"
-                              >
-                                <p className="line-clamp-2">{ack.data}</p>
-                              </button>
-                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Button
-                                  onClick={() => handleEditAcknowledgement(ack)}
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-6 w-6 text-gray-400 hover:text-white"
-                                >
-                                  <Pencil className="h-3 w-3" />
-                                </Button>
-                                <Button
-                                  onClick={() =>
-                                    handleDeleteAcknowledgement(ack.id)
-                                  }
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-6 w-6 text-gray-400 hover:text-red-500"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                </div>
-              </PopoverContent>
-            </Popover>
           </div>
         </TooltipProvider>
       </div>

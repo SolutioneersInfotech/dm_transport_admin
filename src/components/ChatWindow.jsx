@@ -287,6 +287,41 @@ function isMessageConfirmed(optimisticMessage, confirmedMessage) {
   );
 }
 
+const CHAT_ATTACHMENT_ALLOWED_MIME_PREFIXES = ["image/", "video/"];
+const CHAT_ATTACHMENT_ALLOWED_MIME_TYPES = new Set(["application/pdf"]);
+
+function hasFilesInDataTransfer(dataTransfer) {
+  if (!dataTransfer) return false;
+
+  const types = Array.isArray(dataTransfer.types)
+    ? dataTransfer.types
+    : Array.from(dataTransfer.types || []);
+  if (types.includes("Files")) {
+    return true;
+  }
+
+  return Array.from(dataTransfer.items || []).some((item) => item.kind === "file");
+}
+
+function isSupportedChatAttachment(file) {
+  if (!(file instanceof File)) {
+    return false;
+  }
+
+  const mimeType = typeof file.type === "string" ? file.type.trim().toLowerCase() : "";
+  if (mimeType) {
+    if (CHAT_ATTACHMENT_ALLOWED_MIME_TYPES.has(mimeType)) {
+      return true;
+    }
+
+    return CHAT_ATTACHMENT_ALLOWED_MIME_PREFIXES.some((prefix) =>
+      mimeType.startsWith(prefix)
+    );
+  }
+
+  return /\.pdf$/i.test(file.name || "");
+}
+
 export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
   const { user } = useAuth();
   const dispatch = useAppDispatch();
@@ -320,10 +355,12 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
   const [showBroadcastDialog, setShowBroadcastDialog] = useState(false);
   const [broadcastMessage, setBroadcastMessage] = useState("");
   const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [isDragActive, setIsDragActive] = useState(false);
   const [selectedBroadcastFile, setSelectedBroadcastFile] = useState(null);
   const [showBroadcastFilePreview, setShowBroadcastFilePreview] = useState(false);
   const [showBroadcastAttachmentOptions, setShowBroadcastAttachmentOptions] = useState(false);
   const broadcastFileInputRef = useRef(null);
+  const dragDepthRef = useRef(0);
   const buildChatMediaFileName = useCallback((url, sender, dateTime) => {
     const safeSender = String(sender || "unknown_sender")
       .trim()
@@ -511,6 +548,28 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
       }
     };
   }, [driverId, messageSubscriptionTarget, subscribeMessages, markMessagesAsSeen]);
+
+  useEffect(() => {
+    setSelectedFile(null);
+    setShowFilePreview(false);
+    setIsDragActive(false);
+    dragDepthRef.current = 0;
+  }, [driverId]);
+
+  useEffect(() => {
+    const preventBrowserFileDrop = (event) => {
+      if (!hasFilesInDataTransfer(event.dataTransfer)) return;
+      event.preventDefault();
+    };
+
+    window.addEventListener("dragover", preventBrowserFileDrop);
+    window.addEventListener("drop", preventBrowserFileDrop);
+
+    return () => {
+      window.removeEventListener("dragover", preventBrowserFileDrop);
+      window.removeEventListener("drop", preventBrowserFileDrop);
+    };
+  }, []);
 
   useEffect(() => {
     if (!driverId || !messageSubscriptionTarget || !refreshSignal) return;
@@ -704,6 +763,26 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     setShowAttachmentOptions(false);
   }
 
+  const queueChatAttachment = useCallback((file, { openPreview = true } = {}) => {
+    if (!(file instanceof File)) {
+      return;
+    }
+
+    if (!isSupportedChatAttachment(file)) {
+      toast.error("Only images, videos, and PDF files can be attached");
+      return;
+    }
+
+    setSelectedFile(file);
+    setShowAttachmentOptions(false);
+    setIsDragActive(false);
+    dragDepthRef.current = 0;
+
+    if (openPreview) {
+      setShowFilePreview(true);
+    }
+  }, []);
+
   function handleFileSelect(e) {
     const file = e.target.files?.[0];
     if (file) {
@@ -712,11 +791,68 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
         size: file.size,
         type: file.type,
       });
-      setSelectedFile(file);
-      setShowFilePreview(true);
+      queueChatAttachment(file);
     }
     e.target.value = "";
   }
+
+  const handleChatDragEnter = useCallback((event) => {
+    if (!hasFilesInDataTransfer(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current += 1;
+    setIsDragActive(true);
+  }, []);
+
+  const handleChatDragOver = useCallback((event) => {
+    if (!hasFilesInDataTransfer(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+    if (!isDragActive) {
+      setIsDragActive(true);
+    }
+  }, [isDragActive]);
+
+  const handleChatDragLeave = useCallback((event) => {
+    if (!hasFilesInDataTransfer(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const relatedTarget = event.relatedTarget;
+    if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) {
+      return;
+    }
+
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) {
+      setIsDragActive(false);
+    }
+  }, []);
+
+  const handleChatDrop = useCallback((event) => {
+    if (!event.dataTransfer?.files?.length) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    dragDepthRef.current = 0;
+    setIsDragActive(false);
+
+    const droppedFiles = Array.from(event.dataTransfer.files);
+    const file = droppedFiles[0];
+
+    if (droppedFiles.length > 1) {
+      toast.info("Using the first dropped file");
+    }
+
+    queueChatAttachment(file);
+  }, [queueChatAttachment]);
+
+  useEffect(() => {
+    return () => {
+      dragDepthRef.current = 0;
+    };
+  }, []);
 
   function handleAttachmentSent(url) {
     const attachmentName = selectedFile?.name || "";
@@ -746,7 +882,6 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     console.log("📤 Creating temporary message with attachment:", tempMsg);
     
     setOptimisticMessages((prev) => [...prev, tempMsg]);
-    setMessages((prev) => sortMessagesByDate([...prev, tempMsg]));
     setSelectedFile(null);
     setShowFilePreview(false);
     setReplyTo(null);
@@ -818,7 +953,6 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     };
 
     setOptimisticMessages((prev) => [...prev, tempMsg]);
-    setMessages((prev) => sortMessagesByDate([...prev, tempMsg]));
     setText("");
 
     const now = new Date().toISOString();
@@ -1018,7 +1152,28 @@ const grouped = groupMessagesByDate(allMessages);
   ]);
 
   return (
-    <div className="relative flex flex-col h-full overflow-hidden bg-[#0b141a]">
+    <div
+      className="relative flex flex-col h-full overflow-hidden bg-[#0b141a]"
+      onDragEnter={handleChatDragEnter}
+      onDragOver={handleChatDragOver}
+      onDragLeave={handleChatDragLeave}
+      onDrop={handleChatDrop}
+    >
+      {isDragActive && (
+        <div className="absolute inset-0 z-[120] pointer-events-none bg-[#0b141a]/80 backdrop-blur-[1px]">
+          <div className="flex h-full w-full items-center justify-center p-6">
+            <div className="w-full max-w-md rounded-2xl border-2 border-dashed border-[#1f6feb] bg-[#132238]/95 px-6 py-10 text-center shadow-2xl">
+              <Paperclip className="mx-auto h-10 w-10 text-[#6ca8ff]" strokeWidth={1.6} />
+              <p className="mt-4 text-lg font-semibold text-white">
+                Drop media to attach
+              </p>
+              <p className="mt-2 text-sm text-[#9fb3c8]">
+                Images, videos, and PDF files are supported.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ================= HEADER (WhatsApp-like) ================= */}
       <div className="px-4 py-3 border-b border-[#2c3e52] bg-[#1c2530] sticky top-0 z-40 flex justify-between items-center">
         <div className="flex items-center gap-3 min-w-0">
@@ -1295,7 +1450,7 @@ const grouped = groupMessagesByDate(allMessages);
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*,video/*"
+          accept="image/*,video/*,application/pdf"
           onChange={handleFileSelect}
           className="hidden"
           aria-label="Attach file"

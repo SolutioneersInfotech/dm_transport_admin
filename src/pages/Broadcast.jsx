@@ -64,6 +64,7 @@ export default function Broadcast() {
   const [broadcasting, setBroadcasting] = useState(false);
   const [broadcastHistory, setBroadcastHistory] = useState([]);
   const [showRecipientList, setShowRecipientList] = useState(false);
+  const [recipientSearch, setRecipientSearch] = useState("");
   const [driverSelections, setDriverSelections] = useState({});
   const [adminSelections, setAdminSelections] = useState({});
   const [historyFilter, setHistoryFilter] = useState("all");
@@ -111,6 +112,7 @@ export default function Broadcast() {
 
   useEffect(() => {
     setShowRecipientList(false);
+    setRecipientSearch("");
   }, [recipients]);
 
   useEffect(() => {
@@ -136,15 +138,57 @@ export default function Broadcast() {
   const getSelectedAdminIds = () =>
     Object.keys(adminSelections).filter((id) => adminSelections[id]);
 
-  const selectedDriverCount = getSelectedDriverIds().length;
-  const selectedAdminCount = getSelectedAdminIds().length;
-  const selectionList = recipients === "drivers" ? drivers : maintenanceUsers;
+  const selectedDriverIds = getSelectedDriverIds();
+  const selectedAdminIds = getSelectedAdminIds();
+  const selectedDriverCount = selectedDriverIds.length;
+  const selectedAdminCount = selectedAdminIds.length;
+  const selectedAllCount = selectedDriverCount + selectedAdminCount;
+  const allUsersList = [
+    ...drivers.map((driver) => ({
+      ...driver,
+      _recipientGroup: "driver",
+    })),
+    ...maintenanceUsers.map((admin) => ({
+      ...admin,
+      _recipientGroup: "admin",
+    })),
+  ];
+  const selectionList =
+    recipients === "drivers"
+      ? drivers
+      : recipients === "admins"
+        ? maintenanceUsers
+        : allUsersList;
   const currentSelections =
-    recipients === "drivers" ? driverSelections : adminSelections;
+    recipients === "drivers"
+      ? driverSelections
+      : recipients === "admins"
+        ? adminSelections
+        : {
+            ...driverSelections,
+            ...adminSelections,
+          };
+  const filteredSelectionList = selectionList.filter((person) => {
+    const id = String(person?.userid ?? person?.id ?? "").toLowerCase();
+    const name = String(
+      person?.name ||
+        person?.driver_name ||
+        person?.admin_name ||
+        person?.username ||
+        "Unknown"
+    ).toLowerCase();
+    const searchValue = recipientSearch.trim().toLowerCase();
+
+    if (!searchValue) {
+      return true;
+    }
+
+    return name.includes(searchValue) || id.includes(searchValue);
+  });
 
   const allVisibleSelected =
-    selectionList.length > 0 &&
-    selectionList.every((person) => {
+    filteredSelectionList.length > 0 &&
+    filteredSelectionList.every((person) => {
       const id = person?.userid ?? person?.id;
       return id ? currentSelections[id] : false;
     });
@@ -158,7 +202,9 @@ export default function Broadcast() {
         ? selectedAdminCount > 0
           ? `${selectedAdminCount} admins selected`
           : "Select Users..."
-        : "All users selected";
+        : selectedAllCount > 0
+          ? `${selectedAllCount} users selected`
+          : "Select Users...";
 
   const filteredHistory = broadcastHistory.filter((broadcast) => {
     const matchesType =
@@ -192,6 +238,24 @@ export default function Broadcast() {
       return;
     }
 
+    if (recipients === "admins") {
+      setAdminSelections((prev) => ({
+        ...prev,
+        [userId]: !prev[userId],
+      }));
+      return;
+    }
+
+    const person = allUsersList.find((entry) => (entry?.userid ?? entry?.id) === userId);
+
+    if (person?._recipientGroup === "driver") {
+      setDriverSelections((prev) => ({
+        ...prev,
+        [userId]: !prev[userId],
+      }));
+      return;
+    }
+
     setAdminSelections((prev) => ({
       ...prev,
       [userId]: !prev[userId],
@@ -200,21 +264,63 @@ export default function Broadcast() {
 
   const handleToggleAll = () => {
     const nextValue = !allVisibleSelected;
-    const nextSelections = {};
-
-    selectionList.forEach((person) => {
-      const id = person?.userid ?? person?.id;
-      if (id) {
-        nextSelections[id] = nextValue;
-      }
-    });
 
     if (recipients === "drivers") {
-      setDriverSelections(nextSelections);
+      const nextSelections = {};
+
+      filteredSelectionList.forEach((person) => {
+        const id = person?.userid ?? person?.id;
+        if (id) {
+          nextSelections[id] = nextValue;
+        }
+      });
+
+      setDriverSelections((prev) => ({
+        ...prev,
+        ...nextSelections,
+      }));
       return;
     }
 
-    setAdminSelections(nextSelections);
+    if (recipients === "admins") {
+      const nextSelections = {};
+
+      filteredSelectionList.forEach((person) => {
+        const id = person?.userid ?? person?.id;
+        if (id) {
+          nextSelections[id] = nextValue;
+        }
+      });
+
+      setAdminSelections((prev) => ({
+        ...prev,
+        ...nextSelections,
+      }));
+      return;
+    }
+
+    const nextDriverSelections = {};
+    const nextAdminSelections = {};
+
+    filteredSelectionList.forEach((person) => {
+      const id = person?.userid ?? person?.id;
+      if (!id) return;
+
+      if (person?._recipientGroup === "driver") {
+        nextDriverSelections[id] = nextValue;
+      } else {
+        nextAdminSelections[id] = nextValue;
+      }
+    });
+
+    setDriverSelections((prev) => ({
+      ...prev,
+      ...nextDriverSelections,
+    }));
+    setAdminSelections((prev) => ({
+      ...prev,
+      ...nextAdminSelections,
+    }));
   };
 
   const openAttachmentPicker = (accept) => {
@@ -275,6 +381,11 @@ export default function Broadcast() {
       return;
     }
 
+    if (recipients === "all" && selectedAllCount === 0) {
+      toast.error("Select at least one user");
+      return;
+    }
+
     setBroadcasting(true);
     try {
       await sendBroadcast(
@@ -282,8 +393,8 @@ export default function Broadcast() {
         message,
         drivers,
         maintenanceUsers,
-        getSelectedDriverIds(),
-        getSelectedAdminIds(),
+        selectedDriverIds,
+        selectedAdminIds,
         {
           attachmentUrl: attachmentMeta?.url || "",
           attachmentName: attachmentMeta?.name || "",
@@ -398,17 +509,14 @@ export default function Broadcast() {
             <div className="mt-2">
               <button
                 type="button"
-                onClick={() =>
-                  recipients !== "all" &&
-                  setShowRecipientList((prev) => !prev)
-                }
+                onClick={() => setShowRecipientList((prev) => !prev)}
                 className={`flex w-full items-center justify-between rounded-[9px] border border-white/8 px-4 py-3 text-left text-[13px] transition ${
                   recipients === "all"
-                    ? "cursor-default bg-slate-950 text-white/42"
+                    ? "bg-slate-950 text-white/72 hover:text-white"
                     : "bg-slate-950 text-white/72 hover:text-white"
                 }`}
               >
-                <span>{recipients === "all" ? "Select Users..." : selectionLabel}</span>
+                <span>{selectionLabel}</span>
                 <ChevronDown
                   className={`h-4 w-4 text-white/35 transition-transform ${
                     showRecipientList ? "rotate-180" : ""
@@ -416,12 +524,24 @@ export default function Broadcast() {
                 />
               </button>
 
-              {recipients !== "all" && showRecipientList && (
+              {showRecipientList && (
                 <div className="mt-2 rounded-[9px] border border-white/8 bg-slate-950 p-3">
                   <div className="mb-2 px-1 text-[11px] uppercase tracking-[0.22em] text-white/34">
-                    {recipients === "drivers"
+                    {recipients === "all"
+                      ? `${selectedAllCount} Selected`
+                      : recipients === "drivers"
                       ? `${selectedDriverCount} Selected`
                       : `${selectedAdminCount} Selected`}
+                  </div>
+
+                  <div className="relative mb-2">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/30" />
+                    <input
+                      value={recipientSearch}
+                      onChange={(event) => setRecipientSearch(event.target.value)}
+                      placeholder="Search users..."
+                      className="h-9 w-full rounded-md border border-white/8 bg-slate-950 pl-8 pr-3 text-[12px] text-white outline-none placeholder:text-white/27"
+                    />
                   </div>
 
                   <label className="mb-1 flex items-center justify-between rounded-md px-2 py-2 text-[13px] text-white/82 hover:bg-white/[0.04]">
@@ -439,7 +559,7 @@ export default function Broadcast() {
                   </label>
 
                   <div className="max-h-52 space-y-1 overflow-y-auto pr-1">
-                    {selectionList.map((person) => {
+                    {filteredSelectionList.map((person) => {
                       const id = person?.userid ?? person?.id;
                       const name =
                         person?.name ||
@@ -461,10 +581,22 @@ export default function Broadcast() {
                             />
                             <span className="truncate">{name}</span>
                           </div>
-                          <span className="text-[11px] text-white/28">{id}</span>
+                          <div className="flex items-center gap-2 text-[11px] text-white/28">
+                            {recipients === "all" && (
+                              <span className="uppercase tracking-[0.16em] text-white/36">
+                                {person?._recipientGroup === "driver" ? "Driver" : "Admin"}
+                              </span>
+                            )}
+                            <span>{id}</span>
+                          </div>
                         </label>
                       );
                     })}
+                    {filteredSelectionList.length === 0 && (
+                      <div className="rounded-md px-2 py-3 text-[12px] text-white/42">
+                        No users found.
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
