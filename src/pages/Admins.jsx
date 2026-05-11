@@ -121,20 +121,32 @@ const normalizeAdmins = (payload) => {
 
   return candidates
     .map((admin, index) => {
-      const name =
+      const userid = String(
         admin?.userid ||
-        admin?.username ||
-        admin?.name ||
-        admin?.email ||
+        admin?.userId ||
+        admin?.uid ||
         admin?.id ||
+        ""
+      ).trim();
+
+      if (!userid) return null;
+
+      const name =
+        admin?.name ||
+        admin?.username ||
+        admin?.displayName ||
+        admin?.email ||
+        userid ||
         `Admin ${index + 1}`;
+
       return {
-        id: admin?.id || admin?.userid || admin?.email || name,
+        id: userid,
+        userid,
         name,
         raw: admin,
       };
     })
-    .filter((admin) => admin.name);
+    .filter(Boolean);
 };
 
 const ADMIN_CACHE_KEY = "dm_admins_cache_v1";
@@ -143,7 +155,7 @@ export default function Admins() {
   const { user } = useAuth();
   const [query, setQuery] = useState("");
   const [admins, setAdmins] = useState([]);
-  const [selectedAdmin, setSelectedAdmin] = useState("");
+  const [selectedAdminId, setSelectedAdminId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [isAddAdminOpen, setIsAddAdminOpen] = useState(false);
@@ -218,7 +230,26 @@ export default function Admins() {
           const cachedAdmins = normalizeAdmins(parsed.data);
           if (cachedAdmins.length > 0) {
             hasHydratedFromCache = true;
+<<<<<<< HEAD
             syncAdminsState(cachedAdmins);
+=======
+            setAdmins(cachedAdmins);
+            setSelectedAdminId(cachedAdmins[0]?.userid || "");
+            setAdminPermissions(
+              cachedAdmins.reduce((acc, admin) => {
+                const rawPerms = admin.raw?.permissions;
+                acc[admin.userid] = buildPermissionsFromRaw(rawPerms);
+                return acc;
+              }, {})
+            );
+            setSavedAdminPermissions(
+              cachedAdmins.reduce((acc, admin) => {
+                const rawPerms = admin.raw?.permissions;
+                acc[admin.userid] = buildPermissionsFromRaw(rawPerms);
+                return acc;
+              }, {})
+            );
+>>>>>>> 4e8db635d3e8f25014eaa30b4ff117e69f3db9dd
             setIsLoading(false);
           }
         }
@@ -230,7 +261,26 @@ export default function Admins() {
         const response = await fetchAdmins();
         if (!isMounted) return;
         const normalized = normalizeAdmins(response);
+<<<<<<< HEAD
         syncAdminsState(normalized);
+=======
+        setAdmins(normalized);
+        setSelectedAdminId(normalized[0]?.userid || "");
+        setAdminPermissions(
+          normalized.reduce((acc, admin) => {
+            const rawPerms = admin.raw?.permissions;
+            acc[admin.userid] = buildPermissionsFromRaw(rawPerms);
+            return acc;
+          }, {})
+        );
+        setSavedAdminPermissions(
+          normalized.reduce((acc, admin) => {
+            const rawPerms = admin.raw?.permissions;
+            acc[admin.userid] = buildPermissionsFromRaw(rawPerms);
+            return acc;
+          }, {})
+        );
+>>>>>>> 4e8db635d3e8f25014eaa30b4ff117e69f3db9dd
         localStorage.setItem(
           ADMIN_CACHE_KEY,
           JSON.stringify({ timestamp: Date.now(), data: response })
@@ -241,7 +291,7 @@ export default function Admins() {
         if (!hasHydratedFromCache) {
           setError(err?.message || "Unable to fetch admins right now.");
           setAdmins([]);
-          setSelectedAdmin("");
+          setSelectedAdminId("");
         }
       } finally {
         if (isMounted) {
@@ -267,38 +317,72 @@ export default function Admins() {
   useEffect(() => {
     if (filteredAdmins.length === 0) return;
     const nextAdmin = filteredAdmins.find(
-      (admin) => admin.name === selectedAdmin
+      (admin) => admin.userid === selectedAdminId
     );
     if (!nextAdmin) {
-      setSelectedAdmin(filteredAdmins[0].name);
+      setSelectedAdminId(filteredAdmins[0].userid);
     }
-  }, [filteredAdmins, selectedAdmin]);
+  }, [filteredAdmins, selectedAdminId]);
 
-  const permissions = selectedAdmin
-    ? adminPermissions[selectedAdmin] || permissionDefaults
+  const permissions = selectedAdminId
+    ? adminPermissions[selectedAdminId] || permissionDefaults
     : permissionDefaults;
-  const savedPermissions = selectedAdmin
-    ? savedAdminPermissions[selectedAdmin] || permissionDefaults
+  const savedPermissions = selectedAdminId
+    ? savedAdminPermissions[selectedAdminId] || permissionDefaults
     : permissionDefaults;
   const hasPermissionChanges = Object.keys(permissionDefaults).some(
     (permission) => Boolean(permissions?.[permission]) !== Boolean(savedPermissions?.[permission])
   );
 
   const togglePermission = (permission) => {
-    if (!selectedAdmin || !canManageAdmins) return;
+    if (!selectedAdminId || !canManageAdmins) return;
     setSavePermissionsError("");
     setAdminPermissions((prev) => ({
       ...prev,
-      [selectedAdmin]: {
-        ...prev[selectedAdmin],
-        [permission]: !prev[selectedAdmin]?.[permission],
+      [selectedAdminId]: {
+        ...prev[selectedAdminId],
+        [permission]: !prev[selectedAdminId]?.[permission],
       },
     }));
   };
 
   const selectedAdminMeta = admins.find(
-    (admin) => admin.name === selectedAdmin
+    (admin) => admin.userid === selectedAdminId
   );
+  const selectedAdmin = selectedAdminMeta?.name || "";
+  const refreshAdminsList = async ({ useLoadingState = true } = {}) => {
+    if (useLoadingState) {
+      setIsLoading(true);
+    }
+
+    const response = await fetchAdmins();
+    const normalized = normalizeAdmins(response);
+    setAdmins(normalized);
+    setAdminPermissions(
+      normalized.reduce((acc, admin) => {
+        const rawPerms = admin.raw?.permissions;
+        acc[admin.userid] = buildPermissionsFromRaw(rawPerms);
+        return acc;
+      }, {})
+    );
+    setSavedAdminPermissions(
+      normalized.reduce((acc, admin) => {
+        const rawPerms = admin.raw?.permissions;
+        acc[admin.userid] = buildPermissionsFromRaw(rawPerms);
+        return acc;
+      }, {})
+    );
+    localStorage.setItem(
+      ADMIN_CACHE_KEY,
+      JSON.stringify({ timestamp: Date.now(), data: response })
+    );
+    setError("");
+    if (useLoadingState) {
+      setIsLoading(false);
+    }
+
+    return normalized;
+  };
 
   const adminListSkeletonRows = Array.from({ length: 21 }, (_, index) => index);
 
@@ -324,21 +408,27 @@ export default function Admins() {
       });
 
       const createdAdmin = {
-        id: response?.userid || `local-${Date.now()}`,
-        name: trimmedName,
+        id: response?.userid || trimmedName,
+        userid: response?.userid || trimmedName,
+        name:
+          response?.name ||
+          response?.username ||
+          response?.displayName ||
+          response?.email ||
+          trimmedName,
         raw: response || {},
       };
 
       setAdmins((prev) => [createdAdmin, ...prev]);
       setAdminPermissions((prev) => ({
         ...prev,
-        [createdAdmin.name]: { ...permissionDefaults, ...newAdminPermissions },
+        [createdAdmin.userid]: { ...permissionDefaults, ...newAdminPermissions },
       }));
       setSavedAdminPermissions((prev) => ({
         ...prev,
-        [createdAdmin.name]: { ...permissionDefaults, ...newAdminPermissions },
+        [createdAdmin.userid]: { ...permissionDefaults, ...newAdminPermissions },
       }));
-      setSelectedAdmin(createdAdmin.name);
+      setSelectedAdminId(createdAdmin.userid);
       setNewAdminName("");
       setNewAdminPassword("");
       setShowNewAdminPassword(false);
@@ -366,16 +456,20 @@ export default function Admins() {
   const handleChangePassword = async (event) => {
     event.preventDefault();
     if (!updatedPassword.trim()) return;
-    if (!selectedAdmin) return;
+    if (!selectedAdminId) return;
     const permissionsForAdmin =
-      adminPermissions[selectedAdmin] || permissionDefaults;
+      adminPermissions[selectedAdminId] || permissionDefaults;
 
     const permissions = Object.entries(permissionsForAdmin)
       .filter(([, enabled]) => enabled)
       .map(([label]) => permissionKeyMap[label] || label)
       .filter(Boolean);
 
-    const userid = selectedAdminMeta?.raw?.userid || selectedAdmin;
+    const userid = selectedAdminMeta?.userid;
+    if (!userid) {
+      setPasswordUpdateError("Unable to determine admin userid.");
+      return;
+    }
 
     try {
       setIsUpdatingPassword(true);
@@ -397,14 +491,31 @@ export default function Admins() {
   };
 
   const handleDeleteAdmin = async () => {
-    if (!selectedAdmin) return;
-    const userid = selectedAdminMeta?.raw?.userid || selectedAdmin;
+    if (!selectedAdminId) return;
+    const userid = selectedAdminMeta?.userid;
+    if (!userid) {
+      setDeleteAdminError("Unable to determine admin userid.");
+      return;
+    }
+    if (userid === "admin") {
+      setDeleteAdminError("Default admin cannot be deleted.");
+      return;
+    }
     try {
       setIsDeletingAdmin(true);
       setDeleteAdminError("");
       await deleteAdmin(userid);
+<<<<<<< HEAD
       await refreshAdminsList({ useLoadingState: false });
+=======
+      const deletedAdminId = userid;
+      const remainingAdmins = await refreshAdminsList({ useLoadingState: false });
+      if (deletedAdminId === selectedAdminId) {
+        setSelectedAdminId(remainingAdmins[0]?.userid || "");
+      }
+>>>>>>> 4e8db635d3e8f25014eaa30b4ff117e69f3db9dd
       setIsDeleteModalOpen(false);
+      setDeleteAdminError("");
     } catch (err) {
       setDeleteAdminError(err?.message || "Unable to delete admin right now.");
     } finally {
@@ -413,13 +524,17 @@ export default function Admins() {
   };
 
   const handleSavePermissions = async () => {
-    if (!selectedAdmin || !hasPermissionChanges || !canManageAdmins) return;
-    const permissionsForAdmin = adminPermissions[selectedAdmin] || permissionDefaults;
+    if (!selectedAdminId || !hasPermissionChanges || !canManageAdmins) return;
+    const permissionsForAdmin = adminPermissions[selectedAdminId] || permissionDefaults;
     const permissions = Object.entries(permissionsForAdmin)
       .filter(([, enabled]) => enabled)
       .map(([label]) => permissionKeyMap[label] || label)
       .filter(Boolean);
-    const userid = selectedAdminMeta?.raw?.userid || selectedAdmin;
+    const userid = selectedAdminMeta?.userid;
+    if (!userid) {
+      setSavePermissionsError("Unable to determine admin userid.");
+      return;
+    }
 
     try {
       setIsSavingPermissions(true);
@@ -427,7 +542,7 @@ export default function Admins() {
       await updateAdmin({ permissions, userid });
       setSavedAdminPermissions((prev) => ({
         ...prev,
-        [selectedAdmin]: { ...permissionsForAdmin },
+        [selectedAdminId]: { ...permissionsForAdmin },
       }));
       toast.success("Permissions updated successfully");
     } catch (err) {
@@ -677,9 +792,9 @@ export default function Admins() {
                   <button
                     key={admin.id}
                     type="button"
-                    onClick={() => setSelectedAdmin(admin.name)}
+                    onClick={() => setSelectedAdminId(admin.userid)}
                     className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
-                      selectedAdmin === admin.name
+                      selectedAdminId === admin.userid
                         ? "bg-slate-800 text-slate-100"
                         : "text-slate-300 hover:bg-slate-900"
                     }`}
@@ -687,7 +802,7 @@ export default function Admins() {
                     <span>{admin.name}</span>
                     <ChevronRight
                       className={`h-4 w-4 transition ${
-                        selectedAdmin === admin.name
+                        selectedAdminId === admin.userid
                           ? "text-sky-300"
                           : "text-slate-500"
                       }`}
@@ -783,7 +898,7 @@ export default function Admins() {
                   <button
                     type="button"
                     onClick={handleSavePermissions}
-                    disabled={!selectedAdmin || !hasPermissionChanges || isSavingPermissions || !canManageAdmins}
+                    disabled={!selectedAdminId || !hasPermissionChanges || isSavingPermissions || !canManageAdmins}
                     className="rounded-lg border border-slate-700 bg-slate-900 p-2 text-emerald-300 transition hover:border-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
                     aria-label="Save updated permissions"
                   >
@@ -806,7 +921,7 @@ export default function Admins() {
                     className="rounded-lg border border-slate-700 bg-slate-900 p-2 text-rose-300 transition hover:border-rose-400"
                     aria-label="Delete admin"
                     onClick={() => setIsDeleteModalOpen(true)}
-                    disabled={!selectedAdmin}
+                    disabled={!selectedAdminId}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -839,13 +954,13 @@ export default function Admins() {
                           <button
                             type="button"
                             onClick={() => togglePermission(permission)}
-                            disabled={!selectedAdmin || !canManageAdmins}
+                            disabled={!selectedAdminId || !canManageAdmins}
                             className={`flex h-7 w-12 items-center rounded-full border transition ${
                               permissions?.[permission]
                                 ? "border-sky-400 bg-sky-500"
                                 : "border-slate-700 bg-slate-800"
                             } ${
-                              !selectedAdmin
+                              !selectedAdminId
                                 ? "cursor-not-allowed opacity-60"
                                 : ""
                             }`}

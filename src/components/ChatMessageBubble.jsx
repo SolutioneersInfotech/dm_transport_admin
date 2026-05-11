@@ -292,8 +292,8 @@
 //   );
 // }
 
-import { useEffect, useState } from "react";
-import { Check, CheckCheck, Download, ExternalLink, FileText, Copy, Trash2, Megaphone, BadgeCheck } from "lucide-react";
+import { memo, useEffect, useState } from "react";
+import { Check, CheckCheck, Download, ExternalLink, FileText, Copy, Megaphone } from "lucide-react";
 import {
   extractAttachmentDisplayName,
   getAttachmentKind,
@@ -302,7 +302,7 @@ import {
 import PdfThumbnail from "./PdfThumbnail";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
-export default function ChatMessageBubble({
+function ChatMessageBubble({
   msg,
   senderName,
   showSenderName = true,
@@ -312,11 +312,21 @@ export default function ChatMessageBubble({
   onImageClick,
   onDownloadMedia,
   isLastMessageInChat,
-  onDelete,
   isBroadcast = false,
 }) {
   /* ================= DATA ================= */
   const isAdmin = msg?.type === 1;
+  const isBroadcastMessage =
+    isBroadcast ||
+    msg?.type === "broadcast" ||
+    msg?.isBroadcast === true ||
+    msg?.isbroadcast === true ||
+    String(msg?.isbroadcast).toLowerCase() === "true" ||
+    msg?.broadcast === true ||
+    String(msg?.broadcast).toLowerCase() === "true" ||
+    Boolean(msg?.recipientType) ||
+    Boolean(msg?.broadcastId) ||
+    msg?.source === "broadcast";
 
   const rawMessage = msg?.content?.message;
   const text =
@@ -571,7 +581,7 @@ export default function ChatMessageBubble({
       <div className={`relative flex flex-col max-w-[65%] ${bubbleAlign}`}>
         {(copyButton || deleteButton) && (
           <div
-            className={`absolute z-10 flex gap-2 ${showSenderName ? "top-5" : "top-0.5"} ${isAdmin ? "-left-20" : "-right-20"}`}
+            className={`absolute z-10 flex ${showSenderName ? "top-5" : "top-0.5"} ${isAdmin ? "-left-10" : "-right-10"}`}
           >
             {copyButton}
             {deleteButton}
@@ -587,14 +597,6 @@ export default function ChatMessageBubble({
             >
               {displayName}
             </span>
-            {isBroadcast && (
-              <span
-                className="inline-flex items-center justify-center rounded-full bg-[#6e83ff]/20 p-1 text-[#85a0ff]"
-                title="Broadcast message"
-              >
-                <Megaphone className="h-3.5 w-3.5" />
-              </span>
-            )}
           </div>
         )}
 
@@ -774,6 +776,15 @@ export default function ChatMessageBubble({
 
           {/* Meta */}
           <div className="mt-1 flex items-center justify-end gap-1">
+            {isBroadcastMessage && (
+              <span
+                className="inline-flex items-center text-white/75"
+                title="Broadcast message"
+                aria-label="Broadcast message"
+              >
+                <Megaphone className="h-3.5 w-3.5" />
+              </span>
+            )}
             <span
               className={`text-[10px] ${isAdmin ? "text-white/80" : "text-gray-400"}`}
             >
@@ -794,3 +805,5 @@ export default function ChatMessageBubble({
     </div>
   );
 }
+
+export default memo(ChatMessageBubble);
