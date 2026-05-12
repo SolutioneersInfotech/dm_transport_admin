@@ -189,18 +189,18 @@ export default function Admins() {
 
   const syncAdminsState = useCallback((normalizedAdmins) => {
     setAdmins(normalizedAdmins);
-    setSelectedAdmin(normalizedAdmins[0]?.name || "");
+    setSelectedAdminId(normalizedAdmins[0]?.userid || "");
     setAdminPermissions(
       normalizedAdmins.reduce((acc, admin) => {
         const rawPerms = admin.raw?.permissions;
-        acc[admin.name] = buildPermissionsFromRaw(rawPerms);
+        acc[admin.userid] = buildPermissionsFromRaw(rawPerms);
         return acc;
       }, {})
     );
     setSavedAdminPermissions(
       normalizedAdmins.reduce((acc, admin) => {
         const rawPerms = admin.raw?.permissions;
-        acc[admin.name] = buildPermissionsFromRaw(rawPerms);
+        acc[admin.userid] = buildPermissionsFromRaw(rawPerms);
         return acc;
       }, {})
     );
@@ -217,6 +217,8 @@ export default function Admins() {
       JSON.stringify({ timestamp: Date.now(), data: response })
     );
     setError("");
+    if (useLoadingState) setIsLoading(false);
+    return normalized;
   }, [syncAdminsState]);
 
   useEffect(() => {
@@ -230,26 +232,7 @@ export default function Admins() {
           const cachedAdmins = normalizeAdmins(parsed.data);
           if (cachedAdmins.length > 0) {
             hasHydratedFromCache = true;
-<<<<<<< HEAD
             syncAdminsState(cachedAdmins);
-=======
-            setAdmins(cachedAdmins);
-            setSelectedAdminId(cachedAdmins[0]?.userid || "");
-            setAdminPermissions(
-              cachedAdmins.reduce((acc, admin) => {
-                const rawPerms = admin.raw?.permissions;
-                acc[admin.userid] = buildPermissionsFromRaw(rawPerms);
-                return acc;
-              }, {})
-            );
-            setSavedAdminPermissions(
-              cachedAdmins.reduce((acc, admin) => {
-                const rawPerms = admin.raw?.permissions;
-                acc[admin.userid] = buildPermissionsFromRaw(rawPerms);
-                return acc;
-              }, {})
-            );
->>>>>>> 4e8db635d3e8f25014eaa30b4ff117e69f3db9dd
             setIsLoading(false);
           }
         }
@@ -261,26 +244,7 @@ export default function Admins() {
         const response = await fetchAdmins();
         if (!isMounted) return;
         const normalized = normalizeAdmins(response);
-<<<<<<< HEAD
         syncAdminsState(normalized);
-=======
-        setAdmins(normalized);
-        setSelectedAdminId(normalized[0]?.userid || "");
-        setAdminPermissions(
-          normalized.reduce((acc, admin) => {
-            const rawPerms = admin.raw?.permissions;
-            acc[admin.userid] = buildPermissionsFromRaw(rawPerms);
-            return acc;
-          }, {})
-        );
-        setSavedAdminPermissions(
-          normalized.reduce((acc, admin) => {
-            const rawPerms = admin.raw?.permissions;
-            acc[admin.userid] = buildPermissionsFromRaw(rawPerms);
-            return acc;
-          }, {})
-        );
->>>>>>> 4e8db635d3e8f25014eaa30b4ff117e69f3db9dd
         localStorage.setItem(
           ADMIN_CACHE_KEY,
           JSON.stringify({ timestamp: Date.now(), data: response })
@@ -350,39 +314,6 @@ export default function Admins() {
     (admin) => admin.userid === selectedAdminId
   );
   const selectedAdmin = selectedAdminMeta?.name || "";
-  const refreshAdminsList = async ({ useLoadingState = true } = {}) => {
-    if (useLoadingState) {
-      setIsLoading(true);
-    }
-
-    const response = await fetchAdmins();
-    const normalized = normalizeAdmins(response);
-    setAdmins(normalized);
-    setAdminPermissions(
-      normalized.reduce((acc, admin) => {
-        const rawPerms = admin.raw?.permissions;
-        acc[admin.userid] = buildPermissionsFromRaw(rawPerms);
-        return acc;
-      }, {})
-    );
-    setSavedAdminPermissions(
-      normalized.reduce((acc, admin) => {
-        const rawPerms = admin.raw?.permissions;
-        acc[admin.userid] = buildPermissionsFromRaw(rawPerms);
-        return acc;
-      }, {})
-    );
-    localStorage.setItem(
-      ADMIN_CACHE_KEY,
-      JSON.stringify({ timestamp: Date.now(), data: response })
-    );
-    setError("");
-    if (useLoadingState) {
-      setIsLoading(false);
-    }
-
-    return normalized;
-  };
 
   const adminListSkeletonRows = Array.from({ length: 21 }, (_, index) => index);
 
@@ -505,15 +436,11 @@ export default function Admins() {
       setIsDeletingAdmin(true);
       setDeleteAdminError("");
       await deleteAdmin(userid);
-<<<<<<< HEAD
-      await refreshAdminsList({ useLoadingState: false });
-=======
       const deletedAdminId = userid;
       const remainingAdmins = await refreshAdminsList({ useLoadingState: false });
       if (deletedAdminId === selectedAdminId) {
         setSelectedAdminId(remainingAdmins[0]?.userid || "");
       }
->>>>>>> 4e8db635d3e8f25014eaa30b4ff117e69f3db9dd
       setIsDeleteModalOpen(false);
       setDeleteAdminError("");
     } catch (err) {

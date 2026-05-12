@@ -73,11 +73,8 @@ function normalizeMessage(messageId, msg) {
       },
       status: msg?.status ?? 0,
       type: "broadcast",
-<<<<<<< HEAD
-=======
       isbroadcast: msg?.isbroadcast ?? msg?.isBroadcast ?? false,
       isBroadcast: msg?.isBroadcast ?? msg?.isbroadcast ?? false,
->>>>>>> 4e8db635d3e8f25014eaa30b4ff117e69f3db9dd
       contactId: msg?.contactId ?? msg?.userid ?? null,
       sendername: msg?.sendername ?? "Unknown",
       replyTo: msg?.replyTo ?? null,

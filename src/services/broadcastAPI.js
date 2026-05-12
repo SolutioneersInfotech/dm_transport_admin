@@ -69,17 +69,6 @@ export async function sendBroadcast(
     let recipientNames = [];
 
     if (type === "all") {
-<<<<<<< HEAD
-      userids = [...selectedDriverIds, ...selectedAdminIds].filter(Boolean);
-      recipientNames = [
-        ...drivers
-          .filter((d) => selectedDriverIds.includes(d?.userid ?? d?.id))
-          .map((d) => d?.name || d?.driver_name || "Unknown"),
-        ...admins
-          .filter((a) => selectedAdminIds.includes(a?.userid ?? a?.id))
-          .map((a) => a?.name || a?.username || "Unknown"),
-      ].filter(Boolean);
-=======
       const selectedDriverIdSet = new Set(selectedDriverIds.filter(Boolean));
       const selectedAdminIdSet = new Set(selectedAdminIds.filter(Boolean));
       userids = [...selectedDriverIdSet, ...selectedAdminIdSet];
@@ -93,7 +82,6 @@ export async function sendBroadcast(
         .map((a) => a?.name || a?.username || "Unknown")
         .filter(Boolean);
       recipientNames = [...driverNames, ...adminNames];
->>>>>>> 4e8db635d3e8f25014eaa30b4ff117e69f3db9dd
     } else if (type === "drivers") {
       // Only selected drivers
       userids = selectedDriverIds.filter(Boolean);
