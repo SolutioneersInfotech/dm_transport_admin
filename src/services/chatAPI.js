@@ -73,6 +73,8 @@ function normalizeMessage(messageId, msg) {
       },
       status: msg?.status ?? 0,
       type: "broadcast",
+      isbroadcast: msg?.isbroadcast ?? msg?.isBroadcast ?? false,
+      isBroadcast: msg?.isBroadcast ?? msg?.isbroadcast ?? false,
       contactId: msg?.contactId ?? msg?.userid ?? null,
       sendername: msg?.sendername ?? "Unknown",
       replyTo: msg?.replyTo ?? null,
@@ -108,6 +110,8 @@ function normalizeMessage(messageId, msg) {
     },
     status: msg?.status ?? 0,
     type: typeof type === "number" ? type : 0,
+    isbroadcast: msg?.isbroadcast ?? msg?.isBroadcast ?? false,
+    isBroadcast: msg?.isBroadcast ?? msg?.isbroadcast ?? false,
     contactId: msg?.contactId ?? msg?.userid ?? null,
     sendername: msg?.sendername ?? "Unknown",
     replyTo: rawReplyTo,
@@ -162,6 +166,8 @@ function resolveUserId(chatTarget) {
 function resolveContactId(chatTarget) {
   if (chatTarget && typeof chatTarget === "object") {
     const preferred = [
+      chatTarget.contactId,
+      chatTarget.contactid,
       chatTarget.phoneNumber,
       chatTarget.phone,
       chatTarget.mobile,
@@ -273,6 +279,16 @@ export async function fetchMessages(chatTarget, messageLimit = 10) {
   // If we only need 1 message, return just the most recent (last in sorted array)
   if (messageLimit === 1 && messages.length > 0) {
     return { messages: [messages[messages.length - 1]] };
+  }
+
+  const shouldFetchAll =
+    messageLimit === null ||
+    messageLimit === undefined ||
+    messageLimit === 0 ||
+    messageLimit === -1;
+
+  if (shouldFetchAll) {
+    return { messages };
   }
 
   // Return the last N messages (most recent)

@@ -292,8 +292,8 @@
 //   );
 // }
 
-import { useEffect, useState } from "react";
-import { Check, CheckCheck, Download, ExternalLink, FileText, Copy, Trash2, Megaphone } from "lucide-react";
+import { memo, useEffect, useState } from "react";
+import { Check, CheckCheck, Download, ExternalLink, FileText, Copy, Megaphone } from "lucide-react";
 import {
   extractAttachmentDisplayName,
   getAttachmentKind,
@@ -302,7 +302,7 @@ import {
 import PdfThumbnail from "./PdfThumbnail";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
-export default function ChatMessageBubble({
+function ChatMessageBubble({
   msg,
   senderName,
   showSenderName = true,
@@ -312,11 +312,21 @@ export default function ChatMessageBubble({
   onImageClick,
   onDownloadMedia,
   isLastMessageInChat,
-  onDelete,
   isBroadcast = false,
 }) {
   /* ================= DATA ================= */
   const isAdmin = msg?.type === 1;
+  const isBroadcastMessage =
+    isBroadcast ||
+    msg?.type === "broadcast" ||
+    msg?.isBroadcast === true ||
+    msg?.isbroadcast === true ||
+    String(msg?.isbroadcast).toLowerCase() === "true" ||
+    msg?.broadcast === true ||
+    String(msg?.broadcast).toLowerCase() === "true" ||
+    Boolean(msg?.recipientType) ||
+    Boolean(msg?.broadcastId) ||
+    msg?.source === "broadcast";
 
   const rawMessage = msg?.content?.message;
   const text =
@@ -331,6 +341,26 @@ export default function ChatMessageBubble({
               ? rawMessage.message.trim()
               : ""
           : "";
+
+  const messageMetadata = rawMessage && typeof rawMessage === "object" ? rawMessage : null;
+  const acknowledgementType =
+    typeof msg?.acknowledgementType === "string"
+      ? msg.acknowledgementType.trim()
+      : typeof msg?.content?.acknowledgementType === "string"
+        ? msg.content.acknowledgementType.trim()
+        : typeof messageMetadata?.acknowledgementType === "string"
+          ? messageMetadata.acknowledgementType.trim()
+          : typeof messageMetadata?.type === "string" &&
+              messageMetadata.type.toLowerCase().includes("acknowledgement")
+            ? messageMetadata.type.trim()
+            : "";
+  const textLooksLikeAcknowledgement =
+    /^acknowledg(e)?ment\s+sent\b/i.test(text) ||
+    /^acknowledg(e)?ment\b/i.test(text);
+  const derivedAcknowledgementType = text.match(/\(([^)]+)\)/)?.[1]?.trim() || "";
+  const isAcknowledgementMessage = Boolean(
+    acknowledgementType || textLooksLikeAcknowledgement
+  );
 
   const rawAttachment = msg?.content?.attachmentUrl;
   const attachment =
@@ -436,11 +466,27 @@ export default function ChatMessageBubble({
   const bubbleAlign = isAdmin ? "items-end" : "items-start";
   // Sent = blue bubble (admin theme), Received = blue-gray bubble
   const bubbleStyle = isAdmin
-    ? "bg-[#1f6feb] text-white rounded-br-md"
-    : "bg-[#1c2530] text-[#e9edef] rounded-bl-md";
+    ? isAcknowledgementMessage
+      ? "border border-emerald-300/40 bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-br-md"
+      : "bg-[#1f6feb] text-white rounded-br-md"
+    : isAcknowledgementMessage
+      ? "border border-emerald-400/20 bg-[#122c2a] text-[#d7fff4] rounded-bl-md"
+      : "bg-[#1c2530] text-[#e9edef] rounded-bl-md";
   const bubbleRounding = isAdmin
     ? "rounded-2xl rounded-br-md"
     : "rounded-2xl rounded-bl-md";
+  const replyPreviewStyle = isAdmin
+    ? isAcknowledgementMessage
+      ? "border-emerald-200/70 bg-white/10 text-white"
+      : "border-[#1f6feb] bg-white/10 text-white"
+    : isAcknowledgementMessage
+      ? "border-emerald-300/50 bg-black/20 text-[#d7fff4]"
+      : "border-gray-500 bg-black/20 text-gray-300";
+  const acknowledgementBadge = isAcknowledgementMessage
+    ? (acknowledgementType || derivedAcknowledgementType || "Acknowledgement")
+        .replace(/[_-]+/g, " ")
+        .trim()
+    : "";
 
   const replyToPreview =
     replyToMessage != null
@@ -535,7 +581,7 @@ export default function ChatMessageBubble({
       <div className={`relative flex flex-col max-w-[65%] ${bubbleAlign}`}>
         {(copyButton || deleteButton) && (
           <div
-            className={`absolute z-10 flex gap-2 ${showSenderName ? "top-5" : "top-0.5"} ${isAdmin ? "-left-20" : "-right-20"}`}
+            className={`absolute z-10 flex ${showSenderName ? "top-5" : "top-0.5"} ${isAdmin ? "-left-10" : "-right-10"}`}
           >
             {copyButton}
             {deleteButton}
@@ -551,14 +597,6 @@ export default function ChatMessageBubble({
             >
               {displayName}
             </span>
-            {isBroadcast && (
-              <span
-                className="inline-flex items-center justify-center rounded-full bg-[#6e83ff]/20 p-1 text-[#85a0ff]"
-                title="Broadcast message"
-              >
-                <Megaphone className="h-3.5 w-3.5" />
-              </span>
-            )}
           </div>
         )}
 
@@ -566,6 +604,15 @@ export default function ChatMessageBubble({
         <div
           className={`px-3 py-2 shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] text-sm ${bubbleStyle} ${bubbleRounding}`}
         >
+          {isAcknowledgementMessage && (
+            <div className="mb-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-black/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/90">
+              <BadgeCheck className="h-3.5 w-3.5" />
+              <span className="truncate">
+                {acknowledgementBadge || "Acknowledgement"}
+              </span>
+            </div>
+          )}
+
           {/* Broadcast indicator (when sender name is not shown) */}
           {isBroadcast && !showSenderName && (
             <div className="mb-2 inline-flex items-center justify-center rounded-full bg-white/[0.08] p-1 text-[#85a0ff]">
@@ -578,11 +625,7 @@ export default function ChatMessageBubble({
             <button
               type="button"
               onClick={() => onReplyClick?.(replyTargetId)}
-              className={`mb-2 w-full text-left rounded border-l-2 pl-2 py-1 text-xs ${
-                isAdmin
-                  ? "border-[#1f6feb] bg-white/10 text-white"
-                  : "border-gray-500 bg-black/20 text-gray-300"
-              } truncate`}
+              className={`mb-2 w-full truncate rounded border-l-2 pl-2 py-1 text-left text-xs ${replyPreviewStyle}`}
               title={replyToPreview}
             >
               <span className="font-medium opacity-90">Replying to: </span>
@@ -725,10 +768,23 @@ export default function ChatMessageBubble({
           )}
 
           {/* Text */}
-          {shouldRenderText && <p className="whitespace-pre-wrap break-words">{text}</p>}
+          {shouldRenderText && (
+            <p className={`whitespace-pre-wrap break-words ${isAcknowledgementMessage ? "font-medium leading-6" : ""}`}>
+              {text}
+            </p>
+          )}
 
           {/* Meta */}
           <div className="mt-1 flex items-center justify-end gap-1">
+            {isBroadcastMessage && (
+              <span
+                className="inline-flex items-center text-white/75"
+                title="Broadcast message"
+                aria-label="Broadcast message"
+              >
+                <Megaphone className="h-3.5 w-3.5" />
+              </span>
+            )}
             <span
               className={`text-[10px] ${isAdmin ? "text-white/80" : "text-gray-400"}`}
             >
@@ -749,3 +805,5 @@ export default function ChatMessageBubble({
     </div>
   );
 }
+
+export default memo(ChatMessageBubble);

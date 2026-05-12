@@ -4,7 +4,28 @@ import {
   updateAcknowledgementRoute,
   deleteAcknowledgementRoute,
   updateDocumentRoute,
+  sendAcknowledgementRoute,
 } from "../utils/apiRoutes";
+
+function normalizeComparableId(value) {
+  if (value === null || value === undefined) return null;
+  const normalized = String(value).trim().replace(/[+\s-]/g, "");
+  return normalized || null;
+}
+
+function resolveUserId(chatTarget) {
+  if (chatTarget && typeof chatTarget === "object") {
+    return normalizeComparableId(
+      chatTarget.userid ??
+        chatTarget.userId ??
+        chatTarget.uid ??
+        chatTarget.id ??
+        null,
+    );
+  }
+
+  return normalizeComparableId(chatTarget);
+}
 
 /**
  * Fetch all acknowledgement templates
@@ -27,11 +48,11 @@ export async function fetchAcknowledgements() {
       throw new Error(data.message || "Failed to fetch acknowledgements");
     }
 
-    // Transform the response to array format
     const acknowledgements = data.chatAcknowledgement || [];
     return acknowledgements.map((item) => ({
       id: item.id,
       data: item.data || item.value || "",
+      acknowledgementType: item.acknowledgementType || "",
     }));
   } catch (error) {
     console.error("Failed to fetch acknowledgements:", error);
@@ -62,7 +83,9 @@ export async function createAcknowledgement(value) {
       throw new Error(data.message || "Failed to create acknowledgement");
     }
 
-    return { id: data.id || data.acknowledgementId };
+    return {
+      id: data?.acknowledgement?.id || data.id || data.acknowledgementId,
+    };
   } catch (error) {
     console.error("Failed to create acknowledgement:", error);
     throw error;
@@ -134,12 +157,18 @@ export async function deleteAcknowledgement(id) {
 }
 
 /**
- * Send acknowledgement to driver (updates document only; backend sends notifications)
+ * Send acknowledgement to driver.
+ * First updates the document acknowledgement, then asks backend to append chat history + push notification.
  * @param {object} document - Document object
  * @param {string} acknowledgement - Acknowledgement text
+ * @param {object} options - Additional acknowledgement metadata
  * @returns {Promise<{success: boolean}>}
  */
-export async function sendAcknowledgement(document, acknowledgement) {
+export async function sendAcknowledgement(
+  document,
+  acknowledgement,
+  options = {},
+) {
   try {
     const token = localStorage.getItem("adminToken");
     const baseFieldKeys = [
@@ -158,7 +187,21 @@ export async function sendAcknowledgement(document, acknowledgement) {
       return acc;
     }, {});
 
-    // Send only base identifiers + acknowledgement. Avoid full-document spreads so stale mutable fields do not trigger unintended backend side effects.
+    const normalizedAcknowledgement =
+      typeof acknowledgement === "string" ? acknowledgement.trim() : "";
+    const acknowledgementType =
+      typeof options?.acknowledgementType === "string"
+        ? options.acknowledgementType.trim()
+        : "";
+    const userid =
+      resolveUserId(options?.chatTarget) ||
+      resolveUserId(document) ||
+      resolveUserId(document?.userid);
+
+    if (!userid) {
+      throw new Error("Driver user ID not found for acknowledgement send");
+    }
+
     const updateRes = await fetch(updateDocumentRoute, {
       method: "POST",
       headers: {
@@ -167,7 +210,7 @@ export async function sendAcknowledgement(document, acknowledgement) {
       },
       body: JSON.stringify({
         ...requestBody,
-        acknowledgement,
+        acknowledgement: normalizedAcknowledgement,
       }),
     });
 
@@ -177,8 +220,37 @@ export async function sendAcknowledgement(document, acknowledgement) {
       throw new Error(updateData.message || "Failed to update document");
     }
 
+    const sendRes = await fetch(sendAcknowledgementRoute, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        userid,
+        value: normalizedAcknowledgement,
+        acknowledgementType,
+      }),
+    });
 
-    return { success: true, document: updateData.document || { ...document, acknowledgement } };
+    const sendData = await sendRes.json();
+
+    if (!sendRes.ok) {
+      throw new Error(sendData.message || "Failed to send acknowledgement");
+    }
+
+    return {
+      success: true,
+      document: updateData.document || {
+        ...document,
+        acknowledgement: normalizedAcknowledgement,
+      },
+      chat: {
+        msgId: sendData.msgId || null,
+        historySaved: sendData.historySaved === true,
+        pushSent: sendData.pushSent === true,
+      },
+    };
   } catch (error) {
     console.error("Failed to send acknowledgement:", error);
     throw error;

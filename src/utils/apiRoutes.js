@@ -215,6 +215,7 @@ export const fetchAcknowledgementsRoute = `${baseBackendUrl}/fetchchatacknowledg
 export const createAcknowledgementRoute = `${baseBackendUrl}/createchatacknowledgement`;
 export const updateAcknowledgementRoute = `${baseBackendUrl}/updatechatacknowledgement`;
 export const deleteAcknowledgementRoute = `${baseBackendUrl}/deletechatacknowledgement`;
+export const sendAcknowledgementRoute = `${baseBackendUrl}/sendchatacknowledgement`;
 export const sendPushNotificationRoute = `${baseBackendUrl}/sendpushnotification`;
 
 // Maintenance chat routes

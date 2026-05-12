@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Check,
@@ -28,6 +28,7 @@ import { useAppSelector } from "../store/hooks";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
 import { extractAttachmentDisplayName } from "../utils/chatAttachments";
+import { fetchAdmins } from "../services/adminAPI";
 
 const MESSAGE_LIMIT = 500;
 
@@ -56,6 +57,36 @@ function getBroadcastAudienceLabel(recipientType) {
   }
 }
 
+const normalizeBroadcastAdmins = (payload) => {
+  const candidates = Array.isArray(payload)
+    ? payload
+    : payload?.admins || payload?.data || payload?.users || payload?.result || [];
+
+  if (!Array.isArray(candidates)) return [];
+
+  return candidates
+    .map((admin, index) => {
+      const userid =
+        admin?.userid ||
+        admin?.userId ||
+        admin?.username ||
+        admin?.name ||
+        admin?.email ||
+        admin?.id ||
+        `admin-${index + 1}`;
+
+      return {
+        ...admin,
+        userid,
+        id: admin?.id || userid,
+        name: admin?.name || admin?.username || admin?.userid || admin?.email || userid,
+        admin_name:
+          admin?.admin_name || admin?.name || admin?.username || admin?.userid || userid,
+      };
+    })
+    .filter((admin) => admin.userid || admin.id);
+};
+
 export default function Broadcast() {
   const navigate = useNavigate();
   const [recipients, setRecipients] = useState("all");
@@ -64,6 +95,7 @@ export default function Broadcast() {
   const [broadcasting, setBroadcasting] = useState(false);
   const [broadcastHistory, setBroadcastHistory] = useState([]);
   const [showRecipientList, setShowRecipientList] = useState(false);
+  const [recipientSearch, setRecipientSearch] = useState("");
   const [driverSelections, setDriverSelections] = useState({});
   const [adminSelections, setAdminSelections] = useState({});
   const [historyFilter, setHistoryFilter] = useState("all");
@@ -73,42 +105,69 @@ export default function Broadcast() {
   const [selectedAttachment, setSelectedAttachment] = useState(null);
   const [showAttachmentPreview, setShowAttachmentPreview] = useState(false);
   const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
+  const [pendingDeleteBroadcast, setPendingDeleteBroadcast] = useState(null);
+  const [isDeletingBroadcast, setIsDeletingBroadcast] = useState(false);
+  const [broadcastAdmins, setBroadcastAdmins] = useState([]);
+  const [broadcastAdminsLoading, setBroadcastAdminsLoading] = useState(false);
   const fileInputRef = useRef(null);
 
   const { users: drivers = [] } = useAppSelector((state) => state.users);
-  const maintenanceUsers = useAppSelector(
-    (state) => state?.maintenanceUsers?.users || []
-  );
   const { user: adminUser } = useAuth();
+
+  const loadBroadcastAdmins = useCallback(async () => {
+    setBroadcastAdminsLoading(true);
+    try {
+      const response = await fetchAdmins();
+      setBroadcastAdmins(normalizeBroadcastAdmins(response));
+    } catch (error) {
+      console.error("Failed to load broadcast admins:", error);
+      toast.error("Failed to load admins");
+    } finally {
+      setBroadcastAdminsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     loadBroadcastHistory();
   }, []);
 
   useEffect(() => {
-    const selections = {};
-    drivers.forEach((driver) => {
-      const id = driver?.userid ?? driver?.id;
-      if (id) {
-        selections[id] = true;
-      }
+    loadBroadcastAdmins();
+  }, [loadBroadcastAdmins]);
+
+  useEffect(() => {
+    setDriverSelections((prev) => {
+      const next = { ...prev };
+
+      drivers.forEach((driver) => {
+        const id = driver?.userid ?? driver?.id;
+        if (id && !(id in next)) {
+          next[id] = true;
+        }
+      });
+
+      return next;
     });
-    setDriverSelections(selections);
   }, [drivers]);
 
   useEffect(() => {
-    const selections = {};
-    maintenanceUsers.forEach((admin) => {
-      const id = admin?.userid ?? admin?.id;
-      if (id) {
-        selections[id] = true;
-      }
+    setAdminSelections((prev) => {
+      const next = { ...prev };
+
+      broadcastAdmins.forEach((admin) => {
+        const id = admin?.userid ?? admin?.id;
+        if (id && !(id in next)) {
+          next[id] = true;
+        }
+      });
+
+      return next;
     });
-    setAdminSelections(selections);
-  }, [maintenanceUsers]);
+  }, [broadcastAdmins]);
 
   useEffect(() => {
     setShowRecipientList(false);
+    setRecipientSearch("");
   }, [recipients]);
 
   useEffect(() => {
@@ -129,23 +188,84 @@ export default function Broadcast() {
   };
 
   const getSelectedDriverIds = () =>
-    Object.keys(driverSelections).filter((id) => driverSelections[id]);
+    drivers
+      .map((driver) => driver?.userid ?? driver?.id)
+      .filter((id) => id && driverSelections[id]);
 
   const getSelectedAdminIds = () =>
-    Object.keys(adminSelections).filter((id) => adminSelections[id]);
+    broadcastAdmins
+      .map((admin) => admin?.userid ?? admin?.id)
+      .filter((id) => id && adminSelections[id]);
 
-  const selectedDriverCount = getSelectedDriverIds().length;
-  const selectedAdminCount = getSelectedAdminIds().length;
-  const selectionList = recipients === "drivers" ? drivers : maintenanceUsers;
-  const currentSelections =
-    recipients === "drivers" ? driverSelections : adminSelections;
+  const selectedDriverIds = getSelectedDriverIds();
+  const selectedAdminIds = getSelectedAdminIds();
+  const selectedDriverCount = selectedDriverIds.length;
+  const selectedAdminCount = selectedAdminIds.length;
+  const selectedAllCount = selectedDriverCount + selectedAdminCount;
+  const driverRows = drivers.map((driver) => ({
+    ...driver,
+    __recipientKind: "driver",
+    __selectionKey: `driver:${driver?.userid ?? driver?.id}`,
+    __id: driver?.userid ?? driver?.id,
+    __name:
+      driver?.name || driver?.driver_name || driver?.username || "Unknown Driver",
+  }));
+  const adminRows = broadcastAdmins.map((admin) => ({
+    ...admin,
+    __recipientKind: "admin",
+    __selectionKey: `admin:${admin?.userid ?? admin?.id}`,
+    __id: admin?.userid ?? admin?.id,
+    __name:
+      admin?.name ||
+      admin?.admin_name ||
+      admin?.username ||
+      admin?.userid ||
+      "Unknown Admin",
+  }));
+  const selectionList =
+    recipients === "drivers"
+      ? driverRows
+      : recipients === "admins"
+        ? adminRows
+        : [...driverRows, ...adminRows];
+
+  const isPersonSelected = (person) => {
+    if (person?.__recipientKind === "driver") {
+      return Boolean(driverSelections[person.__id]);
+    }
+    if (person?.__recipientKind === "admin") {
+      return Boolean(adminSelections[person.__id]);
+    }
+    return false;
+  };
+
+  const togglePersonSelection = (person) => {
+    if (!person?.__id) return;
+    if (person.__recipientKind === "driver") {
+      setDriverSelections((prev) => ({ ...prev, [person.__id]: !prev[person.__id] }));
+      return;
+    }
+    setAdminSelections((prev) => ({ ...prev, [person.__id]: !prev[person.__id] }));
+  };
+
+  const filteredSelectionList = selectionList.filter((person) => {
+    const searchValue = recipientSearch.trim().toLowerCase();
+    if (!searchValue) return true;
+
+    const id = String(person?.__id || "").toLowerCase();
+    const name = String(person?.__name || "").toLowerCase();
+    const phone = String(
+      person?.phone || person?.mobile || person?.phoneNumber || ""
+    ).toLowerCase();
+    const email = String(person?.email || "").toLowerCase();
+    const typeLabel = person?.__recipientKind === "admin" ? "admin" : "driver";
+
+    return [id, name, phone, email, typeLabel].some((value) => value.includes(searchValue));
+  });
 
   const allVisibleSelected =
-    selectionList.length > 0 &&
-    selectionList.every((person) => {
-      const id = person?.userid ?? person?.id;
-      return id ? currentSelections[id] : false;
-    });
+    filteredSelectionList.length > 0 &&
+    filteredSelectionList.every(isPersonSelected);
 
   const selectionLabel =
     recipients === "drivers"
@@ -156,7 +276,9 @@ export default function Broadcast() {
         ? selectedAdminCount > 0
           ? `${selectedAdminCount} admins selected`
           : "Select Users..."
-        : "All users selected";
+        : selectedAllCount > 0
+          ? `${selectedAllCount} users selected`
+          : "Select Users...";
 
   const filteredHistory = broadcastHistory.filter((broadcast) => {
     const matchesType =
@@ -181,38 +303,31 @@ export default function Broadcast() {
     return matchesType && haystack.includes(searchValue);
   });
 
-  const handleUserSelection = (userId) => {
-    if (recipients === "drivers") {
-      setDriverSelections((prev) => ({
-        ...prev,
-        [userId]: !prev[userId],
-      }));
-      return;
-    }
-
-    setAdminSelections((prev) => ({
-      ...prev,
-      [userId]: !prev[userId],
-    }));
-  };
-
   const handleToggleAll = () => {
     const nextValue = !allVisibleSelected;
-    const nextSelections = {};
+    const visibleDriverIds = filteredSelectionList
+      .filter((person) => person.__recipientKind === "driver")
+      .map((person) => person.__id)
+      .filter(Boolean);
+    const visibleAdminIds = filteredSelectionList
+      .filter((person) => person.__recipientKind === "admin")
+      .map((person) => person.__id)
+      .filter(Boolean);
 
-    selectionList.forEach((person) => {
-      const id = person?.userid ?? person?.id;
-      if (id) {
+    setDriverSelections((prev) => {
+      const nextSelections = { ...prev };
+      visibleDriverIds.forEach((id) => {
         nextSelections[id] = nextValue;
-      }
+      });
+      return nextSelections;
     });
-
-    if (recipients === "drivers") {
-      setDriverSelections(nextSelections);
-      return;
-    }
-
-    setAdminSelections(nextSelections);
+    setAdminSelections((prev) => {
+      const nextSelections = { ...prev };
+      visibleAdminIds.forEach((id) => {
+        nextSelections[id] = nextValue;
+      });
+      return nextSelections;
+    });
   };
 
   const openAttachmentPicker = (accept) => {
@@ -272,6 +387,10 @@ export default function Broadcast() {
       toast.error("Select at least one admin");
       return;
     }
+    if (recipients === "all" && selectedAllCount === 0) {
+      toast.error("Select at least one user");
+      return;
+    }
 
     setBroadcasting(true);
     try {
@@ -279,9 +398,9 @@ export default function Broadcast() {
         recipients,
         message,
         drivers,
-        maintenanceUsers,
-        getSelectedDriverIds(),
-        getSelectedAdminIds(),
+        broadcastAdmins,
+        selectedDriverIds,
+        selectedAdminIds,
         {
           attachmentUrl: attachmentMeta?.url || "",
           attachmentName: attachmentMeta?.name || "",
@@ -300,23 +419,28 @@ export default function Broadcast() {
     }
   };
 
-  const handleDeleteBroadcast = async (broadcastId) => {
-    if (!window.confirm("Delete this broadcast from history?")) {
-      return;
-    }
+  const handleDeleteBroadcast = (broadcast) => {
+    setPendingDeleteBroadcast(broadcast);
+  };
 
+  const confirmDeleteBroadcast = async () => {
+    if (!pendingDeleteBroadcast?.id) return;
+
+    setIsDeletingBroadcast(true);
     try {
-      await deleteBroadcast(broadcastId);
-      toast.success("Broadcast deleted");
+      await deleteBroadcast(pendingDeleteBroadcast.id);
       loadBroadcastHistory();
+      setPendingDeleteBroadcast(null);
     } catch (error) {
       console.error("Failed to delete broadcast:", error);
       toast.error("Failed to delete broadcast");
+    } finally {
+      setIsDeletingBroadcast(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#120b22] text-white">
+    <div className="min-h-screen bg-slate-950 text-white">
       <div className="w-full px-5 py-6">
         <div className="mb-5 flex items-center gap-3">
           <button
@@ -332,7 +456,7 @@ export default function Broadcast() {
           </h1>
         </div>
 
-        <section className="rounded-[10px] border border-white/7 bg-[linear-gradient(180deg,rgba(31,24,55,0.98),rgba(24,18,42,0.98))] p-5 shadow-[0_18px_40px_rgba(4,2,16,0.28)]">
+        <section className="rounded-[10px] border border-white/7 bg-slate-950 p-5 shadow-[0_18px_40px_rgba(4,2,16,0.28)]">
           <div className="flex items-center justify-between gap-3">
             <div className="text-[15px] font-semibold text-white/92">
               Send Broadcast
@@ -354,12 +478,12 @@ export default function Broadcast() {
           </div>
 
           {!isComposeCollapsed && (
-            <div className="mt-4 rounded-[10px] border border-white/7 bg-white/[0.025] p-4">
+            <div className="mt-4 rounded-[10px] border border-white/7 bg-slate-950 p-4">
             <label className="mb-2 block text-[13px] font-semibold text-white/78">
               Recipients
             </label>
 
-            <div className="rounded-[9px] border border-white/8 bg-[#282047]/82 px-4 py-3">
+            <div className="rounded-[9px] border border-white/8 bg-slate-950 px-4 py-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex flex-wrap gap-1.5">
                   {recipientOptions.map((option) => {
@@ -391,17 +515,10 @@ export default function Broadcast() {
             <div className="mt-2">
               <button
                 type="button"
-                onClick={() =>
-                  recipients !== "all" &&
-                  setShowRecipientList((prev) => !prev)
-                }
-                className={`flex w-full items-center justify-between rounded-[9px] border border-white/8 px-4 py-3 text-left text-[13px] transition ${
-                  recipients === "all"
-                    ? "cursor-default bg-[#282047]/50 text-white/42"
-                    : "bg-[#282047]/72 text-white/72 hover:text-white"
-                }`}
+                onClick={() => setShowRecipientList((prev) => !prev)}
+                className="flex w-full items-center justify-between rounded-[9px] border border-white/8 bg-slate-950 px-4 py-3 text-left text-[13px] text-white/72 transition hover:text-white"
               >
-                <span>{recipients === "all" ? "Select Users..." : selectionLabel}</span>
+                <span>{selectionLabel}</span>
                 <ChevronDown
                   className={`h-4 w-4 text-white/35 transition-transform ${
                     showRecipientList ? "rotate-180" : ""
@@ -409,12 +526,42 @@ export default function Broadcast() {
                 />
               </button>
 
-              {recipients !== "all" && showRecipientList && (
-                <div className="mt-2 rounded-[9px] border border-white/8 bg-[#231b3f] p-3">
+              {showRecipientList && (
+                <div className="mt-2 rounded-[9px] border border-white/8 bg-slate-950 p-3">
                   <div className="mb-2 px-1 text-[11px] uppercase tracking-[0.22em] text-white/34">
-                    {recipients === "drivers"
+                    {recipients === "all"
+                      ? `${selectedAllCount} Selected`
+                      : recipients === "drivers"
                       ? `${selectedDriverCount} Selected`
-                      : `${selectedAdminCount} Selected`}
+                      : recipients === "admins"
+                        ? `${selectedAdminCount} Selected`
+                        : `${selectedDriverCount + selectedAdminCount} Selected`}
+                  </div>
+                  <div className="relative mb-2">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
+                    <input
+                      type="text"
+                      value={recipientSearch}
+                      onChange={(event) => setRecipientSearch(event.target.value)}
+                      placeholder={`Search ${
+                        recipients === "drivers"
+                          ? "drivers"
+                          : recipients === "admins"
+                            ? "admins"
+                            : "users"
+                      }...`}
+                      className="h-9 w-full rounded-md border border-white/8 bg-[#17122c] pl-9 pr-9 text-[13px] text-white outline-none placeholder:text-white/30 focus:border-[#6b82ff]/75"
+                    />
+                    {recipientSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setRecipientSearch("")}
+                        className="absolute right-2 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-white/45 transition hover:bg-white/10 hover:text-white"
+                        aria-label="Clear recipient search"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
 
                   <label className="mb-1 flex items-center justify-between rounded-md px-2 py-2 text-[13px] text-white/82 hover:bg-white/[0.04]">
@@ -431,30 +578,47 @@ export default function Broadcast() {
                     </span>
                   </label>
 
-                  <div className="max-h-52 space-y-1 overflow-y-auto pr-1">
-                    {selectionList.map((person) => {
-                      const id = person?.userid ?? person?.id;
-                      const name =
-                        person?.name ||
-                        person?.driver_name ||
-                        person?.admin_name ||
-                        person?.username ||
-                        "Unknown";
+                  <div className="dark-scrollbar max-h-52 space-y-1 overflow-y-auto pr-1">
+                    {(recipients === "admins" || recipients === "all") && broadcastAdminsLoading && (
+                      <div className="px-2 py-2 text-[12px] text-white/50">
+                        Loading admins...
+                      </div>
+                    )}
+                    {filteredSelectionList.length === 0 && (
+                      <div className="px-2 py-3 text-center text-[12px] text-white/45">
+                        No users found
+                      </div>
+                    )}
+                    {filteredSelectionList.map((person) => {
+                      const id = person?.__id;
+                      const name = person?.__name;
 
                       return (
                         <label
-                          key={id}
+                          key={person.__selectionKey}
                           className="flex items-center justify-between gap-3 rounded-md px-2 py-2 text-[13px] text-white/74 transition hover:bg-white/[0.04] hover:text-white"
                         >
                           <div className="flex min-w-0 items-center gap-2.5">
                             <Checkbox
-                              checked={currentSelections[id] || false}
-                              onCheckedChange={() => handleUserSelection(id)}
+                              checked={isPersonSelected(person)}
+                              onCheckedChange={() => togglePersonSelection(person)}
                               className="border-white/18 bg-white/[0.04] data-[state=checked]:border-[#6b82ff] data-[state=checked]:bg-[#6b82ff] data-[state=checked]:text-white"
                             />
                             <span className="truncate">{name}</span>
+                            {recipients === "all" && (
+                              <span className="rounded border border-white/8 bg-white/[0.04] px-1.5 py-0.5 text-[10px] text-white/38">
+                                {person.__recipientKind === "driver" ? "Driver" : "Admin"}
+                              </span>
+                            )}
                           </div>
-                          <span className="text-[11px] text-white/28">{id}</span>
+                          <div className="flex items-center gap-2 text-[11px] text-white/28">
+                            {recipients === "all" && (
+                              <span className="uppercase tracking-[0.16em] text-white/36">
+                                {person.__recipientKind === "driver" ? "Driver" : "Admin"}
+                              </span>
+                            )}
+                            <span>{id}</span>
+                          </div>
                         </label>
                       );
                     })}
@@ -489,13 +653,13 @@ export default function Broadcast() {
                   }
                   rows={4}
                   placeholder="Enter your broadcast message..."
-                  className="min-h-[112px] w-full resize-none rounded-[9px] border border-white/8 bg-[#282047]/72 px-4 py-3.5 pr-16 text-[13px] text-white outline-none placeholder:text-white/27 focus:border-[#6b82ff]/75"
+                  className="min-h-[112px] w-full resize-none rounded-[9px] border border-white/8 bg-slate-950 px-4 py-3.5 pr-16 text-[13px] text-white outline-none placeholder:text-white/27 focus:border-[#6b82ff]/75"
                 />
                 <div className="absolute bottom-3 right-3">
                   <button
                     type="button"
                     onClick={() => setShowAttachmentOptions((prev) => !prev)}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/8 bg-black/10 text-white/72 backdrop-blur-sm transition hover:bg-black/20 hover:text-white"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/8 bg-[#111b21] text-white/72 backdrop-blur-sm transition hover:bg-[#1a252c] hover:text-white"
                     aria-label="Attach file to broadcast"
                     aria-expanded={showAttachmentOptions}
                     aria-haspopup="true"
@@ -552,7 +716,7 @@ export default function Broadcast() {
               </div>
 
               {selectedAttachment?.url && (
-                <div className="mt-3 flex items-center justify-between gap-3 rounded-[11px] border border-white/8 bg-[#282047]/72 px-4 py-3 text-[13px] text-white/80">
+                <div className="mt-3 flex items-center justify-between gap-3 rounded-[11px] border border-white/8 bg-slate-950 px-4 py-3 text-[13px] text-white/80">
                   <div className="flex min-w-0 flex-1 items-center gap-3">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/55">
                       <Paperclip className="h-4 w-4" />
@@ -600,7 +764,7 @@ export default function Broadcast() {
           )}
         </section>
 
-        <section className="mt-4 rounded-[10px] border border-white/7 bg-[linear-gradient(180deg,rgba(31,24,55,0.98),rgba(24,18,42,0.98))] shadow-[0_18px_40px_rgba(4,2,16,0.24)]">
+        <section className="mt-4 rounded-[10px] border border-white/7 bg-slate-950 shadow-[0_18px_40px_rgba(4,2,16,0.24)]">
           <div className="border-b border-white/7 px-5 py-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-[15px] font-semibold text-white/92">
@@ -616,12 +780,12 @@ export default function Broadcast() {
                         value={historySearch}
                         onChange={(event) => setHistorySearch(event.target.value)}
                         placeholder="Search broadcasts..."
-                        className="h-8 w-[148px] rounded-md border border-white/8 bg-[#282047]/72 pl-8 pr-2 text-[12px] text-white outline-none placeholder:text-white/27"
+                        className="h-8 w-[148px] rounded-md border border-white/8 bg-slate-950 pl-8 pr-2 text-[12px] text-white outline-none placeholder:text-white/27"
                       />
                     </div>
                     <button
                       type="button"
-                      className="flex h-8 w-8 items-center justify-center rounded-md border border-white/8 bg-[#282047]/72 text-white/60"
+                      className="flex h-8 w-8 items-center justify-center rounded-md border border-white/8 bg-slate-950 text-white/60"
                     >
                       <Filter className="h-3.5 w-3.5" />
                     </button>
@@ -630,7 +794,7 @@ export default function Broadcast() {
                 <button
                   type="button"
                   onClick={() => setIsHistoryCollapsed((prev) => !prev)}
-                  className="flex h-8 w-8 items-center justify-center rounded-md border border-white/8 bg-[#282047]/72 text-white/60 transition hover:text-white"
+                  className="flex h-8 w-8 items-center justify-center rounded-md border border-white/8 bg-slate-950 text-white/60 transition hover:text-white"
                   aria-label={
                     isHistoryCollapsed
                       ? "Expand broadcast history panel"
@@ -666,7 +830,7 @@ export default function Broadcast() {
 
                 <button
                   type="button"
-                  className="flex h-8 w-8 items-center justify-center rounded-md border border-white/8 bg-[#282047]/72 text-white/60"
+                  className="flex h-8 w-8 items-center justify-center rounded-md border border-white/8 bg-slate-950 text-white/60"
                 >
                   <Filter className="h-3.5 w-3.5" />
                 </button>
@@ -675,7 +839,7 @@ export default function Broadcast() {
           </div>
 
           {!isHistoryCollapsed && (
-            <div className="max-h-[420px] space-y-3 overflow-y-auto px-4 py-4">
+            <div className="dark-scrollbar max-h-[420px] space-y-3 overflow-y-auto px-4 py-4">
               {loading ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="h-5 w-5 animate-spin text-white/65" />
@@ -695,7 +859,7 @@ export default function Broadcast() {
                   return (
                     <article
                       key={broadcast.id}
-                      className="rounded-[10px] border border-white/7 bg-[linear-gradient(180deg,rgba(36,29,64,0.98),rgba(28,22,49,0.98))] p-3"
+                      className="rounded-[10px] border border-white/7 bg-slate-950 p-3"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex gap-2.5">
@@ -719,7 +883,7 @@ export default function Broadcast() {
 
                         <button
                           type="button"
-                          onClick={() => handleDeleteBroadcast(broadcast.id)}
+                          onClick={() => handleDeleteBroadcast(broadcast)}
                           className="rounded p-1 text-red-400 transition hover:bg-red-500/10 hover:text-red-300"
                           title="Delete broadcast"
                           aria-label="Delete broadcast"
@@ -793,6 +957,71 @@ export default function Broadcast() {
 
         </section>
       </div>
+      {pendingDeleteBroadcast && (
+        <div
+          className="fixed inset-0 z-[190] flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Delete broadcast confirmation"
+        >
+          <div className="w-full max-w-md rounded-[16px] border border-white/10 bg-slate-950 p-5 shadow-[0_24px_60px_rgba(2,6,23,0.55)]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-[17px] font-semibold text-white">
+                  Delete broadcast?
+                </h3>
+                <p className="mt-1 text-[13px] text-white/55">
+                  This will permanently delete the broadcast message?
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isDeletingBroadcast && setPendingDeleteBroadcast(null)}
+                disabled={isDeletingBroadcast}
+                className="rounded p-1 text-white/45 transition hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Close delete confirmation"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-[12px] border border-white/8 bg-white/[0.03] px-4 py-3">
+              <div className="text-[12px] uppercase tracking-[0.14em] text-white/32">
+                Message preview
+              </div>
+              <p className="mt-2 line-clamp-3 text-[13px] text-white/78">
+                {pendingDeleteBroadcast.message?.trim() || "No message text"}
+              </p>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteBroadcast(null)}
+                disabled={isDeletingBroadcast}
+                className="rounded-[10px] border border-white/10 px-4 py-2 text-[13px] font-medium text-white/72 transition hover:bg-white/[0.04] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteBroadcast}
+                disabled={isDeletingBroadcast}
+                className="flex min-w-[118px] items-center justify-center gap-2 rounded-[10px] bg-red-500 px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {isDeletingBroadcast ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <span>Delete</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showAttachmentPreview && selectedAttachment instanceof File && (
         <FilePreviewModal
           file={selectedAttachment}
@@ -827,5 +1056,3 @@ function formatDateCompact(timestamp) {
     return timestamp;
   }
 }
-
-
