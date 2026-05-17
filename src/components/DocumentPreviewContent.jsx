@@ -743,6 +743,13 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   const handleSendAcknowledgement = async (acknowledgementText) => {
     const doc = selectedDoc;
     if (!doc) return;
+    const normalizedAcknowledgementText =
+      typeof acknowledgementText === "string"
+        ? acknowledgementText.replace(
+            /^acknowledg(e)?ment\s+sent\b/i,
+            "Acknowledgement",
+          ).trim()
+        : "";
 
     const directChatTarget =
       doc.userid || doc.userId || doc.driver_id || doc.driverId || null;
@@ -754,13 +761,13 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
 
     setIsSendingAcknowledgement(true);
     try {
-      await sendAcknowledgement(doc, acknowledgementText, {
+      await sendAcknowledgement(doc, normalizedAcknowledgementText, {
         chatTarget: resolvedChatTarget,
         acknowledgementType,
       });
 
       // Update local state
-      const updatedDoc = { ...doc, acknowledgement: acknowledgementText };
+      const updatedDoc = { ...doc, acknowledgement: normalizedAcknowledgementText };
       if (onDocUpdate) {
         onDocUpdate(updatedDoc);
       }
@@ -1118,7 +1125,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
               >
                 <Send className="h-4 w-4" />
                 {doc.acknowledgement
-                  ? "Acknowledgement Sent"
+                  ? "Acknowledgement"
                   : "Acknowledgement"}
               </Button>
             </PopoverTrigger>

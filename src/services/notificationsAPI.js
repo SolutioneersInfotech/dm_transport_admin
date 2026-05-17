@@ -40,6 +40,30 @@ function getDocumentTypeLabel(document) {
   return "document";
 }
 
+function getCanonicalDocumentNotificationId(data = {}, metadata = {}, docSnapshot) {
+  return (
+    data.id ||
+    metadata.document_id ||
+    data.document_id ||
+    data.documentId ||
+    metadata.documentId ||
+    docSnapshot?.id ||
+    [
+      metadata.driver_name || metadata.driverName || data.driver_name || data.driverName || "driver",
+      metadata.type || metadata.document_type || data.document_type || getDocumentTypeLabel(data),
+      normalizeTimestampMs(
+        data.createdAt ||
+          data.date ||
+          data.created_at ||
+          data.timestamp ||
+          metadata.createdAt ||
+          metadata.date ||
+          metadata.timestamp
+      ) || 0,
+    ].join(":")
+  );
+}
+
 function normalizeNotificationType(value) {
   return String(value || "")
     .trim()
@@ -85,12 +109,7 @@ function mapDocumentNotificationDoc(docSnapshot) {
   }
 
   const metadata = data.metadata || {};
-  const documentId =
-    metadata.document_id ||
-    data.document_id ||
-    data.documentId ||
-    metadata.documentId ||
-    docSnapshot.id;
+  const documentId = getCanonicalDocumentNotificationId(data, metadata, docSnapshot);
   const timestampMs = normalizeTimestampMs(
     data.createdAt ||
       data.date ||
@@ -125,7 +144,7 @@ function mapDocumentNotificationDoc(docSnapshot) {
 
 function mapDocumentUploadDoc(docSnapshot) {
   const data = docSnapshot.data() || {};
-  const documentId = data.id || data.document_id || docSnapshot.id;
+  const documentId = getCanonicalDocumentNotificationId(data, data.metadata || {}, docSnapshot);
   const timestampMs = normalizeTimestampMs(
     data.date || data.createdAt || data.created_at || data.timestamp
   );
