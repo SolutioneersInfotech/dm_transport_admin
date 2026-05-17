@@ -27,6 +27,14 @@ function resolveUserId(chatTarget) {
   return normalizeComparableId(chatTarget);
 }
 
+function normalizeAcknowledgementMessage(value) {
+  const normalizedValue = typeof value === "string" ? value.trim() : "";
+  return normalizedValue.replace(
+    /^acknowledg(e)?ment\s+sent\b/i,
+    "Acknowledgement",
+  );
+}
+
 /**
  * Fetch all acknowledgement templates
  * @returns {Promise<Array<{id: string, data: string}>>}
@@ -51,7 +59,7 @@ export async function fetchAcknowledgements() {
     const acknowledgements = data.chatAcknowledgement || [];
     return acknowledgements.map((item) => ({
       id: item.id,
-      data: item.data || item.value || "",
+      data: normalizeAcknowledgementMessage(item.data || item.value || ""),
       acknowledgementType: item.acknowledgementType || "",
     }));
   } catch (error) {
@@ -67,6 +75,7 @@ export async function fetchAcknowledgements() {
  */
 export async function createAcknowledgement(value) {
   try {
+    const normalizedValue = normalizeAcknowledgementMessage(value);
     const token = localStorage.getItem("adminToken");
     const res = await fetch(createAcknowledgementRoute, {
       method: "POST",
@@ -74,7 +83,7 @@ export async function createAcknowledgement(value) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ value }),
+      body: JSON.stringify({ value: normalizedValue }),
     });
 
     const data = await res.json();
@@ -100,6 +109,7 @@ export async function createAcknowledgement(value) {
  */
 export async function updateAcknowledgement(id, newValue) {
   try {
+    const normalizedValue = normalizeAcknowledgementMessage(newValue);
     const token = localStorage.getItem("adminToken");
     const res = await fetch(updateAcknowledgementRoute, {
       method: "POST",
@@ -109,7 +119,7 @@ export async function updateAcknowledgement(id, newValue) {
       },
       body: JSON.stringify({
         id,
-        new_value: newValue,
+        new_value: normalizedValue,
       }),
     });
 
@@ -189,6 +199,8 @@ export async function sendAcknowledgement(
 
     const normalizedAcknowledgement =
       typeof acknowledgement === "string" ? acknowledgement.trim() : "";
+    const outboundAcknowledgement =
+      normalizeAcknowledgementMessage(normalizedAcknowledgement);
     const acknowledgementType =
       typeof options?.acknowledgementType === "string"
         ? options.acknowledgementType.trim()
@@ -210,7 +222,7 @@ export async function sendAcknowledgement(
       },
       body: JSON.stringify({
         ...requestBody,
-        acknowledgement: normalizedAcknowledgement,
+        acknowledgement: outboundAcknowledgement,
       }),
     });
 
@@ -228,7 +240,7 @@ export async function sendAcknowledgement(
       },
       body: JSON.stringify({
         userid,
-        value: normalizedAcknowledgement,
+        value: outboundAcknowledgement,
         acknowledgementType,
       }),
     });
@@ -243,7 +255,7 @@ export async function sendAcknowledgement(
       success: true,
       document: updateData.document || {
         ...document,
-        acknowledgement: normalizedAcknowledgement,
+        acknowledgement: outboundAcknowledgement,
       },
       chat: {
         msgId: sendData.msgId || null,

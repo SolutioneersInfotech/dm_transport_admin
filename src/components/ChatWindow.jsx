@@ -1409,7 +1409,6 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
                       onReplyClick={handleReplyJump}
                       onImageClick={(url) => handleImageClick(url, senderName, msg?.dateTime)}
                       onDownloadMedia={(url) => downloadChatMedia(url, senderName, msg?.dateTime)}
-                      onDelete={handleDeleteMessage}
                     />
 
                   </div>

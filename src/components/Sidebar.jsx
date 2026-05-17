@@ -317,27 +317,6 @@ export default function Sidebar() {
     }));
   }, [updatePersonalization]);
 
-  useEffect(() => {
-    if (!dismissedNotificationIds.length) return;
-
-    const activeNotificationIds = new Set([
-      ...chatNotifications.map((item) => item?.id).filter(Boolean),
-      ...broadcastNotifications.map((item) => item?.id).filter(Boolean),
-      ...documentNotifications.map((item) => item?.id).filter(Boolean),
-    ]);
-
-    const nextDismissedIds = dismissedNotificationIds.filter((id) => activeNotificationIds.has(id));
-    if (nextDismissedIds.length !== dismissedNotificationIds.length) {
-      persistDismissedNotificationIds(nextDismissedIds);
-    }
-  }, [
-    broadcastNotifications,
-    chatNotifications,
-    dismissedNotificationIds,
-    documentNotifications,
-    persistDismissedNotificationIds,
-  ]);
-
   // Create menu sections with dynamic badges (number of users with unseen, not total unseen)
   const menuSectionsWithBadges = useMemo(() => {
     return menuSections.map((section) => ({
