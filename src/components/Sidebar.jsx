@@ -75,6 +75,7 @@ import {
 } from "lucide-react";
 
 const DISMISSED_NOTIFICATIONS_STORAGE_KEY = "sidebar_dismissed_notifications_v1";
+const NOTIFICATION_CHIME_COOLDOWN_MS = 1000;
 
 const menuSections = [
   {
@@ -120,6 +121,11 @@ export default function Sidebar() {
   const [dismissedNotificationIds, setDismissedNotificationIds] = useState([]);
   const [notificationNow, setNotificationNow] = useState(() => Date.now());
   const hasHydratedSidebarPersonalization = useRef(false);
+  const audioContextRef = useRef(null);
+  const notificationBurstTimeoutRef = useRef(null);
+  const isNotificationBurstActiveRef = useRef(false);
+  const previousNotificationIdsRef = useRef(new Set());
+  const hasInitializedNotificationSoundRef = useRef(false);
 
   // Get unread data from Redux - badge shows number of users with unseen messages, not total messages
   const { unreadCountsByUser } = useAppSelector((state) => state.chatUnread);
@@ -251,6 +257,69 @@ export default function Sidebar() {
 
   const unreadCount = notifications.length;
 
+  const playNotificationChime = useCallback(() => {
+    if (typeof window === "undefined") return;
+
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    try {
+      const audioContext =
+        audioContextRef.current || new AudioContextClass();
+      audioContextRef.current = audioContext;
+
+      if (audioContext.state === "suspended") {
+        audioContext.resume().catch(() => {});
+      }
+
+      const now = audioContext.currentTime;
+      const masterGain = audioContext.createGain();
+      masterGain.gain.setValueAtTime(0.0001, now);
+      masterGain.gain.exponentialRampToValueAtTime(0.082, now + 0.02);
+      masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.74);
+      masterGain.connect(audioContext.destination);
+
+      const primaryOscillator = audioContext.createOscillator();
+      primaryOscillator.type = "sine";
+      primaryOscillator.frequency.setValueAtTime(740, now);
+      primaryOscillator.frequency.exponentialRampToValueAtTime(880, now + 0.16);
+      primaryOscillator.connect(masterGain);
+
+      const accentOscillator = audioContext.createOscillator();
+      const accentGain = audioContext.createGain();
+      accentOscillator.type = "triangle";
+      accentOscillator.frequency.setValueAtTime(1110, now + 0.12);
+      accentGain.gain.setValueAtTime(0.0001, now);
+      accentGain.gain.exponentialRampToValueAtTime(0.036, now + 0.14);
+      accentGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.46);
+      accentOscillator.connect(accentGain);
+      accentGain.connect(audioContext.destination);
+
+      primaryOscillator.start(now);
+      primaryOscillator.stop(now + 0.72);
+      accentOscillator.start(now + 0.1);
+      accentOscillator.stop(now + 0.48);
+    } catch (error) {
+      console.error("Failed to play notification chime:", error);
+    }
+  }, []);
+
+  const requestNotificationChime = useCallback(() => {
+    if (!isNotificationBurstActiveRef.current) {
+      isNotificationBurstActiveRef.current = true;
+      playNotificationChime();
+    }
+
+    if (notificationBurstTimeoutRef.current) {
+      window.clearTimeout(notificationBurstTimeoutRef.current);
+    }
+
+    notificationBurstTimeoutRef.current = window.setTimeout(() => {
+      notificationBurstTimeoutRef.current = null;
+      isNotificationBurstActiveRef.current = false;
+    }, NOTIFICATION_CHIME_COOLDOWN_MS);
+  }, [playNotificationChime]);
+
   useEffect(() => {
     if (!isPersonalizationReady || hasHydratedSidebarPersonalization.current) {
       return;
@@ -370,6 +439,39 @@ export default function Sidebar() {
     }, 60 * 1000);
 
     return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const currentNotificationIds = new Set(
+      notifications.map((item) => item?.id).filter(Boolean)
+    );
+
+    if (!hasInitializedNotificationSoundRef.current) {
+      previousNotificationIdsRef.current = currentNotificationIds;
+      hasInitializedNotificationSoundRef.current = true;
+      return;
+    }
+
+    const hasNewNotification = [...currentNotificationIds].some(
+      (id) => !previousNotificationIdsRef.current.has(id)
+    );
+
+    previousNotificationIdsRef.current = currentNotificationIds;
+
+    if (hasNewNotification) {
+      requestNotificationChime();
+    }
+  }, [notifications, requestNotificationChime]);
+
+  useEffect(() => {
+    return () => {
+      if (notificationBurstTimeoutRef.current) {
+        window.clearTimeout(notificationBurstTimeoutRef.current);
+      }
+      if (audioContextRef.current?.close) {
+        audioContextRef.current.close().catch(() => {});
+      }
+    };
   }, []);
 
   useEffect(() => {
