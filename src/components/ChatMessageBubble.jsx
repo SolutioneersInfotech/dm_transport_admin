@@ -293,7 +293,16 @@
 // }
 
 import { memo, useEffect, useState } from "react";
-import { Check, CheckCheck, Download, ExternalLink, FileText, Copy, Megaphone } from "lucide-react";
+import {
+  Check,
+  CheckCheck,
+  Copy,
+  Download,
+  ExternalLink,
+  FileText,
+  Megaphone,
+  Trash2,
+} from "lucide-react";
 import {
   extractAttachmentDisplayName,
   getAttachmentKind,
@@ -311,6 +320,7 @@ function ChatMessageBubble({
   onReplyClick,
   onImageClick,
   onDownloadMedia,
+  onDelete,
   isLastMessageInChat,
   isBroadcast = false,
 }) {
@@ -467,27 +477,21 @@ function ChatMessageBubble({
   // Sent = blue bubble (admin theme), Received = blue-gray bubble
   const bubbleStyle = isAdmin
     ? isAcknowledgementMessage
-      ? "border border-emerald-300/40 bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-br-md"
+      ? "border border-slate-600/70 bg-[#1c2530] text-[#e9edef] rounded-br-md"
       : "bg-[#1f6feb] text-white rounded-br-md"
     : isAcknowledgementMessage
-      ? "border border-emerald-400/20 bg-[#122c2a] text-[#d7fff4] rounded-bl-md"
+      ? "border border-slate-700 bg-[#161f29] text-[#d5dde6] rounded-bl-md"
       : "bg-[#1c2530] text-[#e9edef] rounded-bl-md";
   const bubbleRounding = isAdmin
     ? "rounded-2xl rounded-br-md"
     : "rounded-2xl rounded-bl-md";
   const replyPreviewStyle = isAdmin
     ? isAcknowledgementMessage
-      ? "border-emerald-200/70 bg-white/10 text-white"
+      ? "border-slate-500 bg-black/20 text-[#dbe4ee]"
       : "border-[#1f6feb] bg-white/10 text-white"
     : isAcknowledgementMessage
-      ? "border-emerald-300/50 bg-black/20 text-[#d7fff4]"
+      ? "border-slate-600 bg-black/20 text-[#cbd5e1]"
       : "border-gray-500 bg-black/20 text-gray-300";
-  const acknowledgementBadge = isAcknowledgementMessage
-    ? (acknowledgementType || derivedAcknowledgementType || "Acknowledgement")
-        .replace(/[_-]+/g, " ")
-        .trim()
-    : "";
-
   const replyToPreview =
     replyToMessage != null
       ? (typeof replyToMessage.content?.message === "string"
@@ -604,15 +608,6 @@ function ChatMessageBubble({
         <div
           className={`px-3 py-2 shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] text-sm ${bubbleStyle} ${bubbleRounding}`}
         >
-          {isAcknowledgementMessage && (
-            <div className="mb-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-black/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/90">
-              <BadgeCheck className="h-3.5 w-3.5" />
-              <span className="truncate">
-                {acknowledgementBadge || "Acknowledgement"}
-              </span>
-            </div>
-          )}
-
           {/* Broadcast indicator (when sender name is not shown) */}
           {isBroadcast && !showSenderName && (
             <div className="mb-2 inline-flex items-center justify-center rounded-full bg-white/[0.08] p-1 text-[#85a0ff]">

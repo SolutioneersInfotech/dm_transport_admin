@@ -53,3 +53,52 @@ export async function createAdmin(payload) {
 export async function deleteAdmin(userid) {
   return api("deleteadmin", "POST", { userid });
 }
+
+/**
+ * Save document filter preferences for the current admin
+ * @param {object} filters - Filter state object containing selectedFilters, statusFilter, categoryFilter, flagFilter, and dateRange
+ * @returns {Promise<{success: boolean, message?: string}>}
+ */
+export async function saveDocumentFilters(filters) {
+  try {
+    const timestamp = new Date().toISOString();
+    return await api("savedocumentfilters", "POST", {
+      name: "Auto-saved document filters",
+      description: `Updated at ${timestamp}`,
+      filters,
+    });
+  } catch (error) {
+    // If backend endpoint doesn't exist yet, fail gracefully
+    console.warn("Failed to save document filters to backend:", error.message);
+    return { success: false, message: error.message };
+  }
+}
+
+/**
+ * Retrieve saved document filter preferences for the current admin
+ * @returns {Promise<{filters?: object, success?: boolean}>}
+ */
+export async function fetchDocumentFilters() {
+  try {
+    const response = await api("getdocumentfilters", "GET");
+    const latestFilter = Array.isArray(response?.filters) ? response.filters[0] : null;
+
+    if (!latestFilter?.id) {
+      return { filters: null, success: false };
+    }
+
+    const detailResponse = await api(
+      `getdocumentfilters?filterId=${encodeURIComponent(latestFilter.id)}`,
+      "GET"
+    );
+
+    return {
+      filters: detailResponse?.filter?.filters || null,
+      success: Boolean(detailResponse?.filter?.filters),
+    };
+  } catch (error) {
+    // If backend endpoint doesn't exist yet, return empty
+    console.warn("Failed to fetch document filters from backend:", error.message);
+    return { filters: null, success: false };
+  }
+}

@@ -68,7 +68,7 @@ function ChatComposer({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*,video/*"
+          accept="image/*,video/*,application/pdf"
           onChange={onFileSelect}
           className="hidden"
           aria-label="Attach file"

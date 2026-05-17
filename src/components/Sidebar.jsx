@@ -44,12 +44,18 @@
 //   );
 // }
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAppSelector } from "../store/hooks";
 import { useAuth } from "../context/AuthContext";
+import { usePersonalization } from "../context/PersonalizationContext";
 import { hasDocumentAccess } from "../utils/documentPermissions";
 import { ADMIN_PERMISSION_KEYS, hasAdminPermission } from "../utils/adminPermissions";
+import {
+  formatNotificationRelativeTime,
+  subscribeBroadcastNotifications,
+  subscribeDocumentUploadNotifications,
+} from "../services/notificationsAPI";
 import {
   Bell,
   Folder,
@@ -63,7 +69,12 @@ import {
   ShieldCheck,
   ChevronLeft,
   Menu,
+  Megaphone,
+  Upload,
+  X,
 } from "lucide-react";
+
+const DISMISSED_NOTIFICATIONS_STORAGE_KEY = "sidebar_dismissed_notifications_v1";
 
 const menuSections = [
   {
@@ -92,36 +103,28 @@ const menuSections = [
 
 export default function Sidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useAuth();
+  const {
+    personalization,
+    isReady: isPersonalizationReady,
+    updatePersonalization,
+  } = usePersonalization();
   const [open, setOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showMenuIcon, setShowMenuIcon] = useState(false);
   const userMenuRef = useRef(null);
   const [storedUser, setStoredUser] = useState(null);
-  const [notifications, setNotifications] = useState([
-    {
-      id: "notif-1",
-      title: "Chat escalation",
-      detail: "3 new escalations need review",
-      time: "2m ago",
-    },
-    {
-      id: "notif-2",
-      title: "Document upload",
-      detail: "12 manifests pending approval",
-      time: "18m ago",
-    },
-    {
-      id: "notif-3",
-      title: "System update",
-      detail: "Nightly sync completed",
-      time: "1h ago",
-    },
-  ]);
-  const unreadCount = useMemo(() => notifications.length, [notifications]);
+  const [broadcastNotifications, setBroadcastNotifications] = useState([]);
+  const [documentNotifications, setDocumentNotifications] = useState([]);
+  const [dismissedNotificationIds, setDismissedNotificationIds] = useState([]);
+  const [notificationNow, setNotificationNow] = useState(() => Date.now());
+  const hasHydratedSidebarPersonalization = useRef(false);
 
   // Get unread data from Redux - badge shows number of users with unseen messages, not total messages
   const { unreadCountsByUser } = useAppSelector((state) => state.chatUnread);
+  const { users } = useAppSelector((state) => state.users);
+  const { users: maintenanceUsers } = useAppSelector((state) => state.maintenanceUsers);
 
   // Count how many users have at least one unread (regular vs maintenance)
   const regularChatUnreadUserCount = useMemo(() => {
@@ -159,6 +162,182 @@ export default function Sidebar() {
     [currentUser?.permissions]
   );
 
+  const getUserDisplayName = (item) =>
+    item?.name || item?.driver_name || item?.username || item?.userid || item?.id || "User";
+
+  const getComparableUserId = (item) =>
+    item?.userid ??
+    item?.userId ??
+    item?.contactId ??
+    item?.contactid ??
+    item?.uid ??
+    item?.id ??
+    null;
+
+  const getChatNotificationTimestampMs = (item) => {
+    const raw = item?.last_chat_time;
+    if (!raw) return 0;
+
+    const sec = raw?._seconds ?? raw?.seconds;
+    if (typeof sec === "number") {
+      return sec * 1000;
+    }
+
+    const parsed = new Date(raw).getTime();
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+
+  const getChatNotificationDetail = useCallback((item, unreadCount, isMaintenance = false) => {
+    const preview = String(item?.last_message || "").trim();
+    const displayName = getUserDisplayName(item);
+    const countLabel = unreadCount > 1 ? `${unreadCount} unread messages` : "1 unread message";
+
+    if (preview) {
+      return `${displayName}: ${preview}`;
+    }
+
+    return isMaintenance
+      ? `${displayName} has ${countLabel} in maintenance chat`
+      : `${displayName} has ${countLabel}`;
+  }, []);
+
+  const chatNotifications = useMemo(() => {
+    const regularItems = (users || [])
+      .map((item) => {
+        const userId = getComparableUserId(item);
+        const unreadCount = unreadCountsByUser?.[userId]?.regular || 0;
+        if (!userId || unreadCount <= 0) return null;
+
+        const timestampMs = getChatNotificationTimestampMs(item);
+        return {
+          id: `chat:${userId}:${timestampMs || 0}:${unreadCount}`,
+          type: "chat",
+          title: unreadCount > 1 ? "New chat messages" : "New chat message",
+          detail: getChatNotificationDetail(item, unreadCount, false),
+          timestampMs,
+          route: `/chat?userid=${encodeURIComponent(userId)}`,
+        };
+      })
+      .filter(Boolean);
+
+    const maintenanceItems = (maintenanceUsers || [])
+      .map((item) => {
+        const userId = getComparableUserId(item);
+        const unreadCount = unreadCountsByUser?.[userId]?.maintenance || 0;
+        if (!userId || unreadCount <= 0) return null;
+
+        const timestampMs = getChatNotificationTimestampMs(item);
+        return {
+          id: `maintenance-chat:${userId}:${timestampMs || 0}:${unreadCount}`,
+          type: "maintenance-chat",
+          title: unreadCount > 1 ? "Maintenance chat updates" : "Maintenance chat update",
+          detail: getChatNotificationDetail(item, unreadCount, true),
+          timestampMs,
+          route: "/maintenance-chat",
+        };
+      })
+      .filter(Boolean);
+
+    return [...regularItems, ...maintenanceItems];
+  }, [getChatNotificationDetail, maintenanceUsers, unreadCountsByUser, users]);
+
+  const notifications = useMemo(() => {
+    const dismissedIds = new Set(dismissedNotificationIds);
+
+    return [...chatNotifications, ...broadcastNotifications, ...documentNotifications]
+      .filter((item) => item?.id && !dismissedIds.has(item.id))
+      .sort((left, right) => right.timestampMs - left.timestampMs);
+  }, [broadcastNotifications, chatNotifications, dismissedNotificationIds, documentNotifications]);
+
+  const unreadCount = notifications.length;
+
+  useEffect(() => {
+    if (!isPersonalizationReady || hasHydratedSidebarPersonalization.current) {
+      return;
+    }
+
+    const personalizationSidebar = personalization?.sidebar;
+    const personalizationNotifications = personalization?.notifications;
+
+    if (typeof personalizationSidebar?.isCollapsed === "boolean") {
+      setIsCollapsed(personalizationSidebar.isCollapsed);
+    }
+
+    if (Array.isArray(personalizationNotifications?.dismissedSidebarNotificationIds)) {
+      setDismissedNotificationIds(
+        personalizationNotifications.dismissedSidebarNotificationIds.filter(Boolean)
+      );
+    } else {
+      try {
+        const saved = window.localStorage.getItem(DISMISSED_NOTIFICATIONS_STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            setDismissedNotificationIds(parsed);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to read dismissed notifications:", error);
+      }
+    }
+
+    hasHydratedSidebarPersonalization.current = true;
+  }, [isPersonalizationReady, personalization]);
+
+  useEffect(() => {
+    if (!hasHydratedSidebarPersonalization.current) {
+      return;
+    }
+
+    updatePersonalization((current) => ({
+      ...current,
+      sidebar: {
+        ...(current?.sidebar || {}),
+        isCollapsed,
+      },
+    }));
+  }, [isCollapsed, updatePersonalization]);
+
+  const persistDismissedNotificationIds = useCallback((nextIds) => {
+    setDismissedNotificationIds(nextIds);
+    window.localStorage.setItem(
+      DISMISSED_NOTIFICATIONS_STORAGE_KEY,
+      JSON.stringify(nextIds)
+    );
+    if (!hasHydratedSidebarPersonalization.current) {
+      return;
+    }
+
+    updatePersonalization((current) => ({
+      ...current,
+      notifications: {
+        ...(current?.notifications || {}),
+        dismissedSidebarNotificationIds: nextIds,
+      },
+    }));
+  }, [updatePersonalization]);
+
+  useEffect(() => {
+    if (!dismissedNotificationIds.length) return;
+
+    const activeNotificationIds = new Set([
+      ...chatNotifications.map((item) => item?.id).filter(Boolean),
+      ...broadcastNotifications.map((item) => item?.id).filter(Boolean),
+      ...documentNotifications.map((item) => item?.id).filter(Boolean),
+    ]);
+
+    const nextDismissedIds = dismissedNotificationIds.filter((id) => activeNotificationIds.has(id));
+    if (nextDismissedIds.length !== dismissedNotificationIds.length) {
+      persistDismissedNotificationIds(nextDismissedIds);
+    }
+  }, [
+    broadcastNotifications,
+    chatNotifications,
+    dismissedNotificationIds,
+    documentNotifications,
+    persistDismissedNotificationIds,
+  ]);
+
   // Create menu sections with dynamic badges (number of users with unseen, not total unseen)
   const menuSectionsWithBadges = useMemo(() => {
     return menuSections.map((section) => ({
@@ -194,6 +373,24 @@ export default function Sidebar() {
     if (savedUser) {
       setStoredUser(JSON.parse(savedUser));
     }
+  }, []);
+
+  useEffect(() => {
+    const unsubscribeBroadcasts = subscribeBroadcastNotifications(setBroadcastNotifications);
+    const unsubscribeDocuments = subscribeDocumentUploadNotifications(setDocumentNotifications);
+
+    return () => {
+      unsubscribeBroadcasts?.();
+      unsubscribeDocuments?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setNotificationNow(Date.now());
+    }, 60 * 1000);
+
+    return () => window.clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -237,6 +434,39 @@ export default function Sidebar() {
     localStorage.removeItem("adminToken");
     localStorage.removeItem("adminUser");
     window.location.href = "/login";
+  }
+
+  function handleClearNotifications() {
+    persistDismissedNotificationIds([
+      ...new Set([...dismissedNotificationIds, ...notifications.map((item) => item.id)]),
+    ]);
+  }
+
+  function handleDismissNotification(notificationId) {
+    persistDismissedNotificationIds([...new Set([...dismissedNotificationIds, notificationId])]);
+  }
+
+  function handleNotificationClick(notification) {
+    if (!notification?.route) return;
+    navigate(notification.route);
+  }
+
+  function getNotificationAccent(notificationType) {
+    if (notificationType === "broadcast") return "text-amber-300";
+    if (notificationType === "document") return "text-emerald-300";
+    return "text-sky-300";
+  }
+
+  function renderNotificationIcon(notificationType) {
+    if (notificationType === "broadcast") {
+      return <Megaphone className={`h-4 w-4 ${getNotificationAccent(notificationType)}`} />;
+    }
+
+    if (notificationType === "document") {
+      return <Upload className={`h-4 w-4 ${getNotificationAccent(notificationType)}`} />;
+    }
+
+    return <MessageCircle className={`h-4 w-4 ${getNotificationAccent(notificationType)}`} />;
   }
 
   return (
@@ -357,14 +587,14 @@ export default function Sidebar() {
               </div>
               <button
                 type="button"
-                onClick={() => setNotifications([])}
+                onClick={handleClearNotifications}
                 className="text-xs font-semibold text-slate-400 transition hover:text-slate-200"
               >
                 Clear
               </button>
             </div>
 
-            <div className="space-y-2">
+            <div className="max-h-[26.5rem] space-y-2 overflow-y-auto pr-1">
               {notifications.length === 0 ? (
                 <p className="rounded-lg border border-dashed border-slate-800 px-3 py-4 text-xs text-slate-500">
                   You&apos;re all caught up.
@@ -373,19 +603,56 @@ export default function Sidebar() {
                 notifications.map((notification) => (
                   <div
                     key={notification.id}
-                    className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2"
+                    onClick={() => handleNotificationClick(notification)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        handleNotificationClick(notification);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    className="w-full cursor-pointer rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-left transition hover:border-slate-700 hover:bg-slate-900"
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs font-semibold text-slate-200">
-                        {notification.title}
-                      </p>
-                      <span className="text-[10px] uppercase tracking-wide text-slate-500">
-                        {notification.time}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 flex-1 items-start gap-2">
+                        <span className="mt-0.5 shrink-0">
+                          {renderNotificationIcon(notification.type)}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-xs font-semibold text-slate-200">
+                              {notification.title}
+                            </p>
+                            <span className="shrink-0 text-[10px] uppercase tracking-wide text-slate-500">
+                              {formatNotificationRelativeTime(notification.timestampMs, notificationNow)}
+                            </span>
+                          </div>
+                          <p className="mt-1 line-clamp-2 text-xs text-slate-400">
+                            {notification.detail}
+                          </p>
+                        </div>
+                      </div>
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        aria-label="Dismiss notification"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleDismissNotification(notification.id);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            handleDismissNotification(notification.id);
+                          }
+                        }}
+                        className="rounded p-1 text-slate-500 transition hover:text-slate-200"
+                      >
+                        <X className="h-3.5 w-3.5" />
                       </span>
                     </div>
-                    <p className="text-xs text-slate-400">
-                      {notification.detail}
-                    </p>
                   </div>
                 ))
               )}

@@ -2,6 +2,7 @@ import "./App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AuthProvider } from "./context/AuthContext";
+import { PersonalizationProvider } from "./context/PersonalizationContext";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Chat from "./pages/Chat";
@@ -18,28 +19,30 @@ function App() {
   // Fetch users on mount
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          {/* Protected Routes */}
-          <Route element={<ProtectedLayout />}>
-            <Route exact path="/" element={<Dashboard />} />
-            <Route exact path="/chat" element={<Chat />} />
-            <Route exact path="/documents" element={<Documents />} />
-            <Route exact path="/maintenance-chat" element={<MaintenanceChat />} />
-            <Route exact path="/admins" element={<Admins />} />
-            <Route exact path="/drivers" element={<Drivers />} />
-            <Route exact path="/note" element={<Notes />} />
-            <Route exact path="/broadcast" element={<Broadcast />} />
-          </Route>
+      <PersonalizationProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* Protected Routes */}
+            <Route element={<ProtectedLayout />}>
+              <Route exact path="/" element={<Dashboard />} />
+              <Route exact path="/chat" element={<Chat />} />
+              <Route exact path="/documents" element={<Documents />} />
+              <Route exact path="/maintenance-chat" element={<MaintenanceChat />} />
+              <Route exact path="/admins" element={<Admins />} />
+              <Route exact path="/drivers" element={<Drivers />} />
+              <Route exact path="/note" element={<Notes />} />
+              <Route exact path="/broadcast" element={<Broadcast />} />
+            </Route>
 
-          {/* Public Routes */}
-          <Route exact path="/login" element={<Login />} />
+            {/* Public Routes */}
+            <Route exact path="/login" element={<Login />} />
 
-          {/* 404 - Catch all route */}
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
-        <Toaster position="top-right" richColors theme="dark" />
-      </BrowserRouter>
+            {/* 404 - Catch all route */}
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+          <Toaster position="top-right" richColors theme="dark" />
+        </BrowserRouter>
+      </PersonalizationProvider>
     </AuthProvider>
   );
 }
