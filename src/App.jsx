@@ -12,6 +12,7 @@ import Drivers from "./pages/Drivers";
 import Admins from "./pages/Admins";
 import Notes from "./pages/Notes";
 import Broadcast from "./pages/Broadcast";
+import DataRetention from "./pages/DataRetention";
 import ProtectedLayout from "./layout/ProtectedLayout";
 import NotFoundPage from "./pages/NotFoundPage";
 
@@ -32,6 +33,7 @@ function App() {
               <Route exact path="/drivers" element={<Drivers />} />
               <Route exact path="/note" element={<Notes />} />
               <Route exact path="/broadcast" element={<Broadcast />} />
+              <Route exact path="/settings/data-retention" element={<DataRetention />} />
             </Route>
 
             {/* Public Routes */}

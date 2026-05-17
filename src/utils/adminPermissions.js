@@ -9,6 +9,14 @@ export const ADMIN_PERMISSION_KEYS = {
   chat: "chat",
   deleteMultipleUsersChart: "delete_multiple_users_chart",
   broadcast: "broadcast",
+  viewDataRetentionDashboard: "view_data_retention_dashboard",
+  manageDataRetentionSettings: "manage_data_retention_settings",
+  deleteChatPermanently: "delete_chat_permanently",
+  bulkDeleteChatPermanently: "bulk_delete_chat_permanently",
+  deleteDocumentPermanently: "delete_document_permanently",
+  bulkDeleteDocumentPermanently: "bulk_delete_document_permanently",
+  viewDeletionAuditLogs: "view_deletion_audit_logs",
+  runRetentionCleanupNow: "run_retention_cleanup_now",
 };
 
 export const hasAdminPermission = (permissions, permissionKey) => {
@@ -19,7 +27,7 @@ export const hasAdminPermission = (permissions, permissionKey) => {
     if (normalizedKey in permissions) {
       return Boolean(permissions[normalizedKey]);
     }
-    return true;
+    return false;
   }
 
   if (!Array.isArray(permissions)) {

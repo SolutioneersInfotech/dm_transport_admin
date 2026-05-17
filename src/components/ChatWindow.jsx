@@ -338,7 +338,7 @@ function isMessageConfirmed(optimisticMessage, confirmedMessage) {
   );
 }
 
-export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
+export default function ChatWindow({ driver, chatApi, refreshSignal = 0, canDeleteChatPermanently = false }) {
   const { user } = useAuth();
   const dispatch = useAppDispatch();
   const location = useLocation();
@@ -347,8 +347,8 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
 
   const adminId = user?.userid || user?.userId || "admin";
   const canDeleteAllMessages = useMemo(
-    () => hasAdminPermission(user?.permissions, ADMIN_PERMISSION_KEYS.deleteMultipleUsersChart),
-    [user?.permissions]
+    () => canDeleteChatPermanently && hasAdminPermission(user?.permissions, ADMIN_PERMISSION_KEYS.deleteMultipleUsersChart),
+    [canDeleteChatPermanently, user?.permissions]
   );
   const [messages, setMessages] = useState([]);
   const [optimisticMessages, setOptimisticMessages] = useState([]);
@@ -488,6 +488,7 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     sendMessage,
     deleteChatHistory,
     deleteSpecificMessage,
+    permanentDeleteChatConversations,
     markMessagesAsSeen,
   } = chatApi || {
     fetchMessages: defaultFetchMessages,
@@ -495,6 +496,7 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     sendMessage: defaultSendMessage,
     deleteChatHistory: defaultDeleteChatHistory,
     deleteSpecificMessage: defaultDeleteSpecificMessage,
+    permanentDeleteChatConversations: async () => ({ success: true }),
     markMessagesAsSeen: async () => ({ success: true }),
   };
 
@@ -986,13 +988,14 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
 
   /* ================= DELETE SELECTED ================= */
   function handleDeleteSelected() {
-    if (selected.length === 0) return;
+    if (!canDeleteChatPermanently || selected.length === 0) return;
     setDeleteActionType("selected");
     setIsDeleteConfirmOpen(true);
   }
 
   /* ================= DELETE ALL ================= */
   function handleDeleteAll() {
+    if (!canDeleteChatPermanently) return;
     setDeleteActionType("all");
     setIsDeleteConfirmOpen(true);
   }
@@ -1012,7 +1015,11 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
       }
 
       if (deleteActionType === "all") {
-        await deleteChatHistory(driverId);
+        if (permanentDeleteChatConversations) {
+          await permanentDeleteChatConversations([driver]);
+        } else {
+          await deleteChatHistory(driverId);
+        }
         setMessages([]);
         setSelected([]);
         setSelectionMode(false);
@@ -1025,28 +1032,13 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
     }
   }
 
-  const handleDeleteMessage = useCallback(
-    async (messageId) => {
-      if (!messageId || !driverId) return;
-      try {
-        await deleteSpecificMessage(messageId, driverId);
-        setMessages((prev) => prev.filter((m) => m.msgId !== messageId));
-        toast.success("Message deleted");
-      } catch (error) {
-        console.error("Failed to delete message:", error);
-        toast.error("Failed to delete message");
-      }
-    },
-    [driverId, deleteSpecificMessage]
-  );
-
-  const deleteConfirmTitle = deleteActionType === "selected" ? "Delete Selected Messages" : "Delete All Messages";
+  const deleteConfirmTitle = deleteActionType === "selected" ? "Delete Selected Messages" : "Permanently Delete Chat";
   const deleteConfirmDescription =
     deleteActionType === "selected"
       ? selected.length === 1
         ? "Would you like to delete selected message for everyone?"
         : `Would you like to delete ${selected.length} selected messages for everyone?`
-      : "Would you like to delete all messages for everyone?";
+      : "Would you like to permanently delete this chat conversation for everyone?";
 
   const emailText = driver?.email ? driver.email : "—";
   const phoneText = driver?.phone ? driver.phone : "—";
@@ -1259,7 +1251,7 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
         </div>
 
         <div className="flex items-center gap-2">
-          {selectionMode ? (
+          {canDeleteChatPermanently && selectionMode ? (
             <>
               <Button
                 variant="ghost"
@@ -1281,7 +1273,7 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
                 <Trash2 className="h-5 w-5" strokeWidth={1.8} />
               </Button>
             </>
-          ) : (
+          ) : canDeleteChatPermanently ? (
             <>
               <Button
                 onClick={handleDeleteSelected}
@@ -1294,11 +1286,11 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
               </Button>
               {canDeleteAllMessages && (
                 <Button onClick={handleDeleteAll} variant="ghost" size="sm" className="bg-red-900 text-red-100 hover:bg-red-600 hover:text-white">
-                  Delete All
+                  Delete Permanently
                 </Button>
               )}
             </>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -1317,13 +1309,15 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
             >
               Reply
             </button>
-            <button
-              type="button"
-              className="w-full px-3 py-2 text-left text-sm text-gray-200 hover:bg-[#1d232a]"
-              onClick={handleContextSelect}
-            >
-              Select
-            </button>
+            {canDeleteChatPermanently && (
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left text-sm text-gray-200 hover:bg-[#1d232a]"
+                onClick={handleContextSelect}
+              >
+                Select
+              </button>
+            )}
           </div>,
           document.body
         )}
@@ -1503,7 +1497,7 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
                 onClick={handleConfirmDelete}
                 disabled={isDeleteInProgress}
               >
-                {isDeleteInProgress ? "Deleting..." : "Delete"}
+                {isDeleteInProgress ? "Deleting..." : "Delete Permanently"}
               </Button>
             </div>
           </div>

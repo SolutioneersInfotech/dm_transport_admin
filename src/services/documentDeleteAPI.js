@@ -1,4 +1,4 @@
-import { deleteDocumentsRoute } from "../utils/apiRoutes";
+import { deleteDocumentsRoute, permanentDeleteDocumentsRoute } from "../utils/apiRoutes";
 
 /**
  * Permanently delete documents
@@ -27,7 +27,7 @@ export async function deleteDocuments(documents) {
     }
 
     const token = localStorage.getItem("adminToken");
-    const res = await fetch(deleteDocumentsRoute, {
+    const res = await fetch(permanentDeleteDocumentsRoute || deleteDocumentsRoute, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

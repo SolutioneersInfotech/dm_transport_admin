@@ -51,6 +51,8 @@ export const fetchChatHistoryRoute = (userid) => `${baseBackendUrl}/fetchchathis
 export const sendChatMessageRoute = `${baseBackendUrl}/sendchatmessage`;
 export const deleteChatHistoryRoute = `${baseBackendUrl}/deletechathistory`;
 export const deleteSpecificChatRoute = `${baseBackendUrl}/deletespecificchats`;
+export const permanentDeleteChatConversationsRoute = `${baseBackendUrl}/chat/permanent-delete`;
+export const permanentDeleteDocumentsRoute = `${baseBackendUrl}/documents/permanent-delete`;
 
 // Document routes
 export const fetchDocumentsRoute = ({ startDateTimeUtc, endDateTimeUtc } = {}, options = {}) => {
