@@ -65,10 +65,12 @@ import { subscribeToLiveDocuments } from "../services/documentRealtimeOverlay";
 import { invalidateDocumentRequestCache } from "../services/documentRequestCache";
 import { clearDocumentCountCache } from "../utils/documentCountCache";
 import { fetchDocumentDetailAPI } from "../services/documentDetailAPI";
+import { saveDocumentFilters, fetchDocumentFilters } from "../services/adminAPI";
 
 const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
 const ALL_DOCUMENTS_START_DATE = "1970-01-01";
 const FAST_HEAD_PAGE_LIMIT = 200;
+const DOCUMENT_FILTER_SESSION_KEY_PREFIX = "documents:selectedFilters:session:v1";
 const FLAG_FILTER_LOADING_MESSAGES = [
   "Loading flagged documents...",
   "Scanning recent uploads...",
@@ -128,12 +130,153 @@ function getDefaultDates() {
   return { from: past, to: start };
 }
 
+const isDefaultDateRange = (dateRange, defaultDates) => {
+  if (!dateRange || !defaultDates) return false;
+  return areDateRangesEquivalent(dateRange, defaultDates);
+};
+
 const FILTER_OPTIONS = getAvailableDocumentFilterOptions(undefined);
 
 const FILTER_MAP = FILTER_OPTIONS.reduce((map, option) => {
   map[option.label] = option.filterValue;
   return map;
 }, {});
+
+const getCurrentAdminDocumentFilterKey = (user) => {
+  const adminId =
+    user?.userid ??
+    user?.userId ??
+    user?.id ??
+    (() => {
+      try {
+        const storedUser = window.localStorage.getItem("adminUser");
+        if (!storedUser) return null;
+        const parsedUser = JSON.parse(storedUser);
+        return parsedUser?.userid ?? parsedUser?.userId ?? parsedUser?.id ?? null;
+      } catch (error) {
+        console.error("Failed to resolve admin for document filter session key:", error);
+        return null;
+      }
+    })();
+
+  return adminId ? `${DOCUMENT_FILTER_SESSION_KEY_PREFIX}:${String(adminId)}` : null;
+};
+
+const normalizePersistedDocumentFilterState = (rawState) => {
+  if (!rawState) return null;
+
+  let parsedState = rawState;
+  if (typeof rawState === "string") {
+    try {
+      parsedState = JSON.parse(rawState);
+    } catch (error) {
+      console.error("Failed to parse persisted document filter state:", error);
+      return null;
+    }
+  }
+
+  if (!parsedState || typeof parsedState !== "object") return null;
+
+  const nextState = {
+    selectedFilters: Array.isArray(parsedState.selectedFilters)
+      ? parsedState.selectedFilters.filter(Boolean)
+      : [],
+    statusFilter:
+      parsedState.statusFilter === "seen" || parsedState.statusFilter === "unseen"
+        ? parsedState.statusFilter
+        : "all",
+    categoryFilter: Array.isArray(parsedState.categoryFilter)
+      ? parsedState.categoryFilter.filter(Boolean)
+      : [],
+    flagFilter:
+      typeof parsedState.flagFilter === "boolean" ? parsedState.flagFilter : null,
+    dateRange: null,
+  };
+
+  const from = parsedState?.dateRange?.from ? new Date(parsedState.dateRange.from) : null;
+  const to = parsedState?.dateRange?.to ? new Date(parsedState.dateRange.to) : null;
+  if (isValidDateValue(from) && isValidDateValue(to)) {
+    nextState.dateRange = { from, to };
+  }
+
+  return nextState;
+};
+
+/**
+ * Read document type filters from session storage
+ * @deprecated Use readSessionDocumentFilterState instead for full filter persistence
+ */
+const readSessionDocumentFilters = (storageKey) => {
+  if (!storageKey || typeof window === "undefined") return [];
+
+  try {
+    const savedFilters = window.sessionStorage.getItem(storageKey);
+    if (!savedFilters) return [];
+
+    const parsedFilters = JSON.parse(savedFilters);
+    return Array.isArray(parsedFilters) ? parsedFilters : [];
+  } catch (error) {
+    console.error("Failed to read session document filters:", error);
+    return [];
+  }
+};
+
+/**
+ * Write document type filters to session storage
+ * @deprecated Use writeSessionDocumentFilterState instead for full filter persistence
+ */
+const writeSessionDocumentFilters = (storageKey, filters) => {
+  if (!storageKey || typeof window === "undefined") return;
+
+  try {
+    if (Array.isArray(filters) && filters.length > 0) {
+      window.sessionStorage.setItem(storageKey, JSON.stringify(filters));
+      return;
+    }
+
+    window.sessionStorage.removeItem(storageKey);
+  } catch (error) {
+    console.error("Failed to persist session document filters:", error);
+  }
+};
+
+/**
+ * Read complete document filter state from session storage
+ * Includes selectedFilters, statusFilter, categoryFilter, flagFilter, and dateRange
+ */
+const readSessionDocumentFilterState = (storageKey) => {
+  if (!storageKey || typeof window === "undefined") return null;
+
+  try {
+    const storageStateKey = `${storageKey}:full-state`;
+    const savedState = window.sessionStorage.getItem(storageStateKey);
+    if (!savedState) return null;
+
+    return normalizePersistedDocumentFilterState(savedState);
+  } catch (error) {
+    console.error("Failed to read session document filter state:", error);
+    return null;
+  }
+};
+
+/**
+ * Write complete document filter state to session storage
+ * Includes selectedFilters, statusFilter, categoryFilter, flagFilter, and dateRange
+ */
+const writeSessionDocumentFilterState = (storageKey, filterState) => {
+  if (!storageKey || typeof window === "undefined") return;
+
+  try {
+    if (!filterState || typeof filterState !== "object") {
+      return;
+    }
+
+    const storageStateKey = `${storageKey}:full-state`;
+    window.sessionStorage.setItem(storageStateKey, JSON.stringify(filterState));
+  } catch (error) {
+    console.error("Failed to persist session document filter state:", error);
+  }
+};
 
 export default function Documents() {
   const defaultDates = useMemo(() => getDefaultDates(), []);
@@ -219,7 +362,8 @@ export default function Documents() {
   const [selectedFilters, setSelectedFilters] = useState([]); // Array of filter values
   const [isDocDetailLoading, setIsDocDetailLoading] = useState(false);
   const docDetailRequestRef = useRef(0);
-  const hasHydratedFiltersFromParamsRef = useRef(false);
+  const [hasHydratedFilters, setHasHydratedFilters] = useState(false);
+  const currentAdminDocumentFilterKey = useMemo(() => getCurrentAdminDocumentFilterKey(user), [user]);
   const availableFilterOptions = useMemo(() => {
     return getAvailableDocumentFilterOptions(user?.permissions);
   }, [user?.permissions]);
@@ -979,69 +1123,159 @@ export default function Documents() {
   }, [dispatch, currentFetchArgs, isManualRefreshing, availableFilterValues.length, hasDocumentPermissionRestrictions, page, limit, startDateTimeUtc, endDateTimeUtc, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters, buildFilterSignature]);
 
   useEffect(() => {
-    const startParam = parseLocalDateParam(searchParams.get("start"));
-    const endParam = parseLocalDateParam(searchParams.get("end"));
-    const parsedUrlDateRange = startParam && endParam ? { from: startParam, to: endParam } : null;
+    let isCancelled = false;
+    setHasHydratedFilters(false);
 
-    // Date hydration is isolated so date changes don't retrigger non-date filter hydration loops.
-    // Equivalent URL/state local-day values must not trigger another setState.
-    if (parsedUrlDateRange) {
-      setDateRange((previousRange) =>
-        areDateRangesEquivalent(parsedUrlDateRange, previousRange) ? previousRange : parsedUrlDateRange
+    const hydrateFilters = async () => {
+      const startParam = parseLocalDateParam(searchParams.get("start"));
+      const endParam = parseLocalDateParam(searchParams.get("end"));
+      const parsedUrlDateRange = startParam && endParam ? { from: startParam, to: endParam } : null;
+      const hasExplicitNonDateFilterParams =
+        Boolean(searchParams.get("q")) ||
+        Boolean(searchParams.get("status")) ||
+        Boolean(searchParams.get("category")) ||
+        Boolean(searchParams.get("flag")) ||
+        Boolean(searchParams.get("types")) ||
+        Boolean(searchParams.get("type"));
+      const hasExplicitDateParams =
+        Boolean(searchParams.get("start")) ||
+        Boolean(searchParams.get("end"));
+      const shouldTreatUrlAsExplicit =
+        hasExplicitNonDateFilterParams ||
+        (hasExplicitDateParams && !isDefaultDateRange(parsedUrlDateRange, defaultDates));
+
+      let restoredFilterState = null;
+      if (!shouldTreatUrlAsExplicit) {
+        restoredFilterState = readSessionDocumentFilterState(currentAdminDocumentFilterKey);
+
+        if (!restoredFilterState && currentAdminDocumentFilterKey) {
+          const backendResponse = await fetchDocumentFilters();
+          if (isCancelled) return;
+
+          restoredFilterState = normalizePersistedDocumentFilterState(backendResponse?.filters);
+          if (restoredFilterState) {
+            writeSessionDocumentFilterState(currentAdminDocumentFilterKey, restoredFilterState);
+            writeSessionDocumentFilters(
+              currentAdminDocumentFilterKey,
+              restoredFilterState.selectedFilters
+            );
+          }
+        }
+      }
+
+      if (parsedUrlDateRange) {
+        setDateRange((previousRange) =>
+          areDateRangesEquivalent(parsedUrlDateRange, previousRange) ? previousRange : parsedUrlDateRange
+        );
+      } else if (restoredFilterState?.dateRange) {
+        setDateRange((previousRange) =>
+          areDateRangesEquivalent(restoredFilterState.dateRange, previousRange)
+            ? previousRange
+            : restoredFilterState.dateRange
+        );
+      }
+
+      const queryParam = searchParams.get("q");
+      const nextSearch = queryParam ?? "";
+      setSearch((previousSearch) => (previousSearch === nextSearch ? previousSearch : nextSearch));
+
+      const statusParam = searchParams.get("status");
+      const nextStatus = ["all", "seen", "unseen"].includes(statusParam)
+        ? statusParam
+        : restoredFilterState?.statusFilter ?? "all";
+      setStatusFilter((previousStatus) => (previousStatus === nextStatus ? previousStatus : nextStatus));
+
+      const categoryParam = searchParams.get("category");
+      let nextCategories = [];
+      if (categoryParam) {
+        nextCategories = categoryParam
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
+      } else {
+        nextCategories = restoredFilterState?.categoryFilter ?? [];
+      }
+      setCategoryFilter((previousCategories) =>
+        areStringArraysEqual(previousCategories, nextCategories) ? previousCategories : nextCategories
       );
+
+      const flagParam = searchParams.get("flag");
+      let nextFlagValue = restoredFilterState?.flagFilter ?? null;
+      if (flagParam === "true") {
+        nextFlagValue = true;
+      } else if (flagParam === "false") {
+        nextFlagValue = false;
+      }
+      setFlagFilter((previousFlagValue) =>
+        previousFlagValue === nextFlagValue ? previousFlagValue : nextFlagValue
+      );
+
+      const typesParam = searchParams.get("types") || searchParams.get("type");
+      let nextTypes = [];
+      if (typesParam) {
+        nextTypes = typesParam
+          .split(",")
+          .map((item) => item.trim())
+          .filter((item) => availableFilterValues.includes(item));
+      } else if (restoredFilterState?.selectedFilters) {
+        nextTypes = restoredFilterState.selectedFilters.filter((item) =>
+          availableFilterValues.includes(item)
+        );
+      } else {
+        nextTypes = readSessionDocumentFilters(currentAdminDocumentFilterKey).filter((item) =>
+          availableFilterValues.includes(item)
+        );
+      }
+
+      setSelectedFilters((previousTypes) =>
+        areStringArraysEqual(previousTypes, nextTypes) ? previousTypes : nextTypes
+      );
+
+      if (!isCancelled) {
+        setHasHydratedFilters(true);
+      }
+    };
+
+    hydrateFilters();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [availableFilterValues, currentAdminDocumentFilterKey, defaultDates, searchParams]);
+
+  // Save complete filter state only after the initial restore path has settled.
+  useEffect(() => {
+    if (!hasHydratedFilters) return;
+
+    const filterState = {
+      selectedFilters,
+      statusFilter,
+      categoryFilter,
+      flagFilter,
+      // Serialize dates as ISO strings for JSON compatibility
+      dateRange: {
+        from: dateRange?.from?.toISOString?.() || dateRange?.from,
+        to: dateRange?.to?.toISOString?.() || dateRange?.to,
+      },
+    };
+
+    // Save to session storage
+    writeSessionDocumentFilterState(currentAdminDocumentFilterKey, filterState);
+
+    // Also try to save to backend (non-blocking)
+    if (currentAdminDocumentFilterKey) {
+      saveDocumentFilters(filterState).catch((error) => {
+        // Silently fail if backend is not available - session storage is the primary store
+        console.debug("Document filters not saved to backend:", error);
+      });
     }
-  }, [searchParams]);
+
+    // Keep backward compatibility by also saving just selectedFilters to old key
+    writeSessionDocumentFilters(currentAdminDocumentFilterKey, selectedFilters);
+  }, [currentAdminDocumentFilterKey, selectedFilters, statusFilter, categoryFilter, flagFilter, dateRange, hasHydratedFilters]);
 
   useEffect(() => {
-    // Non-date filters hydrate independently and only update when their URL-backed value actually changes.
-    const queryParam = searchParams.get("q");
-    const nextSearch = queryParam ?? "";
-    setSearch((previousSearch) => (previousSearch === nextSearch ? previousSearch : nextSearch));
-
-    const statusParam = searchParams.get("status");
-    const nextStatus = ["all", "seen", "unseen"].includes(statusParam) ? statusParam : "all";
-    setStatusFilter((previousStatus) => (previousStatus === nextStatus ? previousStatus : nextStatus));
-
-    const categoryParam = searchParams.get("category");
-    let nextCategories = [];
-    if (categoryParam) {
-      nextCategories = categoryParam
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean);
-    }
-    setCategoryFilter((previousCategories) =>
-      areStringArraysEqual(previousCategories, nextCategories) ? previousCategories : nextCategories
-    );
-
-    const flagParam = searchParams.get("flag");
-    let nextFlagValue = null;
-    if (flagParam === "true") {
-      nextFlagValue = true;
-    } else if (flagParam === "false") {
-      nextFlagValue = false;
-    }
-    setFlagFilter((previousFlagValue) =>
-      previousFlagValue === nextFlagValue ? previousFlagValue : nextFlagValue
-    );
-
-    const typesParam = searchParams.get("types") || searchParams.get("type");
-    let nextTypes = [];
-    if (typesParam) {
-      nextTypes = typesParam
-        .split(",")
-        .map((item) => item.trim())
-        .filter((item) => availableFilterValues.includes(item));
-    }
-    setSelectedFilters((previousTypes) =>
-      areStringArraysEqual(previousTypes, nextTypes) ? previousTypes : nextTypes
-    );
-
-    hasHydratedFiltersFromParamsRef.current = true;
-  }, [availableFilterValues, searchParams]);
-
-  useEffect(() => {
-    if (!hasHydratedFiltersFromParamsRef.current) return;
+    if (!hasHydratedFilters) return;
 
     const nextParams = new URLSearchParams(searchParams);
     const syncParam = (key, value) => {
@@ -1080,6 +1314,7 @@ export default function Documents() {
       setSearchParams(nextParams, { replace: true });
     }
   }, [
+    hasHydratedFilters,
     hasCustomDateRange,
     dateRange,
     categoryFilter,

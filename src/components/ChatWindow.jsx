@@ -240,6 +240,38 @@ function parseTimestampMs(value) {
   return Number.isNaN(direct) ? null : direct;
 }
 
+function hasFilesInDataTransfer(dataTransfer) {
+  if (!dataTransfer) return false;
+
+  if (Array.isArray(dataTransfer.types) && dataTransfer.types.includes("Files")) {
+    return true;
+  }
+
+  if (dataTransfer.types?.contains?.("Files")) {
+    return true;
+  }
+
+  const items = Array.from(dataTransfer.items || []);
+  return items.some((item) => item?.kind === "file");
+}
+
+function isSupportedChatAttachment(file) {
+  if (!(file instanceof File)) return false;
+
+  const mimeType = typeof file.type === "string" ? file.type.toLowerCase() : "";
+  if (
+    mimeType.startsWith("image/") ||
+    mimeType.startsWith("video/") ||
+    mimeType === "application/pdf"
+  ) {
+    return true;
+  }
+
+  const fileName = typeof file.name === "string" ? file.name.toLowerCase() : "";
+  return [".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".mov", ".m4v", ".webm", ".ogv", ".ogg", ".pdf"]
+    .some((extension) => fileName.endsWith(extension));
+}
+
 
 function resolveReplyTargetId(message) {
   if (!message) return null;
@@ -1377,6 +1409,7 @@ export default function ChatWindow({ driver, chatApi, refreshSignal = 0 }) {
                       onReplyClick={handleReplyJump}
                       onImageClick={(url) => handleImageClick(url, senderName, msg?.dateTime)}
                       onDownloadMedia={(url) => downloadChatMedia(url, senderName, msg?.dateTime)}
+                      onDelete={handleDeleteMessage}
                     />
 
                   </div>

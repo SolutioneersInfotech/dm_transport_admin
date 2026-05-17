@@ -1285,7 +1285,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
               Acknowledgement
             </span>
             <div className="flex items-start justify-between gap-2">
-              <p className="text-sm text-gray-300">{doc.acknowledgement}</p>
+              <p className="text-sm text-slate-300/70">{doc.acknowledgement}</p>
               {renderCopyButton(doc.acknowledgement, "acknowledgement")}
             </div>
           </div>

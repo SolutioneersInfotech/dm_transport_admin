@@ -672,6 +672,160 @@ export function subscribeUnreadCount(chatTarget, onChange) {
   return unsubscribe;
 }
 
+/**
+ * Subscribe to chat notifications (unread messages from users)
+ * @param {function} onChange - Callback function called with notifications array
+ * @returns {function} Unsubscribe function
+ */
+export function subscribeChatNotifications(onChange) {
+  const generalPath = `${ADMIN_GENERAL_PATH}`;
+
+  const unsubscribe = onValue(ref(database, generalPath), (snapshot) => {
+    if (!snapshot.exists()) {
+      onChange([]);
+      return;
+    }
+
+    const usersObject = snapshot.val() || {};
+    const notifications = [];
+    const notificationMap = new Map();
+
+    // Iterate through each user
+    Object.entries(usersObject).forEach(([contactId, messagesObject]) => {
+      if (!messagesObject || typeof messagesObject !== "object") return;
+
+      let unreadCount = 0;
+      let lastMessage = null;
+      let latestTimestamp = 0;
+
+      // Iterate through messages for this user
+      Object.entries(messagesObject).forEach(([msgId, raw]) => {
+        const msg = normalizeMessage(msgId, raw);
+        if (!msg) return;
+
+        // Count unread messages from user (type: 1 = from user, seenByAdmin = false)
+        const rawType = typeof raw?.type === "number" ? raw.type : msg.type;
+        if (rawType === 1 && !isSeenByCurrentAdmin(raw)) {
+          unreadCount++;
+        }
+
+        // Track the latest message
+        const ts = parseDateTimeMs(msg.dateTime);
+        if (ts >= latestTimestamp) {
+          latestTimestamp = ts;
+          lastMessage = msg;
+        }
+      });
+
+      // Create notification for users with unread messages
+      if (unreadCount > 0 && lastMessage) {
+        const messagePreview = (lastMessage?.content?.message || "").substring(0, 50);
+        const detail = messagePreview || "New message";
+
+        const notification = {
+          id: `chat:${contactId}`,
+          sourceId: contactId,
+          type: "chat",
+          title: `New message from ${lastMessage?.sendername || "User"}`,
+          detail: `${unreadCount} unread: ${detail}${messagePreview?.length >= 50 ? "..." : ""}`,
+          timestampMs: latestTimestamp,
+          route: "/chat",
+          unreadCount,
+        };
+
+        // Use a map to deduplicate by contactId (keep most recent)
+        notificationMap.set(contactId, notification);
+      }
+    });
+
+    // Convert map to array and sort by timestamp descending
+    const notificationsArray = Array.from(notificationMap.values())
+      .sort((a, b) => b.timestampMs - a.timestampMs)
+      .slice(0, 12); // Limit to 12 most recent
+
+    onChange(notificationsArray);
+  });
+
+  return unsubscribe;
+}
+
+/**
+ * Subscribe to maintenance chat notifications (unread messages from drivers/maintenance)
+ * @param {function} onChange - Callback function called with notifications array
+ * @returns {function} Unsubscribe function
+ */
+export function subscribeMaintenanceChatNotifications(onChange) {
+  const maintenancePath = "chat/users/admin/maintenance";
+
+  const unsubscribe = onValue(ref(database, maintenancePath), (snapshot) => {
+    if (!snapshot.exists()) {
+      onChange([]);
+      return;
+    }
+
+    const usersObject = snapshot.val() || {};
+    const notifications = [];
+    const notificationMap = new Map();
+
+    // Iterate through each driver/user in maintenance chat
+    Object.entries(usersObject).forEach(([contactId, messagesObject]) => {
+      if (!messagesObject || typeof messagesObject !== "object") return;
+
+      let unreadCount = 0;
+      let lastMessage = null;
+      let latestTimestamp = 0;
+
+      // Iterate through messages for this user
+      Object.entries(messagesObject).forEach(([msgId, raw]) => {
+        const msg = normalizeMessage(msgId, raw);
+        if (!msg) return;
+
+        // Count unread messages from user (type: 0 = from user/driver, seenByAdmin = false)
+        const rawType = typeof raw?.type === "number" ? raw.type : msg.type;
+        if (rawType === 0 && !isSeenByCurrentAdmin(raw)) {
+          unreadCount++;
+        }
+
+        // Track the latest message
+        const ts = parseDateTimeMs(msg.dateTime);
+        if (ts >= latestTimestamp) {
+          latestTimestamp = ts;
+          lastMessage = msg;
+        }
+      });
+
+      // Create notification for drivers with unread messages
+      if (unreadCount > 0 && lastMessage) {
+        const messagePreview = (lastMessage?.content?.message || "").substring(0, 50);
+        const detail = messagePreview || "New maintenance message";
+
+        const notification = {
+          id: `maintenance:${contactId}`,
+          sourceId: contactId,
+          type: "maintenance",
+          title: `Maintenance: ${lastMessage?.sendername || "Driver"}`,
+          detail: `${unreadCount} unread: ${detail}${messagePreview?.length >= 50 ? "..." : ""}`,
+          timestampMs: latestTimestamp,
+          route: "/maintenance-chat",
+          unreadCount,
+        };
+
+        // Use a map to deduplicate by contactId (keep most recent)
+        notificationMap.set(contactId, notification);
+      }
+    });
+
+    // Convert map to array and sort by timestamp descending
+    const notificationsArray = Array.from(notificationMap.values())
+      .sort((a, b) => b.timestampMs - a.timestampMs)
+      .slice(0, 12); // Limit to 12 most recent
+
+    onChange(notificationsArray);
+  });
+
+  return unsubscribe;
+}
+
 // ✅ ADD THIS FUNCTION
 export async function fetchChatThreads({ page = 1, limit = 20, search, type } = {}) {
   try {
