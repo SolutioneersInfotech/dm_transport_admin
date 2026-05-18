@@ -14,6 +14,7 @@ import {
 } from "../services/personalizationAPI";
 
 const SESSION_STORAGE_PREFIX = "dm_admin_personalization";
+const PERSONALIZATION_BATCH_WINDOW_MS = 60 * 1000;
 const SYNC_INTERVAL_MS = 30 * 60 * 1000;
 
 const PersonalizationContext = createContext(null);
@@ -88,6 +89,27 @@ export function PersonalizationProvider({ children }) {
   const [error, setError] = useState(null);
   const dirtyRef = useRef(false);
   const personalizationRef = useRef({});
+  const syncTimerRef = useRef(null);
+  const isSyncingRef = useRef(false);
+  const syncNowRef = useRef(() => {});
+
+  const clearScheduledSync = useCallback(() => {
+    if (syncTimerRef.current) {
+      window.clearTimeout(syncTimerRef.current);
+      syncTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleBatchedSync = useCallback(() => {
+    if (!userId || typeof window === "undefined" || syncTimerRef.current) {
+      return;
+    }
+
+    syncTimerRef.current = window.setTimeout(() => {
+      syncTimerRef.current = null;
+      syncNowRef.current();
+    }, PERSONALIZATION_BATCH_WINDOW_MS);
+  }, [userId]);
 
   const applyPersonalization = useCallback(
     (nextValue, { markDirty = false } = {}) => {
@@ -99,28 +121,45 @@ export function PersonalizationProvider({ children }) {
       if (userId) {
         writeSessionPersonalization(userId, normalized);
       }
+
+      if (markDirty) {
+        scheduleBatchedSync();
+      }
     },
-    [userId]
+    [scheduleBatchedSync, userId]
   );
 
   const syncNow = useCallback(async () => {
-    if (!userId || !dirtyRef.current) {
+    if (!userId || !dirtyRef.current || isSyncingRef.current) {
       return;
     }
 
+    clearScheduledSync();
+    isSyncingRef.current = true;
     setIsSyncing(true);
     setError(null);
 
+    const payloadToSync = personalizationRef.current;
+
     try {
-      await savePersonalization(personalizationRef.current);
-      dirtyRef.current = false;
+      await savePersonalization(payloadToSync);
+      dirtyRef.current = personalizationRef.current !== payloadToSync;
     } catch (syncError) {
       console.error("Failed to sync personalization:", syncError);
       setError(syncError instanceof Error ? syncError : new Error(String(syncError)));
     } finally {
+      isSyncingRef.current = false;
       setIsSyncing(false);
+
+      if (dirtyRef.current) {
+        scheduleBatchedSync();
+      }
     }
-  }, [userId]);
+  }, [clearScheduledSync, scheduleBatchedSync, userId]);
+
+  useEffect(() => {
+    syncNowRef.current = syncNow;
+  }, [syncNow]);
 
   useEffect(() => {
     if (isLoading) {
@@ -128,9 +167,11 @@ export function PersonalizationProvider({ children }) {
     }
 
     if (!isAuthenticated || !userId) {
+      clearScheduledSync();
       setPersonalization({});
       personalizationRef.current = {};
       dirtyRef.current = false;
+      isSyncingRef.current = false;
       setError(null);
       setIsReady(false);
       return undefined;
@@ -166,7 +207,7 @@ export function PersonalizationProvider({ children }) {
     return () => {
       isCancelled = true;
     };
-  }, [applyPersonalization, isAuthenticated, isLoading, userId]);
+  }, [applyPersonalization, clearScheduledSync, isAuthenticated, isLoading, userId]);
 
   useEffect(() => {
     if (!isAuthenticated || !userId) {
@@ -179,6 +220,12 @@ export function PersonalizationProvider({ children }) {
 
     return () => window.clearInterval(interval);
   }, [isAuthenticated, syncNow, userId]);
+
+  useEffect(() => {
+    return () => {
+      clearScheduledSync();
+    };
+  }, [clearScheduledSync]);
 
   const updatePersonalization = useCallback(
     (nextValueOrUpdater) => {

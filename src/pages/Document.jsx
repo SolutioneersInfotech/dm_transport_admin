@@ -60,12 +60,12 @@ import { toast } from "sonner";
 import { buildDocumentDownloadName, getDocumentTypeLabel } from "../utils/documentDownloadName";
 import { getAvailableDocumentFilterOptions } from "../utils/documentPermissions";
 import { useAuth } from "../context/AuthContext";
+import { usePersonalization } from "../context/PersonalizationContext";
 import useAppResumeSync from "../hooks/useAppResumeSync";
 import { subscribeToLiveDocuments } from "../services/documentRealtimeOverlay";
 import { invalidateDocumentRequestCache } from "../services/documentRequestCache";
 import { clearDocumentCountCache } from "../utils/documentCountCache";
 import { fetchDocumentDetailAPI } from "../services/documentDetailAPI";
-import { saveDocumentFilters, fetchDocumentFilters } from "../services/adminAPI";
 
 const formatLocalDate = (date) => formatDate(date, "yyyy-MM-dd");
 const ALL_DOCUMENTS_START_DATE = "1970-01-01";
@@ -90,6 +90,21 @@ const areDateRangesEquivalent = (a, b) =>
   formatLocalDateKey(a?.to) === formatLocalDateKey(b?.to);
 const areStringArraysEqual = (a = [], b = []) =>
   a.length === b.length && a.every((value, index) => value === b[index]);
+const areDocumentFilterStatesEquivalent = (a, b) => {
+  const normalizedA = normalizePersistedDocumentFilterState(a);
+  const normalizedB = normalizePersistedDocumentFilterState(b);
+
+  if (!normalizedA && !normalizedB) return true;
+  if (!normalizedA || !normalizedB) return false;
+
+  return (
+    areStringArraysEqual(normalizedA.selectedFilters ?? [], normalizedB.selectedFilters ?? []) &&
+    (normalizedA.statusFilter ?? "all") === (normalizedB.statusFilter ?? "all") &&
+    areStringArraysEqual(normalizedA.categoryFilter ?? [], normalizedB.categoryFilter ?? []) &&
+    (normalizedA.flagFilter ?? null) === (normalizedB.flagFilter ?? null) &&
+    areDateRangesEquivalent(normalizedA.dateRange, normalizedB.dateRange)
+  );
+};
 const parseLocalDateParam = (value) => {
   if (!value) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
@@ -282,6 +297,11 @@ export default function Documents() {
   const defaultDates = useMemo(() => getDefaultDates(), []);
   const dispatch = useAppDispatch();
   const { user } = useAuth();
+  const {
+    personalization,
+    isReady: isPersonalizationReady,
+    updatePersonalization,
+  } = usePersonalization();
   const {
     documents: allDocuments,
     loading,
@@ -926,6 +946,10 @@ export default function Documents() {
 
   // Fetch documents when params change (initial load)
   useEffect(() => {
+    if (!hasHydratedFilters) {
+      return;
+    }
+
     if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
       return;
     }
@@ -1060,6 +1084,7 @@ export default function Documents() {
     clearFastFilterLoadingForSignature,
     endPendingFlagFilterSync,
     stopFlagFilterLoadingMessages,
+    hasHydratedFilters,
     availableFilterValues.length,
     hasDocumentPermissionRestrictions,
     limit,
@@ -1074,6 +1099,10 @@ export default function Documents() {
   }, [loading, error, resolvedTypeFilterTransitionSignature]);
 
   const handleManualRefresh = useCallback(async () => {
+    if (!hasHydratedFilters) {
+      return;
+    }
+
     if (hasDocumentPermissionRestrictions && availableFilterValues.length === 0) {
       return;
     }
@@ -1120,7 +1149,7 @@ export default function Documents() {
       dispatch(endDocumentSync("manualRefresh"));
       setIsManualRefreshing(false);
     }
-  }, [dispatch, currentFetchArgs, isManualRefreshing, availableFilterValues.length, hasDocumentPermissionRestrictions, page, limit, startDateTimeUtc, endDateTimeUtc, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters, buildFilterSignature]);
+  }, [dispatch, currentFetchArgs, isManualRefreshing, availableFilterValues.length, hasDocumentPermissionRestrictions, hasHydratedFilters, page, limit, startDateTimeUtc, endDateTimeUtc, searchDebounced, isSeenParam, isFlaggedParam, categoryParam, typeFilters, buildFilterSignature]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -1148,11 +1177,14 @@ export default function Documents() {
       if (!shouldTreatUrlAsExplicit) {
         restoredFilterState = readSessionDocumentFilterState(currentAdminDocumentFilterKey);
 
-        if (!restoredFilterState && currentAdminDocumentFilterKey) {
-          const backendResponse = await fetchDocumentFilters();
-          if (isCancelled) return;
+        if (!restoredFilterState && !isPersonalizationReady) {
+          return;
+        }
 
-          restoredFilterState = normalizePersistedDocumentFilterState(backendResponse?.filters);
+        if (!restoredFilterState) {
+          restoredFilterState = normalizePersistedDocumentFilterState(
+            personalization?.documents?.filters
+          );
           if (restoredFilterState) {
             writeSessionDocumentFilterState(currentAdminDocumentFilterKey, restoredFilterState);
             writeSessionDocumentFilters(
@@ -1241,7 +1273,14 @@ export default function Documents() {
     return () => {
       isCancelled = true;
     };
-  }, [availableFilterValues, currentAdminDocumentFilterKey, defaultDates, searchParams]);
+  }, [
+    availableFilterValues,
+    currentAdminDocumentFilterKey,
+    defaultDates,
+    isPersonalizationReady,
+    personalization?.documents?.filters,
+    searchParams,
+  ]);
 
   // Save complete filter state only after the initial restore path has settled.
   useEffect(() => {
@@ -1262,17 +1301,36 @@ export default function Documents() {
     // Save to session storage
     writeSessionDocumentFilterState(currentAdminDocumentFilterKey, filterState);
 
-    // Also try to save to backend (non-blocking)
-    if (currentAdminDocumentFilterKey) {
-      saveDocumentFilters(filterState).catch((error) => {
-        // Silently fail if backend is not available - session storage is the primary store
-        console.debug("Document filters not saved to backend:", error);
-      });
+    if (isPersonalizationReady) {
+      const currentPersonalizationFilters = normalizePersistedDocumentFilterState(
+        personalization?.documents?.filters
+      );
+
+      if (!areDocumentFilterStatesEquivalent(currentPersonalizationFilters, filterState)) {
+        updatePersonalization((current) => ({
+          ...current,
+          documents: {
+            ...(current?.documents || {}),
+            filters: filterState,
+          },
+        }));
+      }
     }
 
     // Keep backward compatibility by also saving just selectedFilters to old key
     writeSessionDocumentFilters(currentAdminDocumentFilterKey, selectedFilters);
-  }, [currentAdminDocumentFilterKey, selectedFilters, statusFilter, categoryFilter, flagFilter, dateRange, hasHydratedFilters]);
+  }, [
+    currentAdminDocumentFilterKey,
+    selectedFilters,
+    statusFilter,
+    categoryFilter,
+    flagFilter,
+    dateRange,
+    hasHydratedFilters,
+    isPersonalizationReady,
+    personalization?.documents?.filters,
+    updatePersonalization,
+  ]);
 
   useEffect(() => {
     if (!hasHydratedFilters) return;
