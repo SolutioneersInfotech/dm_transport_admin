@@ -54,6 +54,19 @@ const permissionSections = [
       "Delete Multiple Users Chart",
     ],
   },
+  {
+    title: "Data Retention & Deletion",
+    items: [
+      "View Data Retention Dashboard",
+      "Manage Data Retention Settings",
+      "Delete Chat Permanently",
+      "Bulk Delete Chat Permanently",
+      "Delete Document Permanently",
+      "Bulk Delete Document Permanently",
+      "View Deletion Audit Logs",
+      "Run Retention Cleanup Now",
+    ],
+  },
 ];
 
 const permissionDefaults = {
@@ -77,6 +90,14 @@ const permissionDefaults = {
   Chat: false,
   "Delete Multiple Users Chart": false,
   CTPAT: false,
+  "View Data Retention Dashboard": false,
+  "Manage Data Retention Settings": false,
+  "Delete Chat Permanently": false,
+  "Bulk Delete Chat Permanently": false,
+  "Delete Document Permanently": false,
+  "Bulk Delete Document Permanently": false,
+  "View Deletion Audit Logs": false,
+  "Run Retention Cleanup Now": false,
 };
 
 const permissionKeyMap = {
@@ -100,6 +121,14 @@ const permissionKeyMap = {
   "Manage Admin": "manage_admin",
   "Chat": "chat",
   "Delete Multiple Users Chart": "delete_multiple_users_chart",
+  "View Data Retention Dashboard": "view_data_retention_dashboard",
+  "Manage Data Retention Settings": "manage_data_retention_settings",
+  "Delete Chat Permanently": "delete_chat_permanently",
+  "Bulk Delete Chat Permanently": "bulk_delete_chat_permanently",
+  "Delete Document Permanently": "delete_document_permanently",
+  "Bulk Delete Document Permanently": "bulk_delete_document_permanently",
+  "View Deletion Audit Logs": "view_deletion_audit_logs",
+  "Run Retention Cleanup Now": "run_retention_cleanup_now",
 };
 
 const buildPermissionsFromRaw = (rawPermissions) => {

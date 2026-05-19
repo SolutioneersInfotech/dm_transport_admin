@@ -8,7 +8,7 @@ import {
   update,
 } from "firebase/database";
 import { database } from "../firebase/firebaseApp";
-import { sendChatMessageRoute } from "../utils/apiRoutes";
+import { permanentDeleteChatConversationsRoute, sendChatMessageRoute } from "../utils/apiRoutes";
 
 const ADMIN_GENERAL_PATH = "chat/users/admin/general";
 const USER_MIRROR_BASE = "chat/users";
@@ -872,4 +872,41 @@ export async function fetchChatThreads({ page = 1, limit = 20, search, type } = 
     console.error("fetchChatThreads error:", error);
     throw error;
   }
+}
+
+
+/**
+ * Permanently delete one or more chat conversations through the admin backend.
+ * Backend is expected to remove all mirrored chat data and write deletion audit logs.
+ * @param {Array<object|string>} conversations
+ * @returns {Promise<{success: boolean}>}
+ */
+export async function permanentDeleteChatConversations(conversations) {
+  const items = Array.isArray(conversations) ? conversations : [conversations];
+  const normalized = items
+    .map((item) => ({
+      userid: resolveUserId(item),
+      contactId: resolveContactId(item),
+    }))
+    .filter((item) => item.userid && item.contactId);
+
+  if (normalized.length === 0) {
+    throw new Error("At least one chat conversation is required.");
+  }
+
+  const response = await fetch(permanentDeleteChatConversationsRoute, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${getToken()}`,
+    },
+    body: JSON.stringify({ conversations: normalized }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.message || data?.error || "Failed to permanently delete chat conversation.");
+  }
+
+  return { success: true, data };
 }

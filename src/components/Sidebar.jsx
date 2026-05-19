@@ -66,6 +66,7 @@ import {
   FileText,
   LayoutDashboard,
   Settings,
+  Database,
   ShieldCheck,
   ChevronLeft,
   Menu,
@@ -98,6 +99,12 @@ const menuSections = [
       { title: "Drivers", icon: Truck, path: "/drivers" },
       { title: "Admins", icon: User, path: "/admins" },
       { title: "Notes", icon: FileText, path: "/note" },
+    ],
+  },
+  {
+    label: "Settings",
+    items: [
+      { title: "Data Retention", icon: Database, path: "/settings/data-retention" },
     ],
   },
 ];
@@ -165,6 +172,10 @@ export default function Sidebar() {
   );
   const canAccessAdmins = useMemo(
     () => hasAdminPermission(currentUser?.permissions, ADMIN_PERMISSION_KEYS.viewAdmin),
+    [currentUser?.permissions]
+  );
+  const canAccessDataRetention = useMemo(
+    () => hasAdminPermission(currentUser?.permissions, ADMIN_PERMISSION_KEYS.viewDataRetentionDashboard),
     [currentUser?.permissions]
   );
 
@@ -396,6 +407,7 @@ export default function Sidebar() {
         .filter((item) => item.path !== "/maintenance-chat" || canAccessMaintenanceChat)
         .filter((item) => item.path !== "/drivers" || canAccessDrivers)
         .filter((item) => item.path !== "/admins" || canAccessAdmins)
+        .filter((item) => item.path !== "/settings/data-retention" || canAccessDataRetention)
         .map((item) => {
         if (item.path === "/chat") {
           return { ...item, badge: regularChatUnreadUserCount > 0 ? regularChatUnreadUserCount : null };
@@ -412,6 +424,7 @@ export default function Sidebar() {
     canAccessMaintenanceChat,
     canAccessDrivers,
     canAccessAdmins,
+    canAccessDataRetention,
     regularChatUnreadUserCount,
     maintenanceChatUnreadUserCount,
   ]);

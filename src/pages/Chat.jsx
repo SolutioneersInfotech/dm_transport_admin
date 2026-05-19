@@ -1,10 +1,13 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import ChatList from "../components/ChatList";
 import ChatWindow from "../components/ChatWindow";
 import * as chatAPI from "../services/chatAPI";
 import { useAppSelector } from "../store/hooks";
+import { useAuth } from "../context/AuthContext";
+import { ADMIN_PERMISSION_KEYS, hasAdminPermission } from "../utils/adminPermissions";
+import { Button } from "../components/ui/button";
 
 const Chat = () => {
   const CHAT_LIST_MIN_WIDTH = 260;
@@ -22,6 +25,19 @@ const Chat = () => {
   const dragStartWidthRef = useRef(CHAT_LIST_DEFAULT_WIDTH);
   const currentWidthRef = useRef(CHAT_LIST_DEFAULT_WIDTH);
   const { users } = useAppSelector((state) => state.users);
+  const { user } = useAuth();
+  const [selectedChatIds, setSelectedChatIds] = useState(new Set());
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
+  const canDeleteChatPermanently = useMemo(
+    () => hasAdminPermission(user?.permissions, ADMIN_PERMISSION_KEYS.deleteChatPermanently),
+    [user?.permissions]
+  );
+  const canBulkDeleteChatPermanently = useMemo(
+    () => hasAdminPermission(user?.permissions, ADMIN_PERMISSION_KEYS.bulkDeleteChatPermanently),
+    [user?.permissions]
+  );
 
 
   // Helper function to get user ID from various possible fields
@@ -176,6 +192,24 @@ const Chat = () => {
     setIsResizing(true);
   };
 
+  const handleBulkPermanentDelete = async () => {
+    if (!canBulkDeleteChatPermanently || selectedChatIds.size === 0 || isBulkDeleting) return;
+
+    const selectedDrivers = users.filter((item) => selectedChatIds.has(String(getUserId(item))));
+    setIsBulkDeleting(true);
+    try {
+      await chatAPI.permanentDeleteChatConversations(selectedDrivers);
+      setSelectedChatIds(new Set());
+      if (selectedDriver && selectedChatIds.has(String(getUserId(selectedDriver)))) {
+        setSelectedDriver(null);
+        setSearchParams({});
+      }
+    } finally {
+      setIsBulkDeleting(false);
+      setIsBulkDeleteModalOpen(false);
+    }
+  };
+
   return (
     <div className="flex w-full h-full bg-[#0d1117] text-white overflow-hidden">
       {/* LEFT CHAT LIST: desktop width is resizable; mobile keeps the existing fixed sizing behavior. */}
@@ -187,6 +221,11 @@ const Chat = () => {
           onSelectDriver={handleSelectDriver}
           selectedDriver={selectedDriver}
           chatApi={chatAPI}
+          canBulkDeleteConversations={canBulkDeleteChatPermanently}
+          selectedChatIds={selectedChatIds}
+          onSelectedChatIdsChange={setSelectedChatIds}
+          onRequestBulkDelete={() => setIsBulkDeleteModalOpen(true)}
+          isBulkDeleting={isBulkDeleting}
         />
       </div>
 
@@ -210,22 +249,38 @@ const Chat = () => {
         <AnimatePresence mode="wait">
           {selectedDriver ? (
             <div key={selectedDriver.userid ?? selectedDriver.id ?? "chat"} className="h-full">
-              <ChatWindow driver={selectedDriver} chatApi={chatAPI} refreshSignal={refreshSignal} />
+              <ChatWindow driver={selectedDriver} chatApi={chatAPI} refreshSignal={refreshSignal} canDeleteChatPermanently={canDeleteChatPermanently} />
             </div>
           ) : (
-            <motion.div
+            <div
               key="placeholder"
               className="flex justify-center items-center h-full text-gray-500"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
             >
               Select a driver to start chat
-            </motion.div>
+            </div>
           )}
         </AnimatePresence>
       </div>
+
+      {isBulkDeleteModalOpen && (
+        <div className="fixed inset-0 z-[180] flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-md rounded-lg border border-[#2c3e52] bg-[#1c2530] p-6 space-y-4 shadow-xl">
+            <h3 className="text-lg font-semibold text-white">Permanently Delete Chats</h3>
+            <p className="text-sm text-gray-300">
+              Permanently delete {selectedChatIds.size} selected chat conversation{selectedChatIds.size === 1 ? "" : "s"}?
+              This cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" className="border-gray-600 text-gray-800 hover:bg-[#2c3e52] hover:text-white" onClick={() => setIsBulkDeleteModalOpen(false)} disabled={isBulkDeleting}>
+                Cancel
+              </Button>
+              <Button size="sm" className="bg-red-600 text-white hover:bg-red-700" onClick={handleBulkPermanentDelete} disabled={isBulkDeleting}>
+                {isBulkDeleting ? "Deleting..." : "Delete Permanently"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

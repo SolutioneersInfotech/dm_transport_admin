@@ -2,7 +2,6 @@ import { FaBullhorn } from "react-icons/fa";
 // import Broadcast from "../pages/Broadcast";
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { fetchUsers, fetchMoreUsers, updateUserLastMessage } from "../store/slices/usersSlice";
 import { fetchMaintenanceUsers, updateMaintenanceUserLastMessage } from "../store/slices/maintenanceUsersSlice";
@@ -29,7 +28,7 @@ const statusColorClass = {
   unseen: "text-amber-400",
 };
 
-const ChatList = ({ onSelectDriver, selectedDriver, chatApi }) => {
+const ChatList = ({ onSelectDriver, selectedDriver, chatApi, canBulkDeleteConversations = false, selectedChatIds = new Set(), onSelectedChatIdsChange, onRequestBulkDelete, isBulkDeleting = false }) => {
   const dispatch = useAppDispatch();
   const location = useLocation();
   const navigate = useNavigate();
@@ -503,6 +502,17 @@ const handleSelectDriver = (driver) => {
   if (!driver) return;
   onSelectDriver(driver);
 };
+
+const handleToggleChatSelection = (driverId, checked) => {
+  if (!onSelectedChatIdsChange || !driverId) return;
+  const next = new Set(selectedChatIds);
+  if (checked) {
+    next.add(driverId);
+  } else {
+    next.delete(driverId);
+  }
+  onSelectedChatIdsChange(next);
+};
   
   const selectedDriverId = getDriverId(selectedDriver);
   const hasSearchText = Boolean(search.trim());
@@ -550,6 +560,22 @@ const handleSelectDriver = (driver) => {
     <div className="h-full flex flex-col">
       {/* 🔍 SEARCH BAR (STICKY) */}
       <div className="p-5 border-b border-gray-700 sticky top-0 bg-[#0d1117] z-20 space-y-3">
+        {canBulkDeleteConversations && selectedChatIds.size > 0 && (
+          <div className="flex items-center justify-between rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-100">
+            <span>{selectedChatIds.size} selected</span>
+            <div className="flex items-center gap-2">
+              <button type="button" className="text-gray-300 hover:text-white" onClick={() => onSelectedChatIdsChange?.(new Set())}>Clear</button>
+              <button
+                type="button"
+                className="rounded-md bg-red-600 px-2 py-1 font-medium text-white hover:bg-red-700 disabled:opacity-60"
+                disabled={isBulkDeleting}
+                onClick={onRequestBulkDelete}
+              >
+                {isBulkDeleting ? "Deleting..." : "Delete Permanently"}
+              </button>
+            </div>
+          </div>
+        )}
         <div className="flex items-center justify-center gap-3">
           <div
             ref={searchInputWrapRef}
@@ -701,16 +727,30 @@ const handleSelectDriver = (driver) => {
 
         {/* Show list immediately after users are loaded; message preview hydration runs in background */}
         {!showInitialLoader && filtered.length > 0 && (
-          <motion.div layout className="flex flex-col">
+          <div className="flex flex-col">
             {filtered.map((driver) => (
-              <ChatListItem
-                key={driver.userid}
-                driver={driver}
-                isSelected={selectedDriverId === driver.userid}
-                onClick={() => handleSelectDriver(driver)}
-              />
+              <div key={driver.userid} className="group flex items-center border-b border-transparent">
+                {canBulkDeleteConversations && (
+                  <div className="pl-2">
+                    <Checkbox
+                      checked={selectedChatIds.has(driver.userid)}
+                      onCheckedChange={(checked) => handleToggleChatSelection(driver.userid, Boolean(checked))}
+                      onClick={(event) => event.stopPropagation()}
+                      aria-label={`Select ${driver.driver_name || driver.userid}`}
+                      className="border-gray-600 data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600"
+                    />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <ChatListItem
+                    driver={driver}
+                    isSelected={selectedDriverId === driver.userid}
+                    onClick={() => handleSelectDriver(driver)}
+                  />
+                </div>
+              </div>
             ))}
-          </motion.div>
+          </div>
         )}
 
         {/* Infinite scroll trigger - only show when hasMore (disabled since we fetch all) */}

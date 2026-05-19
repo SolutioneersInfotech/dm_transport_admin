@@ -62,7 +62,7 @@ const FILTER_MAP = {
   CTPAT: "CTPAT",
 };
 
-export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
+export default function DocumentPreviewContent({ selectedDoc, onDocUpdate, canDeleteDocumentPermanently = false }) {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const { users } = useAppSelector((state) => state.users);
@@ -546,7 +546,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   // Navigate to chat page with driver's user ID
   const handleChatWithDriver = () => {
     const doc = selectedDoc;
-    if (!doc) return;
+    if (!doc || !canDeleteDocumentPermanently) return;
 
     // First check if document has a direct userid or driver_id field
     let userId =
@@ -660,7 +660,7 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
   // Handle document deletion
   const handleDeleteDocument = async () => {
     const doc = selectedDoc;
-    if (!doc) return;
+    if (!doc || !canDeleteDocumentPermanently) return;
 
     setIsDeleting(true);
     try {
@@ -1479,21 +1479,23 @@ export default function DocumentPreviewContent({ selectedDoc, onDocUpdate }) {
             </Tooltip>
 
             {/* Delete Document */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  onClick={() => setShowDeleteModal(true)}
-                  size="icon"
-                  variant="outline"
-                  className="h-10 w-10 cursor-pointer flex-1 border-red-500/50 text-red-500 bg-[#111827] hover:bg-red-500/10 hover:border-red-500 hover:text-red-400"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Delete Document</p>
-              </TooltipContent>
-            </Tooltip>
+            {canDeleteDocumentPermanently && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={() => setShowDeleteModal(true)}
+                    size="icon"
+                    variant="outline"
+                    className="h-10 w-10 cursor-pointer flex-1 border-red-500/50 text-red-500 bg-[#111827] hover:bg-red-500/10 hover:border-red-500 hover:text-red-400"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Delete Document Permanently</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
         </TooltipProvider>
       </div>

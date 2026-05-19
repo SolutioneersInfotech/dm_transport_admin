@@ -59,6 +59,7 @@ import {
 import { toast } from "sonner";
 import { buildDocumentDownloadName, getDocumentTypeLabel } from "../utils/documentDownloadName";
 import { getAvailableDocumentFilterOptions } from "../utils/documentPermissions";
+import { ADMIN_PERMISSION_KEYS, hasAdminPermission } from "../utils/adminPermissions";
 import { useAuth } from "../context/AuthContext";
 import { usePersonalization } from "../context/PersonalizationContext";
 import useAppResumeSync from "../hooks/useAppResumeSync";
@@ -387,6 +388,10 @@ export default function Documents() {
   const availableFilterOptions = useMemo(() => {
     return getAvailableDocumentFilterOptions(user?.permissions);
   }, [user?.permissions]);
+  const canBulkDeleteDocumentsPermanently = useMemo(
+    () => hasAdminPermission(user?.permissions, ADMIN_PERMISSION_KEYS.bulkDeleteDocumentPermanently),
+    [user?.permissions]
+  );
 
   const hasDocumentPermissionRestrictions = Array.isArray(user?.permissions);
 
@@ -2415,20 +2420,22 @@ export default function Documents() {
               <Download className="h-4 w-4 mr-1.5" />
               {isBulkDownloading ? "Downloading..." : "Download"}&nbsp;
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                if (selectedDocIds.size === 0) return;
-                setShowBulkDeleteModal(true);
-              }}
-              disabled={isBulkDeleting}
-              className="h-8 mr-0.5 sm:h-9 border-red-500/60 bg-[#0f172a]/70 text-red-400 shadow-sm hover:bg-red-500/20 hover:text-red-100 hover:border-red-400 hover:shadow-md active:shadow-sm"
-            >
-              <Trash2 className="h-4 w-4 mr-1.5" />
-              {isBulkDeleting ? "Deleting..." : "Delete"}&nbsp;
-            </Button>
+            {canBulkDeleteDocumentsPermanently && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (selectedDocIds.size === 0) return;
+                  setShowBulkDeleteModal(true);
+                }}
+                disabled={isBulkDeleting}
+                className="h-8 mr-0.5 sm:h-9 border-red-500/60 bg-[#0f172a]/70 text-red-400 shadow-sm hover:bg-red-500/20 hover:text-red-100 hover:border-red-400 hover:shadow-md active:shadow-sm"
+              >
+                <Trash2 className="h-4 w-4 mr-1.5" />
+                {isBulkDeleting ? "Deleting..." : "Delete Permanently"}&nbsp;
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -2873,6 +2880,7 @@ export default function Documents() {
                   )}
                   <DocumentPreviewContent
                     selectedDoc={selectedDoc}
+                    canDeleteDocumentPermanently={hasAdminPermission(user?.permissions, ADMIN_PERMISSION_KEYS.deleteDocumentPermanently)}
                     onDocUpdate={(updatedDoc) => {
                       if (updatedDoc === null) {
                         // Document was deleted, close preview
@@ -2971,6 +2979,7 @@ export default function Documents() {
                 {selectedDoc && (
                   <DocumentPreviewContent
                     selectedDoc={selectedDoc}
+                    canDeleteDocumentPermanently={hasAdminPermission(user?.permissions, ADMIN_PERMISSION_KEYS.deleteDocumentPermanently)}
                     onDocUpdate={(updatedDoc) => {
                       if (updatedDoc === null) {
                         // Document was deleted, close preview
